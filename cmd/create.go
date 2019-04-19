@@ -195,7 +195,7 @@ func startContainer(c *lxc.Container, spec *specs.Spec) error {
 		binary,
 		"internal",
 		c.Name(),
-		spec.Root.Path,
+		LXC_PATH,
 		filepath.Join(LXC_PATH, c.Name(), "config"),
 	)
 
