@@ -55,7 +55,7 @@ func doState(ctx *cli.Context) error {
 	// https://github.com/opencontainers/runtime-spec/blob/v1.0.0-rc4/runtime.md#state
 	// it means "the container process has neither exited nor executed the user-specified program"
 	status := "stopped"
-	if c.Running() {
+	if c.Running() && checkHackyPreStart(c) == "started" {
 		status = "running"
 	}
 	pid := 0
