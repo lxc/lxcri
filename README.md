@@ -12,3 +12,10 @@ make
 
 Then specify the `crio-lxc` binary you just built as the value for
 `default_runtime` in the `crio.runtime` section of `/etc/crio/crio.conf`.
+
+## Notes
+
+Note that you must have a new enough liblxc, one which supports the
+"lxc.rootfs.managed" key.  3.0.3 is not new enough, 3.1 is.  On Ubuntu,
+you can upgrade using the ubuntu-lxc/lxc-git-master PPA.  Arch and
+OpenSUSE tumbleweed should be uptodate.
