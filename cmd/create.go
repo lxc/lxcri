@@ -100,6 +100,17 @@ func doCreate(ctx *cli.Context) error {
 	return nil
 }
 
+func lxcApiHasKey(c *lxc.Container, key string) bool {
+	keys := c.ConfigKeys()
+	fmt.Printf("XXX keys are %v\n", keys)
+	for _, k := range keys {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
 func configureContainer(ctx *cli.Context, c *lxc.Container, spec *specs.Spec) error {
 	if ctx.Bool("debug") {
 		c.SetVerbosity(lxc.Verbose)
@@ -114,8 +125,10 @@ func configureContainer(ctx *cli.Context, c *lxc.Container, spec *specs.Spec) er
 	if err := c.SetConfigItem("lxc.rootfs.path", spec.Root.Path); err != nil {
 		return errors.Wrapf(err, "failed to set rootfs: '%s'", spec.Root.Path)
 	}
-	if err := c.SetConfigItem("lxc.rootfs.managed", "0"); err != nil {
-		return errors.Wrap(err, "failed to set rootfs.managed to 0")
+	if lxcApiHasKey(c, "lxc.rootfs.managed") {
+		if err := c.SetConfigItem("lxc.rootfs.managed", "0"); err != nil {
+			return errors.Wrap(err, "failed to set rootfs.managed to 0")
+		}
 	}
 
 	for _, envVar := range spec.Process.Env {
