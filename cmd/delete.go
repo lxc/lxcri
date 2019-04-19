@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/apex/log"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
 
@@ -49,7 +50,12 @@ func doDelete(ctx *cli.Context) error {
 	}
 
 	if c.Running() {
-		return fmt.Errorf("container '%s' is running, cannot delete.", containerID)
+		if checkHackyPreStart(c) == "started" {
+			return fmt.Errorf("container '%s' is running, cannot delete.", containerID)
+		}
+		if err := c.Stop(); err != nil {
+			log.Warnf("Failed to stop pre-started container %s: %v", containerID, err)
+		}
 	}
 
 	// TODO: lxc-destroy deletes the rootfs.

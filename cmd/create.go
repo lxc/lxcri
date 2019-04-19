@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/apex/log"
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -207,6 +208,11 @@ func startContainer(c *lxc.Container, spec *specs.Spec) error {
 
 	cmdErr := cmd.Start()
 
-	return cmdErr
+	if cmdErr == nil {
+		if !c.Wait(lxc.RUNNING, 30*time.Second) {
+			cmdErr = fmt.Errorf("Container failed to initialize")
+		}
+	}
 
+	return cmdErr
 }

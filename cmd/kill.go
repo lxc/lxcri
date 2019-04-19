@@ -93,14 +93,13 @@ func doKill(ctx *cli.Context) error {
 
 	}
 
-	if !c.Running() {
-		return fmt.Errorf("container '%s' is not running", containerID)
-	}
+	if c.Running() && checkHackyPreStart(c) == "started" {
+		pid := c.InitPid()
 
-	pid := c.InitPid()
-
-	if err := unix.Kill(pid, signalMap[ctx.String("signal")]); err != nil {
-		return errors.Wrap(err, "failed to send signal")
+		if err := unix.Kill(pid, signalMap[ctx.String("signal")]); err != nil {
+			return errors.Wrap(err, "failed to send signal")
+		}
+		return nil
 	}
-	return nil
+	return fmt.Errorf("container '%s' is not running", containerID)
 }
