@@ -20,7 +20,12 @@ var deleteCmd = cli.Command{
 
 <containerID> is the ID of the container to delete
 `,
-	Flags: []cli.Flag{},
+	Flags: []cli.Flag{
+		cli.BoolFlag{
+			Name: "force",
+			Usage: "force deletion",
+		},
+	},
 }
 
 func doDelete(ctx *cli.Context) error {
@@ -49,8 +54,9 @@ func doDelete(ctx *cli.Context) error {
 
 	}
 
+	force := ctx.Bool("force")
 	if c.Running() {
-		if checkHackyPreStart(c) == "started" {
+		if checkHackyPreStart(c) == "started" && !force {
 			return fmt.Errorf("container '%s' is running, cannot delete.", containerID)
 		}
 		if err := c.Stop(); err != nil {

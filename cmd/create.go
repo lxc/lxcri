@@ -42,6 +42,34 @@ var createCmd = cli.Command{
 	},
 }
 
+func ensureShell(rootfs string) {
+	shPath := filepath.Join(rootfs, "bin/sh")
+	if exists, _ := pathExists(shPath); exists {
+		return
+	}
+	var err error
+	err = RunCommand("mkdir", filepath.Join(rootfs, "bin"))
+	if err != nil {
+		fmt.Printf("Failed doing mkdir: %v\n", err)
+	}
+	err = RunCommand("cp", "/bin/busybox", filepath.Join(rootfs, "bin/"))
+	if err != nil {
+		fmt.Printf("Failed copying busybox: %v\n", err)
+	}
+	err = RunCommand("ln", filepath.Join(rootfs, "bin/busybox"), filepath.Join(rootfs, "bin/stat"))
+	if err != nil {
+		fmt.Printf("Failed linking stat: %v\n", err)
+	}
+	err = RunCommand("ln", filepath.Join(rootfs, "bin/busybox"), filepath.Join(rootfs, "bin/sh"))
+	if err != nil {
+		fmt.Printf("Failed linking sh: %v\n", err)
+	}
+	err = RunCommand("ln", filepath.Join(rootfs, "bin/busybox"), filepath.Join(rootfs, "bin/tee"))
+	if err != nil {
+		fmt.Printf("Failed linking tee : %v\n", err)
+	}
+}
+
 func emitFifoWaiter(file string) error {
 	fifoWaiter := fmt.Sprintf(`#!/bin/sh
 stat /syncfifo
@@ -142,6 +170,8 @@ func configureContainer(ctx *cli.Context, c *lxc.Container, spec *specs.Spec) er
 	if err != nil {
 		return errors.Wrapf(err, "couldn't write wrapper init")
 	}
+
+	ensureShell(spec.Root.Path)
 
 	if err := c.SetConfigItem("lxc.init.cwd", spec.Process.Cwd); err != nil {
 		return errors.Wrap(err, "failed to set CWD")

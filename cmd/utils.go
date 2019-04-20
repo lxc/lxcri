@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -74,4 +76,13 @@ func containerExists(containerID string) (bool, error) {
 	}
 
 	return configExists, nil
+}
+
+func RunCommand(args ...string) error {
+	cmd := exec.Command(args[0], args[1:]...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return errors.Errorf("%s: %s: %s", strings.Join(args, " "), err, string(output))
+	}
+	return nil
 }
