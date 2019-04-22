@@ -12,6 +12,7 @@ function teardown() {
     crictl runp test/basic-pod-config.json
     crictl pull busybox
     crictl images
-    crictl create clowncore test/basic-container-config.json test/basic-pod-config.json
-    [ "$(crictl ps)" | grep clowncore ]
+    podid=$(crictl pods | grep nginx-sandbox | awk '{ print $1 }')
+    crictl create $podid test/basic-container-config.json test/basic-pod-config.json
+    [ "$(crictl ps -a)" | grep busybox ]
 }
