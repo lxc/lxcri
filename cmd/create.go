@@ -81,6 +81,7 @@ exec $@
 }
 
 func doCreate(ctx *cli.Context) error {
+	pidfile := ctx.String("pid-file")
 	containerID := ctx.Args().Get(0)
 	if len(containerID) == 0 {
 		fmt.Fprintf(os.Stderr, "missing container ID\n")
@@ -123,6 +124,17 @@ func doCreate(ctx *cli.Context) error {
 
 	if err := startContainer(c, spec); err != nil {
 		return errors.Wrap(err, "failed to start the container init")
+	}
+
+	if pidfile != "" {
+		err := os.MkdirAll(path.Dir(pidfile), 0755)
+		if err != nil {
+			return errors.Wrapf(err, "Couldn't create pid file directory for %s", pidfile)
+		}
+		err = ioutil.WriteFile(pidfile, []byte(fmt.Sprintf("%d", c.InitPid())), 0755)
+		if err != nil {
+			return errors.Wrapf(err, "Couldn't create pid file %s", pidfile)
+		}
 	}
 
 	log.Infof("created container %s in lxcdir %s", containerID, LXC_PATH)
