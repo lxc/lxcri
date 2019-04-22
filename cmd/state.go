@@ -55,10 +55,11 @@ func doState(ctx *cli.Context) error {
 	// https://github.com/opencontainers/runtime-spec/blob/v1.0.0-rc4/runtime.md#state
 	// it means "the container process has neither exited nor executed the user-specified program"
 	status := "stopped"
+	pid := 0
 	if c.Running() && checkHackyPreStart(c) == "started" {
 		status = "running"
+		pid = c.InitPid()
 	}
-	pid := 0
 	// bundlePath is the enclosing directory of the rootfs:
 	// https://github.com/opencontainers/runtime-spec/blob/v1.0.0-rc4/bundle.md
 	bundlePath := filepath.Dir(c.ConfigItem("lxc.rootfs.path")[0])

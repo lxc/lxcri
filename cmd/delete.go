@@ -22,7 +22,7 @@ var deleteCmd = cli.Command{
 `,
 	Flags: []cli.Flag{
 		cli.BoolFlag{
-			Name: "force",
+			Name:  "force",
 			Usage: "force deletion",
 		},
 	},
