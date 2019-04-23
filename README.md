@@ -22,7 +22,7 @@ OpenSUSE tumbleweed should be uptodate.
 
 ## Tests
 
-To run the 'basic' test, you'll need to build cri-o.
+To run the 'basic' test, you'll need to build cri-o and CNI.
 
 ```
 mkdir ~/packages
@@ -30,6 +30,11 @@ cd packages
 git clone https://github.com/kubernetes-sigs/cri-o
 cd cri-o
 make
+cd ..
+git clone https://github.com/containernetworking/cni
+git clone https://github.com/containernetworking/plugins cni-plugins
+cd cni-plugins
+./build_linux.sh
 ```
 
 You'll also need crictl.  Download the tarball, extract it, and

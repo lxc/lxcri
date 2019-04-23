@@ -16,9 +16,22 @@ function setup_crio {
         "$ROOT_DIR/test/crio.conf.in" > "$TEMP_DIR/crio.conf"
     # it doesn't like seccomp_profile = "", so let's make a bogus one
     echo "{}" > "$TEMP_DIR/seccomp.json"
-    # it doesn't like if these dirs don't exist, so make them
-    mkdir -p "$TEMP_DIR/cni"
-    mkdir -p "$TEMP_DIR/cni-plugins"
+    # It doesn't like if these dirs don't exist, so always them
+    # You can't start a pod without them, so if you're going to test
+    # basic.bats, then
+    #    cd ~/packages;  git clone https://github.com/containernetworking/cni
+    #    git clone https://github.com/containernetworking/plugins cni-plugins
+    #    cd cni-plugins; ./build_linux.sh
+    mkdir -p "$TEMP_DIR/cni/net.d"
+    mkdir -p /tmp/busybox # for the logfile as per log_directory in test/basic-pod-config.json
+    if [ -d ~/packages/cni-plugins ]; then
+        rsync -a ~/packages/cni-plugins $TEMP_DIR/
+        cat > $TEMP_DIR/cni/net.d/10-myptp.conf << EOF
+{"cniVersion":"0.3.1","name":"myptp","type":"ptp","ipMasq":true,"ipam":{"type":"host-local","subnet":"172.16.29.0/24","routes":[{"dst":"0.0.0.0/0"}]}}
+EOF
+    else
+        mkdir -p "$TEMP_DIR/cni-plugins"
+    fi
     # set up an insecure policy
     echo '{"default": [{"type": "insecureAcceptAnything"}]}' > "$TEMP_DIR/policy.json"
     "$CRIO_REPO/bin/crio" --config "$TEMP_DIR/crio.conf" &
@@ -39,7 +52,9 @@ function cleanup_tempdir {
 
 function crictl {
     # watch out for: https://github.com/kubernetes-sigs/cri-tools/issues/460
-    $(which crictl) --runtime-endpoint "$TEMP_DIR/crio.sock" $@
+    # If you need more debug output, set CRICTLDEBUG to -D
+    CRICTLDEBUG=""
+    $(which crictl) $(CRICTLDEBUG) --runtime-endpoint "$TEMP_DIR/crio.sock" $@
     echo "$output"
 }
 
