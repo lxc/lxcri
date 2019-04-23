@@ -264,9 +264,9 @@ registries = [
 [crio.network]
 
 # Path to the directory where CNI configuration files are located.
-network_dir = "CRIOLXC_TEST_DIR/cni"
+network_dir = "CRIOLXC_TEST_DIR/cni/net.d"
 
 # Paths to directories where CNI plugin binaries are located.
 plugin_dir = [
-	"CRIOLXC_TEST_DIR/cni-plugins",
+	"CRIOLXC_TEST_DIR/cni-plugins/bin",
 ]
