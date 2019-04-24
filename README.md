@@ -41,7 +41,7 @@ You'll also need crictl.  Download the tarball, extract it, and
 copy crictl to /usr/bin:
 
 ```
-wget https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.13.0/crictl-v1.14.0-linux-amd64.tar.gz
+wget https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.14.0/crictl-v1.14.0-linux-amd64.tar.gz
 tar zxf crictl-v1.14.0-linux-amd64.tar.gz
 sudo cp crictl /usr/bin
 ```
