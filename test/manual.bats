@@ -14,4 +14,6 @@ function teardown() {
 @test "manual invocation" {
     crio-lxc --debug --log-level trace --log-file "$TEMP_DIR/log" create --bundle "$TEMP_DIR/dest" alpine
     crio-lxc --debug --log-level trace --log-file "$TEMP_DIR/log" start alpine
+    crio-lxc --debug --log-level trace --log-file "$TEMP_DIR/log" kill alpine
+    crio-lxc --debug --log-level trace --log-file "$TEMP_DIR/log" delete alpine
 }

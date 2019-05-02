@@ -15,4 +15,6 @@ function teardown() {
     podid=$(crictl pods | grep nginx-sandbox | awk '{ print $1 }')
     crictl create $podid test/basic-container-config.json test/basic-pod-config.json
     crictl ps -a | grep busybox
+    crictl stopp $podid
+    crictl rmp $podid
 }
