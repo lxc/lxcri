@@ -5,6 +5,7 @@ function setup() {
     skopeo --insecure-policy copy docker://alpine:latest oci:$ROOT_DIR/test/oci-cache:alpine
     umoci unpack --image "$ROOT_DIR/test/oci-cache:alpine" "$TEMP_DIR/dest"
     sed -i -e "s?rootfs?$TEMP_DIR/dest/rootfs?" "$TEMP_DIR/dest/config.json"
+    sed -i -e "s?\"/bin/sh\"?\"/bin/sleep\",\n\"60\"?" "$TEMP_DIR/dest/config.json"
 }
 
 function teardown() {
