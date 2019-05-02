@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -40,6 +41,17 @@ var createCmd = cli.Command{
 			Usage: "path to write container PID", // TODO not handled yet
 		},
 	},
+}
+
+// maps from CRIO namespace names to LXC names
+var NamespaceMap = map[string]string{
+	"cgroup":  "cgroup",
+	"ipc":     "ipc",
+	"mount":   "mnt",
+	"network": "net",
+	"pid":     "pid",
+	"user":    "user",
+	"uts":     "uts",
 }
 
 func ensureShell(rootfs string) {
@@ -200,6 +212,46 @@ func configureContainer(ctx *cli.Context, c *lxc.Container, spec *specs.Spec) er
 	}
 	if err := c.SetConfigItem("lxc.hook.version", "1"); err != nil {
 		return errors.Wrap(err, "failed to set hook version")
+	}
+
+	procPidPathRE := regexp.MustCompile(`/proc/(\d+)/ns`)
+
+	var nsToClone []string
+	var configVal string
+	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
+	for _, ns := range spec.Linux.Namespaces {
+		if _, ok := seenNamespaceTypes[ns.Type]; ok == true {
+			return fmt.Errorf("duplicate namespace type %s", ns.Type)
+		}
+		seenNamespaceTypes[ns.Type] = true
+		if ns.Path == "" {
+			nsToClone = append(nsToClone, NamespaceMap[string(ns.Type)])
+		} else {
+			configKey := fmt.Sprintf("lxc.namespace.share.%s", NamespaceMap[string(ns.Type)])
+
+			matches := procPidPathRE.FindStringSubmatch(ns.Path)
+			switch len(matches) {
+			case 0:
+				configVal = ns.Path
+			case 1:
+				return fmt.Errorf("error parsing namespace path. expected /proc/(\\d+)/ns/*, got '%s'", ns.Path)
+			case 2:
+				configVal = matches[1]
+			default:
+				return fmt.Errorf("error parsing namespace path. expected /proc/(\\d+)/ns/*, got '%s'", ns.Path)
+			}
+
+			if err := c.SetConfigItem(configKey, configVal); err != nil {
+				return errors.Wrapf(err, "failed to set namespace config: '%s'='%s'", configKey, configVal)
+			}
+		}
+	}
+
+	if len(nsToClone) > 0 {
+		configVal = strings.Join(nsToClone, " ")
+		if err := c.SetConfigItem("lxc.namespace.clone", configVal); err != nil {
+			return errors.Wrapf(err, "failed to set lxc.namespace.clone=%s", configVal)
+		}
 	}
 
 	// capabilities?
