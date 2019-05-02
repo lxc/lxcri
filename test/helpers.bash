@@ -54,7 +54,7 @@ function crictl {
     # watch out for: https://github.com/kubernetes-sigs/cri-tools/issues/460
     # If you need more debug output, set CRICTLDEBUG to -D
     CRICTLDEBUG=""
-    $(which crictl) $(CRICTLDEBUG) --runtime-endpoint "$TEMP_DIR/crio.sock" $@
+    $(which crictl) ${CRICTLDEBUG} --runtime-endpoint "$TEMP_DIR/crio.sock" $@
     echo "$output"
 }
 
