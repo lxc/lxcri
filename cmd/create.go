@@ -92,6 +92,49 @@ exec $@
 	return ioutil.WriteFile(file, []byte(fifoWaiter), 0755)
 }
 
+func configureNamespaces(c *lxc.Container, spec *specs.Spec) error {
+	procPidPathRE := regexp.MustCompile(`/proc/(\d+)/ns`)
+
+	var nsToClone []string
+	var configVal string
+	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
+	for _, ns := range spec.Linux.Namespaces {
+		if _, ok := seenNamespaceTypes[ns.Type]; ok == true {
+			return fmt.Errorf("duplicate namespace type %s", ns.Type)
+		}
+		seenNamespaceTypes[ns.Type] = true
+		if ns.Path == "" {
+			nsToClone = append(nsToClone, NamespaceMap[string(ns.Type)])
+		} else {
+			configKey := fmt.Sprintf("lxc.namespace.share.%s", NamespaceMap[string(ns.Type)])
+
+			matches := procPidPathRE.FindStringSubmatch(ns.Path)
+			switch len(matches) {
+			case 0:
+				configVal = ns.Path
+			case 1:
+				return fmt.Errorf("error parsing namespace path. expected /proc/(\\d+)/ns/*, got '%s'", ns.Path)
+			case 2:
+				configVal = matches[1]
+			default:
+				return fmt.Errorf("error parsing namespace path. expected /proc/(\\d+)/ns/*, got '%s'", ns.Path)
+			}
+
+			if err := c.SetConfigItem(configKey, configVal); err != nil {
+				return errors.Wrapf(err, "failed to set namespace config: '%s'='%s'", configKey, configVal)
+			}
+		}
+	}
+
+	if len(nsToClone) > 0 {
+		configVal = strings.Join(nsToClone, " ")
+		if err := c.SetConfigItem("lxc.namespace.clone", configVal); err != nil {
+			return errors.Wrapf(err, "failed to set lxc.namespace.clone=%s", configVal)
+		}
+	}
+	return nil
+}
+
 func doCreate(ctx *cli.Context) error {
 	pidfile := ctx.String("pid-file")
 	containerID := ctx.Args().Get(0)
@@ -214,44 +257,8 @@ func configureContainer(ctx *cli.Context, c *lxc.Container, spec *specs.Spec) er
 		return errors.Wrap(err, "failed to set hook version")
 	}
 
-	procPidPathRE := regexp.MustCompile(`/proc/(\d+)/ns`)
-
-	var nsToClone []string
-	var configVal string
-	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
-	for _, ns := range spec.Linux.Namespaces {
-		if _, ok := seenNamespaceTypes[ns.Type]; ok == true {
-			return fmt.Errorf("duplicate namespace type %s", ns.Type)
-		}
-		seenNamespaceTypes[ns.Type] = true
-		if ns.Path == "" {
-			nsToClone = append(nsToClone, NamespaceMap[string(ns.Type)])
-		} else {
-			configKey := fmt.Sprintf("lxc.namespace.share.%s", NamespaceMap[string(ns.Type)])
-
-			matches := procPidPathRE.FindStringSubmatch(ns.Path)
-			switch len(matches) {
-			case 0:
-				configVal = ns.Path
-			case 1:
-				return fmt.Errorf("error parsing namespace path. expected /proc/(\\d+)/ns/*, got '%s'", ns.Path)
-			case 2:
-				configVal = matches[1]
-			default:
-				return fmt.Errorf("error parsing namespace path. expected /proc/(\\d+)/ns/*, got '%s'", ns.Path)
-			}
-
-			if err := c.SetConfigItem(configKey, configVal); err != nil {
-				return errors.Wrapf(err, "failed to set namespace config: '%s'='%s'", configKey, configVal)
-			}
-		}
-	}
-
-	if len(nsToClone) > 0 {
-		configVal = strings.Join(nsToClone, " ")
-		if err := c.SetConfigItem("lxc.namespace.clone", configVal); err != nil {
-			return errors.Wrapf(err, "failed to set lxc.namespace.clone=%s", configVal)
-		}
+	if err := configureNamespaces(c, spec); err != nil {
+		return errors.Wrap(err, "failed to configure namespaces")
 	}
 
 	// capabilities?
