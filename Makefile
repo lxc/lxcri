@@ -20,4 +20,4 @@ vendorup:
 
 .PHONY: clean
 clean:
-	-rm -r crio-lxc
+	-rm -f crio-lxc
