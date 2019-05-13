@@ -215,6 +215,7 @@ func configureContainer(ctx *cli.Context, c *lxc.Container, spec *specs.Spec) er
 	if err := c.SetConfigItem("lxc.rootfs.path", spec.Root.Path); err != nil {
 		return errors.Wrapf(err, "failed to set rootfs: '%s'", spec.Root.Path)
 	}
+
 	if err := c.SetConfigItem("lxc.rootfs.managed", "0"); err != nil {
 		return errors.Wrap(err, "failed to set rootfs.managed to 0")
 	}
@@ -226,8 +227,35 @@ func configureContainer(ctx *cli.Context, c *lxc.Container, spec *specs.Spec) er
 	}
 
 	for _, ms := range spec.Mounts {
+		// /dev is mounted by lxc by default (lxc.autodev=1 is the default), so we ignore custom settings here
+		if ms.Destination == "/dev" {
+			log.Infof("skipped mounting %s", ms.Destination)
+			continue
+		}
+
+		if StringInList(ms.Options, "bind") || StringInList(ms.Options, "rbind") {
+			stat, err := os.Stat(ms.Source)
+			if err == nil {
+				if stat.IsDir() {
+					ms.Options = append(ms.Options, "create=dir")
+				} else {
+					ms.Options = append(ms.Options, "create=file")
+				}
+			} else {
+				return errors.Wrapf(err, "bad source path in mount entry: %s", ms.Source)
+			}
+		} else {
+			ms.Options = append(ms.Options, "create=dir")
+		}
+
 		opts := strings.Join(ms.Options, ",")
-		mnt := fmt.Sprintf("%s %s %s %s", ms.Source, ms.Destination, ms.Type, opts)
+
+		dest, err := filepath.Rel("/", ms.Destination)
+		if err != nil {
+			return errors.Wrapf(err, "bad destination path in mount entry: %s", ms.Destination)
+		}
+
+		mnt := fmt.Sprintf("%s %s %s %s", ms.Source, dest, ms.Type, opts)
 		if err := c.SetConfigItem("lxc.mount.entry", mnt); err != nil {
 			return errors.Wrap(err, "failed to set mount config")
 		}
@@ -256,8 +284,8 @@ func configureContainer(ctx *cli.Context, c *lxc.Container, spec *specs.Spec) er
 	argsString := "/fifo-wait " + strings.Join(spec.Process.Args, " ")
 	if err := c.SetConfigItem("lxc.execute.cmd", argsString); err != nil {
 		return errors.Wrap(err, "failed to set lxc.execute.cmd")
-
 	}
+
 	if err := c.SetConfigItem("lxc.hook.version", "1"); err != nil {
 		return errors.Wrap(err, "failed to set hook version")
 	}

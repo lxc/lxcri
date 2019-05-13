@@ -86,3 +86,13 @@ func RunCommand(args ...string) error {
 	}
 	return nil
 }
+
+func StringInList(list []string, str string) bool {
+	for idx := range(list) {
+		if list[idx] == str {
+			return true
+		}
+	}
+
+	return false
+}
