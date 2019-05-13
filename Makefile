@@ -5,7 +5,11 @@ TEST?=$(patsubst test/%.bats,%,$(wildcard test/*.bats))
 CRIO_REPO?=~/packages/cri-o
 
 crio-lxc: $(GO_SRC)
-	go build -ldflags "-X main.version=$(COMMIT)" -o crio-lxc ./cmd
+	go build -tags static_build -ldflags "-X main.version=$(COMMIT)" -o crio-lxc ./cmd
+
+.PHONY: foreign
+foreign: $(GO_SRC)
+	stacker build --substitute PWD=$$PWD
 
 # make test TEST=basic will run only the basic test.
 .PHONY: check
@@ -21,3 +25,4 @@ vendorup:
 .PHONY: clean
 clean:
 	-rm -f crio-lxc
+	stacker clean --all
