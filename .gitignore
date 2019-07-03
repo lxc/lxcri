@@ -1,3 +1,6 @@
 *~
 crio-lxc
 crio-lxc-test*
+oci/
+roots/
+.stacker/
