@@ -82,6 +82,11 @@ func ensureShell(rootfs string) {
 	}
 }
 
+const (
+	SYNC_FIFO_PATH    = "/syncfifo"
+	SYNC_FIFO_CONTENT = "meshuggah rocks"
+)
+
 func emitFifoWaiter(file string) error {
 	fifoWaiter := fmt.Sprintf(`#!/bin/sh
 stat /syncfifo
