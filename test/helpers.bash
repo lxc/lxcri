@@ -12,7 +12,7 @@ function setup_crio {
     sed \
         -e "s,CRIOLXC_TEST_DIR,$TEMP_DIR,g" \
         -e "s,CRIOLXC_BINARY,$ROOT_DIR/crio-lxc,g" \
-        -e "s,CRIO_REPO,$CRIO_REPO,g" \
+        -e "s,PACKAGES_DIR,$PACKAGES_DIR,g" \
         "$ROOT_DIR/test/crio.conf.in" > "$TEMP_DIR/crio.conf"
     # it doesn't like seccomp_profile = "", so let's make a bogus one
     echo "{}" > "$TEMP_DIR/seccomp.json"
@@ -34,7 +34,7 @@ EOF
     fi
     # set up an insecure policy
     echo '{"default": [{"type": "insecureAcceptAnything"}]}' > "$TEMP_DIR/policy.json"
-    "$CRIO_REPO/bin/crio" --config "$TEMP_DIR/crio.conf" &
+    "$PACKAGES_DIR/cri-o/bin/crio" --config "$TEMP_DIR/crio.conf" &
     declare -g CRIO_PID=$!
 }
 
