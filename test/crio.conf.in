@@ -89,6 +89,9 @@ no_pivot = false
 # Path to the conmon binary, used for monitoring the OCI runtime.
 conmon = "PACKAGES_DIR/conmon/bin/conmon"
 
+# Path to pinns.
+pinns_path = "PACKAGES_DIR/cri-o/bin/pinns"
+
 # Environment variable list for the conmon process, used for passing necessary
 # environment variables to conmon or the runtime.
 conmon_env = [
