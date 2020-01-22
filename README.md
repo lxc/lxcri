@@ -38,12 +38,12 @@ cd cni-plugins
 ```
 
 You'll also need crictl.  Download the tarball, extract it, and
-copy crictl to /usr/bin:
+copy crictl to somewhere in your path:
 
 ```
 wget https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.14.0/crictl-v1.14.0-linux-amd64.tar.gz
 tar zxf crictl-v1.14.0-linux-amd64.tar.gz
-sudo cp crictl /usr/bin
+sudo cp crictl /usr/local/bin # or ~/.local/bin, etc.
 ```
 
 You'll also need conntrack installed:
