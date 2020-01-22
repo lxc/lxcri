@@ -87,7 +87,10 @@ default_runtime = "runc"
 no_pivot = false
 
 # Path to the conmon binary, used for monitoring the OCI runtime.
-conmon = "CRIO_REPO/bin/conmon"
+conmon = "PACKAGES_DIR/conmon/bin/conmon"
+
+# Path to pinns.
+pinns_path = "PACKAGES_DIR/cri-o/bin/pinns"
 
 # Environment variable list for the conmon process, used for passing necessary
 # environment variables to conmon or the runtime.
@@ -267,6 +270,6 @@ registries = [
 network_dir = "CRIOLXC_TEST_DIR/cni/net.d"
 
 # Paths to directories where CNI plugin binaries are located.
-plugin_dir = [
+plugin_dirs = [
 	"CRIOLXC_TEST_DIR/cni-plugins/bin",
 ]
