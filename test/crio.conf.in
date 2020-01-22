@@ -267,6 +267,6 @@ registries = [
 network_dir = "CRIOLXC_TEST_DIR/cni/net.d"
 
 # Paths to directories where CNI plugin binaries are located.
-plugin_dir = [
+plugin_dirs = [
 	"CRIOLXC_TEST_DIR/cni-plugins/bin",
 ]
