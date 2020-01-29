@@ -3,10 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
-	//	"github.com/apex/log"
+	// "github.com/apex/log"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli"
@@ -51,14 +54,43 @@ func doState(ctx *cli.Context) error {
 
 	}
 
-	// TODO need to detect 'created' per
-	// https://github.com/opencontainers/runtime-spec/blob/v1.0.0-rc4/runtime.md#state
-	// it means "the container process has neither exited nor executed the user-specified program"
 	status := "stopped"
 	pid := 0
-	if c.Running() && checkHackyPreStart(c) == "started" {
-		status = "running"
+	if c.Running() {
+		if checkHackyPreStart(c) == "started" {
+			status = "running"
+		}
 		pid = c.InitPid()
+
+		// need to detect 'created' per
+		// https://github.com/opencontainers/runtime-spec/blob/v1.0.0-rc4/runtime.md#state
+		// it means "the container process has neither exited nor executed the user-specified program"
+
+		// if cmd name of the child of the init pid starts with "/bin/sh /fifo-wait" then we can say it's 'created'
+
+		procChildrenFilename := fmt.Sprintf("/proc/%d/task/%d/children", pid, pid)
+		childrenStr, err := ioutil.ReadFile(procChildrenFilename)
+		if err != nil {
+			return errors.Wrapf(err, "failed to read children from %s", procChildrenFilename)
+		}
+		children := strings.Split(strings.TrimSpace(string(childrenStr)), " ")
+
+		if len(children) == 1 {
+			childPid, err := strconv.Atoi(children[0])
+			if err != nil {
+				return errors.Wrapf(err, "failed to convert child pid")
+			}
+			procCmdlineFilename := fmt.Sprintf("/proc/%d/cmdline", childPid)
+			cmdline, err := ioutil.ReadFile(procCmdlineFilename)
+			if err != nil {
+				return errors.Wrapf(err, "failed to read cmdline from %s", procCmdlineFilename)
+			}
+
+			cmdArgv := strings.Split(string(cmdline), "\x00")
+			if len(cmdArgv) > 2 && cmdArgv[0] == "/bin/sh" && cmdArgv[1] == "/fifo-wait" {
+				status = "created"
+			}
+		}
 	}
 	// bundlePath is the enclosing directory of the rootfs:
 	// https://github.com/opencontainers/runtime-spec/blob/v1.0.0-rc4/bundle.md

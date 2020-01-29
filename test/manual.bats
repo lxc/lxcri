@@ -16,7 +16,15 @@ function teardown() {
 
 @test "manual invocation" {
     crio-lxc --debug --log-level trace --log-file "$TEMP_DIR/log" create --bundle "$TEMP_DIR/dest" --pid-file "$TEMP_DIR/pid" alpine
+
+    status=$(crio-lxc --debug --log-level trace --log-file "$TEMP_DIR/log" state alpine | jq -r .status)
+    [ $status = "created" ]
+
     crio-lxc --debug --log-level trace --log-file "$TEMP_DIR/log" start alpine
+
+    status=$(crio-lxc --debug --log-level trace --log-file "$TEMP_DIR/log" state alpine | jq -r .status)
+    [ $status = "running" ]
+
     pid1ipcnsinode=$(stat -L -c%i /proc/1/ns/ipc)
     mypid=$(<"$TEMP_DIR/pid")
     mypidipcnsinode=$(stat -L -c%i "/proc/$mypid/ns/ipc")
