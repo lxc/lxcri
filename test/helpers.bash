@@ -47,7 +47,7 @@ function cleanup_crio {
 }
 
 function cleanup_tempdir {
-    rm -rf "$TEMP_DIR" || true
+    [ -f .keeptempdirs ] || rm -rf "$TEMP_DIR" || true
 }
 
 function crictl {
