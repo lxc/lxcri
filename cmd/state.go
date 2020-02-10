@@ -109,7 +109,7 @@ func doState(ctx *cli.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal json")
 	}
-	fmt.Fprintf(os.Stdout, string(stateJson))
+	fmt.Fprint(os.Stdout, string(stateJson))
 
 	return nil
 }

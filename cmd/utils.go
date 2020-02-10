@@ -31,7 +31,7 @@ func readBundleSpec(specFilePath string) (spec *specs.Spec, err error) {
 
 func configureLogging(ctx *cli.Context, c *lxc.Container) error {
 	if ctx.GlobalIsSet("log-level") {
-		logLevel := lxc.TRACE
+		var logLevel lxc.LogLevel
 		switch ctx.GlobalString("log-level") {
 		case "trace":
 			logLevel = lxc.TRACE

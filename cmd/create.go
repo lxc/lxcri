@@ -105,7 +105,7 @@ func configureNamespaces(c *lxc.Container, spec *specs.Spec) error {
 	var configVal string
 	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
 	for _, ns := range spec.Linux.Namespaces {
-		if _, ok := seenNamespaceTypes[ns.Type]; ok == true {
+		if _, ok := seenNamespaceTypes[ns.Type]; ok {
 			return fmt.Errorf("duplicate namespace type %s", ns.Type)
 		}
 		seenNamespaceTypes[ns.Type] = true
