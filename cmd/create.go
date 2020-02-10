@@ -54,32 +54,33 @@ var NamespaceMap = map[string]string{
 	"uts":     "uts",
 }
 
-func ensureShell(rootfs string) {
+func ensureShell(rootfs string) error {
 	shPath := filepath.Join(rootfs, "bin/sh")
 	if exists, _ := pathExists(shPath); exists {
-		return
+		return nil
 	}
 	var err error
 	err = RunCommand("mkdir", filepath.Join(rootfs, "bin"))
 	if err != nil {
-		fmt.Printf("Failed doing mkdir: %v\n", err)
+		return errors.Wrapf(err, "Failed doing mkdir")
 	}
 	err = RunCommand("cp", "/bin/busybox", filepath.Join(rootfs, "bin/"))
 	if err != nil {
-		fmt.Printf("Failed copying busybox: %v\n", err)
+		return errors.Wrapf(err, "Failed copying busybox")
 	}
 	err = RunCommand("ln", filepath.Join(rootfs, "bin/busybox"), filepath.Join(rootfs, "bin/stat"))
 	if err != nil {
-		fmt.Printf("Failed linking stat: %v\n", err)
+		return errors.Wrapf(err, "Failed linking stat")
 	}
 	err = RunCommand("ln", filepath.Join(rootfs, "bin/busybox"), filepath.Join(rootfs, "bin/sh"))
 	if err != nil {
-		fmt.Printf("Failed linking sh: %v\n", err)
+		return errors.Wrapf(err, "Failed linking sh")
 	}
 	err = RunCommand("ln", filepath.Join(rootfs, "bin/busybox"), filepath.Join(rootfs, "bin/tee"))
 	if err != nil {
-		fmt.Printf("Failed linking tee : %v\n", err)
+		return errors.Wrapf(err, "Failed linking tee")
 	}
+	return nil
 }
 
 const (
@@ -243,7 +244,9 @@ func configureContainer(ctx *cli.Context, c *lxc.Container, spec *specs.Spec) er
 		return errors.Wrapf(err, "couldn't write wrapper init")
 	}
 
-	ensureShell(spec.Root.Path)
+	if err := ensureShell(spec.Root.Path); err != nil {
+		return errors.Wrap(err, "couldn't ensure a shell exists in container")
+	}
 
 	if err := c.SetConfigItem("lxc.init.cwd", spec.Process.Cwd); err != nil {
 		return errors.Wrap(err, "failed to set CWD")
