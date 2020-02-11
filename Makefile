@@ -4,6 +4,9 @@ COMMIT=$(if $(shell git status --porcelain --untracked-files=no),$(COMMIT_HASH)-
 TEST?=$(patsubst test/%.bats,%,$(wildcard test/*.bats))
 PACKAGES_DIR?=~/packages
 
+lint:
+	golangci-lint run -c ./lint.yaml ./...
+
 crio-lxc: $(GO_SRC)
 	go build -ldflags "-X main.version=$(COMMIT)" -o crio-lxc ./cmd
 
