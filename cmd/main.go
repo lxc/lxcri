@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v2"
 )
@@ -60,6 +61,7 @@ func main() {
 		},
 	}
 
+	startTime := time.Now()
 
 	app.Before = func(ctx *cli.Context) error {
 		clxc.Command = ctx.Args().Get(0)
@@ -118,6 +120,12 @@ func main() {
 	}
 
 	err := app.Run(os.Args)
+	cmdDuration := time.Since(startTime)
+	if err != nil {
+		log.Error().Err(err).Dur("duration:", cmdDuration).Msg("cmd failed")
+	} else {
+		log.Info().Dur("duration:", cmdDuration).Msg("cmd done")
+	}
 
 	clxc.Release()
 	if err != nil {
