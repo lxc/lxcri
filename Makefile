@@ -1,14 +1,22 @@
 GO_SRC=$(shell find . -name \*.go)
-COMMIT_HASH=$(shell git rev-parse HEAD)
+COMMIT_HASH=$(shell git describe --always --tags --long)
 COMMIT=$(if $(shell git status --porcelain --untracked-files=no),$(COMMIT_HASH)-dirty,$(COMMIT_HASH))
 TEST?=$(patsubst test/%.bats,%,$(wildcard test/*.bats))
 PACKAGES_DIR?=~/packages
+BINS := crio-lxc
+PREFIX ?= /usr/local
+LDFLAGS=-s -w -X main.version=$(COMMIT)
+
+all: fmt $(BINS)
+
+install: all
+	cp $(BINS) $(PREFIX)/bin
 
 lint:
 	golangci-lint run -c ./lint.yaml ./...
 
-crio-lxc: $(GO_SRC)
-	go build -ldflags "-X main.version=$(COMMIT)" -o crio-lxc ./cmd
+crio-lxc: $(GO_SRC) Makefile go.mod
+	go build -ldflags '$(LDFLAGS)' -o $@ ./cmd
 
 # make test TEST=basic will run only the basic test.
 .PHONY: check
@@ -23,4 +31,7 @@ vendorup:
 
 .PHONY: clean
 clean:
-	-rm -f crio-lxc
+	-rm -f $(BINS)
+
+fmt:
+	go fmt ./...
