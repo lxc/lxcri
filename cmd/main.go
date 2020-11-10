@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/pkg/errors"
+	"io/ioutil"
 	"os"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 )
@@ -12,6 +14,11 @@ const (
 	// IMPORTANT should be synced with the runtime-spec dependency in go.mod
 	// github.com/opencontainers/runtime-spec v1.0.2
 	CURRENT_OCI_VERSION = "1.0.2"
+	// Environment variables are populated by default from this environment file.
+	// Existing environment variables are preserved.
+	EnvFileDefault = "/etc/default/crio-lxc"
+	// This environment variable can be used to overwrite the path in EnvFileDefault.
+	EnvFileVar = "CRIO_LXC_DEFAULTS"
 )
 
 var version string
@@ -101,6 +108,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "undefined subcommand %q cmdline%s\n", cmd, os.Args)
 	}
 
+	envFile := EnvFileDefault
+	if s, isSet := os.LookupEnv(EnvFileVar); isSet {
+		envFile = s
+	}
+	if err := loadEnvDefaults(envFile); err != nil {
+		println(err.Error())
+		os.Exit(1)
+	}
+
 	err := app.Run(os.Args)
 
 	clxc.Release()
@@ -109,4 +125,38 @@ func main() {
 		println(err.Error())
 		os.Exit(1)
 	}
+}
+
+// TODO This should be added to the urfave/cli API - create a pull request
+func loadEnvDefaults(envFile string) error {
+	_, err := os.Stat(envFile)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return errors.Wrapf(err, "failed to stat %s", envFile)
+	}
+	data, err := ioutil.ReadFile(envFile)
+	if err != nil {
+		return errors.Wrap(err, "failed to load env file")
+	}
+	lines := strings.Split(string(data), "\n")
+	for n, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		//skip over comments and blank lines
+		if len(trimmed) == 0 || trimmed[0] == '#' {
+			continue
+		}
+		vals := strings.SplitN(trimmed, "=", 2)
+		if len(vals) != 2 {
+			return fmt.Errorf("Invalid environment variable at %s +%d", envFile, n)
+		}
+		key := strings.TrimSpace(vals[0])
+		val := strings.Trim(strings.TrimSpace(vals[1]), `"'`)
+		// existing environment variables have precedence
+		if _, exist := os.LookupEnv(key); !exist {
+			os.Setenv(key, val)
+		}
+	}
+	return nil
 }
