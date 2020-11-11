@@ -81,13 +81,16 @@ grpc_max_recv_msg_size = 16777216
 
 # default_runtime is the _name_ of the OCI runtime to be used as the default.
 # The name is matched against the runtimes map below.
-default_runtime = "runc"
+default_runtime = "lxc"
 
 # If true, the runtime will not use pivot_root, but instead use MS_MOVE.
 no_pivot = false
 
 # Path to the conmon binary, used for monitoring the OCI runtime.
 conmon = "PACKAGES_DIR/conmon/bin/conmon"
+
+# Cgroup setting for conmon
+#conmon_cgroup = "system.slice"
 
 # Path to pinns.
 pinns_path = "PACKAGES_DIR/cri-o/bin/pinns"
@@ -110,7 +113,7 @@ seccomp_profile = "CRIOLXC_TEST_DIR/seccomp.json"
 apparmor_profile = "unconfined"
 
 # Cgroup management implementation used for the runtime.
-cgroup_manager = "cgroupfs"
+cgroup_manager = "systemd"
 
 # List of default capabilities for containers. If it is empty or commented out,
 # only the capabilities defined in the containers json file by the user/kube
@@ -213,7 +216,7 @@ manage_network_ns_lifecycle = false
 # If no runtime_handler is provided, the runtime will be picked based on the level
 # of trust of the workload.
 
-[crio.runtime.runtimes.runc]
+[crio.runtime.runtimes.lxc]
 runtime_path = "CRIOLXC_BINARY"
 runtime_type = "oci"
 runtime_root = "CRIOLXC_TEST_DIR/runtime-root"
