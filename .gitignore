@@ -7,3 +7,4 @@ crio-lxc-test*
 oci/
 roots/
 .stacker/
+.keeptempdirs
