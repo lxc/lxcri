@@ -160,9 +160,9 @@ func main() {
 			return err
 		}
 
-		for _, f := range app.Flags {
+		for _, f := range ctx.Command.Flags {
 			name := f.Names()[0]
-			log.Debug().Str("flag", name).Str("val", ctx.String(name)).Msg("flag value")
+			log.Trace().Str("flag", name).Str("val", ctx.String(name)).Msg("flag value")
 		}
 
 		log.Info().Strs("args", os.Args).Msg("run cmd")
