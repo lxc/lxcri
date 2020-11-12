@@ -11,15 +11,9 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const (
-	// Environment variables are populated by default from this environment file.
-	// Existing environment variables are preserved.
-	envFileDefault = "/etc/default/crio-lxc"
-	// This environment variable can be used to overwrite the path in envFileDefault.
-	envFileVar = "CRIO_LXC_DEFAULTS"
-)
-
-var clxc crioLXC
+// Environment variables are populated by default from this environment file.
+// Existing environment variables are preserved.
+var envFile = "/etc/default/crio-lxc"
 
 func main() {
 	app := cli.NewApp()
@@ -46,7 +40,7 @@ func main() {
 		&cli.StringFlag{
 			Name:        "log-file",
 			Usage:       "log file for LXC and crio-lxc (default is per container in lxc-path)",
-			EnvVars:     []string{"CRIO_LXC_LOG_FILE", "LOG_FILE"},
+			EnvVars:     []string{"CRIO_LXC_LOG_FILE"},
 			Value:       "/var/log/crio-lxc.log",
 			Destination: &clxc.LogFilePath,
 		},
@@ -143,6 +137,18 @@ func main() {
 
 	startTime := time.Now()
 
+	env, envErr := loadEnvFile(envFile)
+	// Environment variables must be injected from file before app is run,
+	// Otherwise the values are not set to the crioLXC instance.
+	if env != nil {
+		for key, val := range env {
+			if err := setEnvIfNew(key, val); err != nil {
+				envErr = err
+				break
+			}
+		}
+	}
+
 	app.Before = func(ctx *cli.Context) error {
 		clxc.Command = ctx.Args().Get(0)
 		return nil
@@ -160,12 +166,29 @@ func main() {
 			return err
 		}
 
+		if env != nil {
+			stat, _ := os.Stat(envFile)
+			if stat != nil && (stat.Mode().Perm()^0640) != 0 {
+				log.Warn().Str("file", envFile).Stringer("mode", stat.Mode().Perm()).Msgf("environment file should have mode %s", os.FileMode(0640))
+			}
+			for key, val := range env {
+				log.Trace().Str("env", key).Str("val", val).Msg("environment file value")
+			}
+			log.Info().Str("file", envFile).Msg("loaded environment variables from file")
+		} else {
+			if os.IsNotExist(envErr) {
+				log.Warn().Str("file", envFile).Msg("environment file does not exist")
+			} else {
+				return errors.Wrapf(envErr, "failed to load env file %s", envFile)
+			}
+		}
+
 		for _, f := range ctx.Command.Flags {
 			name := f.Names()[0]
 			log.Trace().Str("flag", name).Str("val", ctx.String(name)).Msg("flag value")
 		}
 
-		log.Info().Strs("args", os.Args).Msg("run cmd")
+		log.Debug().Strs("args", os.Args).Msg("run cmd")
 		return nil
 	}
 
@@ -187,21 +210,12 @@ func main() {
 		fmt.Fprintf(os.Stderr, "undefined subcommand %q cmdline%s\n", cmd, os.Args)
 	}
 
-	envFile := envFileDefault
-	if s, isSet := os.LookupEnv(envFileVar); isSet {
-		envFile = s
-	}
-	if err := loadEnvDefaults(envFile); err != nil {
-		println(err.Error())
-		os.Exit(1)
-	}
-
 	err := app.Run(os.Args)
 	cmdDuration := time.Since(startTime)
 	if err != nil {
 		log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
 	} else {
-		log.Info().Dur("duration", cmdDuration).Msg("cmd done")
+		log.Debug().Dur("duration", cmdDuration).Msg("cmd done")
 	}
 
 	if err := clxc.release(); err != nil {
@@ -214,48 +228,34 @@ func main() {
 	}
 }
 
-// TODO Maybe this should be added to the urfave/cli API - create a pull request.
-func loadEnvDefaults(envFile string) error {
-	stat, err := os.Stat(envFile)
-	if os.IsNotExist(err) {
-		log.Warn().Str("file", envFile).Msg("environment file does not exist")
-		return nil
+func setEnvIfNew(key, val string) error {
+	if _, exist := os.LookupEnv(key); !exist {
+		return os.Setenv(key, val)
 	}
-	if err != nil {
-		return errors.Wrapf(err, "failed to stat %s", envFile)
-	}
-	if (stat.Mode().Perm() &^ 0640) != 0 {
-		log.Warn().Str("file", envFile).Msg("environment file should have mode 0640")
-	}
+	return nil
+}
+
+func loadEnvFile(envFile string) (map[string]string, error) {
 	// #nosec
 	data, err := ioutil.ReadFile(envFile)
 	if err != nil {
-		return errors.Wrap(err, "failed to load env file")
+		return nil, err
 	}
-	log.Info().Str("file", envFile).Msg("loaded environment file")
 	lines := strings.Split(string(data), "\n")
+	env := make(map[string]string, len(lines))
 	for n, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		//skip over comments and blank lines
+		// skip over comments and blank lines
 		if len(trimmed) == 0 || trimmed[0] == '#' {
 			continue
 		}
 		vals := strings.SplitN(trimmed, "=", 2)
 		if len(vals) != 2 {
-			return fmt.Errorf("Invalid environment variable at line %s:%d", envFile, n)
+			return nil, fmt.Errorf("Invalid environment variable at line %s:%d", envFile, n+1)
 		}
 		key := strings.TrimSpace(vals[0])
 		val := strings.Trim(strings.TrimSpace(vals[1]), `"'`)
-		// existing environment variables have precedence
-		if existVal, exist := os.LookupEnv(key); !exist {
-			err := os.Setenv(key, val)
-			if err != nil {
-				return errors.Wrap(err, "setenv failed")
-			}
-			log.Trace().Str("env", key).Str("val", val).Msg("using value from environment file")
-		} else {
-			log.Trace().Str("env", key).Str("val", existVal).Msg("environment file value overriden by existing environment value")
-		}
+		env[key] = val
 	}
-	return nil
+	return env, nil
 }
