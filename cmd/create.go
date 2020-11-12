@@ -255,6 +255,7 @@ func configureInit(spec *specs.Spec) error {
 	if err != nil {
 		return errors.Wrapf(err, "Failed creating %s in rootfs", internal.ConfigDir)
 	}
+	// #nosec
 	err = os.MkdirAll(clxc.runtimePath(internal.ConfigDir), 0755)
 	if err != nil {
 		return errors.Wrapf(err, "Failed creating %s in lxc container dir", internal.ConfigDir)
@@ -309,6 +310,7 @@ func configureInit(spec *specs.Spec) error {
 }
 
 func touchFile(filePath string, perm os.FileMode) error {
+	// #nosec
 	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_RDONLY, perm)
 	if err == nil {
 		return f.Close()
@@ -437,6 +439,7 @@ func ensureDefaultDevices(spec *specs.Spec) error {
 
 func startContainer(spec *specs.Spec, timeout time.Duration) error {
 	configFilePath := clxc.runtimePath("config")
+	// #nosec
 	cmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, configFilePath)
 	// Start container with a clean environment.
 	// LXC will export variables defined in the config lxc.environment.
@@ -560,6 +563,7 @@ func setHostname(spec *specs.Spec) error {
 		if err != nil {
 			return errors.Wrapf(err, "failed to open uts namespace %s", ns.Path)
 		}
+		// #nosec
 		defer f.Close()
 
 		// setns only affects the current thread

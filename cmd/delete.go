@@ -63,6 +63,7 @@ func doDelete(ctx *cli.Context) error {
 		} else {
 			// try to remove outer directory, in case this is the POD that is deleted
 			// FIXME crio should delete the kubepods slice
+			// #nosec
 			tryRemoveAllCgroupDir(c, filepath.Dir(dir), false)
 		}
 	}
@@ -73,6 +74,7 @@ func doDelete(ctx *cli.Context) error {
 		} else {
 			// try to remove outer directory, in case this is the POD that is deleted
 			// FIXME crio should delete the kubepods slice
+			// #nosec
 			tryRemoveAllCgroupDir(c, filepath.Dir(dir), false)
 		}
 	}
@@ -86,6 +88,7 @@ func doDelete(ctx *cli.Context) error {
 
 func tryRemoveAllCgroupDir(c *lxc.Container, cgroupPath string, killProcs bool) error {
 	dirName := filepath.Join("/sys/fs/cgroup", cgroupPath)
+	// #nosec
 	dir, err := os.Open(dirName)
 	if os.IsNotExist(err) {
 		return nil
@@ -144,6 +147,7 @@ func loopKillCgroupProcs(scope string, timeout time.Duration) error {
 func killCgroupProcs(scope string) (int, error) {
 	cgroupProcsPath := filepath.Join(scope, "cgroup.procs")
 	log.Trace().Str("file", cgroupProcsPath).Msg("reading control group process list")
+	// #nosec
 	procsData, err := ioutil.ReadFile(cgroupProcsPath)
 	if err != nil {
 		return -1, errors.Wrapf(err, "failed to read control group process list %s", cgroupProcsPath)

@@ -53,6 +53,7 @@ func doExec(ctx *cli.Context) error {
 
 	if specFilePath != "" {
 		log.Debug().Str("spec", specFilePath).Msg("read process spec")
+		// #nosec
 		specData, err := ioutil.ReadFile(specFilePath)
 		log.Trace().Err(err).RawJSON("spec", specData).Msg("process spec data")
 

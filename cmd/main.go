@@ -224,6 +224,7 @@ func loadEnvDefaults(envFile string) error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to stat %s", envFile)
 	}
+	// #nosec
 	data, err := ioutil.ReadFile(envFile)
 	if err != nil {
 		return errors.Wrap(err, "failed to load env file")

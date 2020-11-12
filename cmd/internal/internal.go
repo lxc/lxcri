@@ -22,10 +22,12 @@ const (
 
 // ReadSpec deserializes the JSON encoded runtime spec from the given path.
 func ReadSpec(specFilePath string) (*specs.Spec, error) {
+	// #nosec
 	specFile, err := os.Open(specFilePath)
 	if err != nil {
 		return nil, err
 	}
+	// #nosec
 	defer specFile.Close()
 	spec := &specs.Spec{}
 	err = json.NewDecoder(specFile).Decode(spec)
@@ -37,10 +39,12 @@ func ReadSpec(specFilePath string) (*specs.Spec, error) {
 
 // WriteSpec serializes the runtime spec to JSON and writes it to the given path.
 func WriteSpec(spec *specs.Spec, specFilePath string) error {
+	// #nosec
 	f, err := os.OpenFile(specFilePath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0444)
 	if err != nil {
 		return err
 	}
+	// #nosec
 	defer f.Close()
 	if err := json.NewEncoder(f).Encode(spec); err != nil {
 		return err

@@ -76,6 +76,7 @@ func createDevice(spec *specs.Spec, dev specs.LinuxDevice) error {
 	}
 
 	// ignore error (mknod will fail)
+	// #nosec
 	os.MkdirAll(filepath.Dir(dev.Path), 0755)
 
 	err := unix.Mknod(dev.Path, mode, devMode)
