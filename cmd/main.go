@@ -216,13 +216,16 @@ func main() {
 
 // TODO Maybe this should be added to the urfave/cli API - create a pull request.
 func loadEnvDefaults(envFile string) error {
-	_, err := os.Stat(envFile)
+	stat, err := os.Stat(envFile)
 	if os.IsNotExist(err) {
 		log.Warn().Str("file", envFile).Msg("environment file does not exist")
 		return nil
 	}
 	if err != nil {
 		return errors.Wrapf(err, "failed to stat %s", envFile)
+	}
+	if (stat.Mode().Perm() &^ 0640) != 0 {
+		log.Warn().Str("file", envFile).Msg("environment file should have mode 0640")
 	}
 	// #nosec
 	data, err := ioutil.ReadFile(envFile)
