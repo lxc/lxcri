@@ -16,7 +16,7 @@ func configureMounts(spec *specs.Spec) error {
 		return err
 	}
 
-	for i, _ := range spec.Mounts {
+	for i := range spec.Mounts {
 		ms := spec.Mounts[i]
 		if ms.Type == "cgroup" {
 			// TODO check if hieararchy is cgroup v2 only (unified mode)
