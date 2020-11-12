@@ -57,11 +57,11 @@ var createCmd = cli.Command{
 func doCreate(ctx *cli.Context) error {
 	err := doCreateInternal()
 	if clxc.Backup || (err != nil && clxc.BackupOnError) {
-		backupDir, backupErr := clxc.backupRuntimeResources()
-		if backupErr == nil {
-			log.Warn().Str("file", backupDir).Msg("runtime backup completed")
+		dir, err := clxc.backupRuntimeResources()
+		if err != nil {
+			log.Error().Err(err).Str("file", dir).Msg("runtime backup failed")
 		} else {
-			log.Error().Err(backupErr).Str("file", backupDir).Msg("runtime backup failed")
+			log.Trace().Str("file", dir).Msg("runtime backup created")
 		}
 	}
 	return err
