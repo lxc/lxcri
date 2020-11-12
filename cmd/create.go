@@ -473,21 +473,16 @@ func startContainer(spec *specs.Spec, timeout time.Duration) error {
 		return errors.Wrapf(err, "failed to write init spec")
 	}
 
-	err := cmd.Start()
-	if err != nil {
-		return err
+	log.Debug().Strs("args", cmd.Args).Msg("running start cmd")
+	if err := cmd.Start(); err != nil {
+		return errors.Wrap(err, "failed to run start cmd")
 	}
 
 	if clxc.PidFile != "" {
 		log.Debug().Str("file", clxc.PidFile).Msg("creating PID file")
-		err := createPidFile(clxc.PidFile, cmd.Process.Pid)
-		if err != nil {
-			return err
-		}
+		return createPidFile(clxc.PidFile, cmd.Process.Pid)
 	}
-
-	log.Debug().Msg("waiting for container creation")
-	return clxc.waitContainerCreated(timeout)
+	return nil
 }
 
 func saveConfig(configFilePath string) error {
