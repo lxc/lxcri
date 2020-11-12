@@ -105,6 +105,7 @@ func doKill(ctx *cli.Context) error {
 	}
 	pid, proc := clxc.safeGetInitPid()
 	if proc != nil {
+		// #nosec
 		defer proc.Close()
 	}
 	if pid <= 0 {

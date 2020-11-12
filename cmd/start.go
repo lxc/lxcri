@@ -31,11 +31,13 @@ starts <containerID>
 
 func doStart(ctx *cli.Context) error {
 	fifoPath := clxc.runtimePath(internal.SyncFifoPath)
+	// #nosec
 	f, err := os.OpenFile(fifoPath, os.O_RDONLY, 0)
 	log.Debug().Err(err).Str("fifo", fifoPath).Msg("open fifo")
 	if err != nil {
 		return errors.Wrap(err, "container not started - failed to open sync fifo")
 	}
+	// #nosec
 	defer f.Close()
 
 	done := make(chan error)

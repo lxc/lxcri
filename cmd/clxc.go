@@ -290,6 +290,7 @@ func (c *crioLXC) getContainerState() (int, string, error) {
 func (c *crioLXC) getContainerInitState() (int, string, error) {
 	pid, proc := c.safeGetInitPid()
 	if proc != nil {
+		// #nosec
 		defer proc.Close()
 	}
 	if pid <= 0 {
@@ -297,6 +298,7 @@ func (c *crioLXC) getContainerInitState() (int, string, error) {
 	}
 
 	envFile := fmt.Sprintf("/proc/%d/environ", pid)
+	// #nosec
 	data, err := ioutil.ReadFile(envFile)
 	if err != nil {
 		// This is fatal. It should not happen because a filehandle to /proc/%d is open.
@@ -327,6 +329,7 @@ func (c *crioLXC) safeGetInitPid() (pid int, proc *os.File) {
 	pid2 := c.Container.InitPid()
 	if pid2 != pid {
 		if proc != nil {
+			// #nosec
 			proc.Close()
 		}
 		// init process has died which should only happen if /proc/%d was not opened

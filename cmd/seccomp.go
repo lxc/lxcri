@@ -39,14 +39,17 @@ func configureSeccomp(spec *specs.Spec) error {
 // Note seccomp flags (see `man 2 seccomp`) are currently not supported
 // https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md#seccomp
 func writeSeccompProfile(profilePath string, seccomp *specs.LinuxSeccomp) error {
+	// #nosec
 	profile, err := os.OpenFile(profilePath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0440)
 	if err != nil {
 		return err
 	}
+	// #nosec
 	defer profile.Close()
 
 	w := bufio.NewWriter(profile)
 
+	// #nosec
 	w.WriteString("2\n")
 
 	action, err := defaultAction(seccomp)

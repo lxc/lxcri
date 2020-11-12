@@ -11,6 +11,7 @@ func createPidFile(path string, pid int) error {
 	tmpDir := filepath.Dir(path)
 	tmpName := filepath.Join(tmpDir, fmt.Sprintf(".%s", filepath.Base(path)))
 
+	// #nosec
 	f, err := os.OpenFile(tmpName, os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
 	if err != nil {
 		return err
