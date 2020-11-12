@@ -33,7 +33,7 @@ func configureMounts(spec *specs.Spec) error {
 		mountDest, err := resolveMountDestination(spec.Root.Path, ms.Destination)
 		// Intermediate path resolution failed. This is not an error, since
 		// the remaining directories / files are automatically created (create=dir|file)
-		log.Trace().Err(err).Str("dst:", ms.Destination).Str("effective:", mountDest).Msg("resolve mount destination")
+		log.Trace().Err(err).Str("file", ms.Destination).Str("target", mountDest).Msg("resolve mount destination")
 
 		// Check whether the resolved destination of the target link escapes the rootfs.
 		if !filepath.HasPrefix(mountDest, spec.Root.Path) {
@@ -77,12 +77,12 @@ func createMountDestination(spec *specs.Spec, ms *specs.Mount) error {
 		// source exists and is not a directory
 		// create a target file that can be used as target for a bind mount
 		err := os.MkdirAll(filepath.Dir(ms.Destination), 0750)
-		log.Debug().Err(err).Str("dst:", ms.Destination).Msg("create parent directory for file bind mount")
+		log.Debug().Err(err).Str("file", ms.Destination).Msg("create parent directory for file bind mount")
 		if err != nil {
 			return errors.Wrap(err, "failed to create mount destination dir")
 		}
 		f, err := os.OpenFile(ms.Destination, os.O_CREATE, 0440)
-		log.Debug().Err(err).Str("dst:", ms.Destination).Msg("create file bind mount destination")
+		log.Debug().Err(err).Str("file", ms.Destination).Msg("create file bind mount destination")
 		if err != nil {
 			return errors.Wrap(err, "failed to create file mountpoint")
 		}
@@ -92,7 +92,7 @@ func createMountDestination(spec *specs.Spec, ms *specs.Mount) error {
 	// FIXME exclude all directories that are below other mounts
 	// only directories / files on the readonly rootfs must be created
 	err = os.MkdirAll(ms.Destination, 0750)
-	log.Debug().Err(err).Str("dst:", ms.Destination).Msg("create mount destination directory")
+	log.Debug().Err(err).Str("file", ms.Destination).Msg("create mount destination directory")
 	if err != nil {
 		return errors.Wrap(err, "failed to create mount destination")
 	}
@@ -100,7 +100,7 @@ func createMountDestination(spec *specs.Spec, ms *specs.Mount) error {
 }
 
 func resolvePathRelative(rootfs string, currentPath string, subPath string) (string, error) {
-	log.Trace().Str("current:", currentPath).Str("sub:", subPath).Msg("resolve path relative")
+	log.Trace().Str("file", currentPath).Str("sub", subPath).Msg("resolve path relative")
 	p := filepath.Join(currentPath, subPath)
 
 	stat, err := os.Lstat(p)
@@ -110,7 +110,7 @@ func resolvePathRelative(rootfs string, currentPath string, subPath string) (str
 	}
 
 	if stat.Mode()&os.ModeSymlink == 0 {
-		log.Trace().Str("filepath:", p).Msg("is not a symlink")
+		log.Trace().Str("file", p).Msg("is not a symlink")
 		return p, nil
 	}
 	// resolve symlink
@@ -120,7 +120,7 @@ func resolvePathRelative(rootfs string, currentPath string, subPath string) (str
 		return p, err
 	}
 
-	log.Trace().Str("link:", p).Str("dst:", linkDst).Msg("symlink detected")
+	log.Trace().Str("link", p).Str("dst", linkDst).Msg("symlink detected")
 
 	// The destination of an absolute link must be prefixed with the rootfs
 	if filepath.IsAbs(linkDst) {
@@ -161,7 +161,7 @@ func resolveMountDestination(rootfs string, dst string) (dstPath string, err err
 	// start path resolution at rootfs
 	for i, entry := range entries {
 		currentPath, err = resolvePathRelative(rootfs, currentPath, entry)
-		log.Trace().Err(err).Str("dst:", currentPath).Msg("path resolved")
+		log.Trace().Err(err).Str("file", currentPath).Msg("path resolved")
 		if err != nil {
 			// The already resolved path is concatenated with the remaining path,
 			// if resolution of path fails at some point.

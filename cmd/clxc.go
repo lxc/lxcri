@@ -128,7 +128,7 @@ func (c crioLXC) release() error {
 func supportsConfigItem(keys ...string) bool {
 	for _, key := range keys {
 		if !lxc.IsSupportedConfigItem(key) {
-			log.Debug().Str("key:", key).Msg("unsupported lxc config item")
+			log.Debug().Str("lxc.config", key).Msg("unsupported config item")
 			return false
 		}
 	}
@@ -151,11 +151,10 @@ func (c *crioLXC) getConfigItem(key string) string {
 func (c *crioLXC) setConfigItem(key, value string) error {
 	err := c.Container.SetConfigItem(key, value)
 	if err != nil {
-		log.Error().Err(err).Str("key:", key).Str("value:", value).Msg("lxc config")
-	} else {
-		log.Debug().Str("key:", key).Str("value:", value).Msg("lxc config")
+		return errors.Wrap(err, "failed to set config item '%s=%s'")
 	}
-	return errors.Wrap(err, "failed to set lxc config item '%s=%s'")
+	log.Debug().Str("lxc.config", key).Str("val", value).Msg("set config item")
+	return nil
 }
 
 func (c *crioLXC) configureLogging() error {
@@ -172,18 +171,18 @@ func (c *crioLXC) configureLogging() error {
 	c.LogFile = f
 
 	zerolog.TimestampFieldName = "t"
-	zerolog.LevelFieldName = "p"
+	zerolog.LevelFieldName = "l"
 	zerolog.MessageFieldName = "m"
 	zerolog.TimeFieldFormat = timeFormatLXCMillis
 
 	// NOTE It's not possible change the possition of the timestamp.
 	// The ttimestamp is appended to the to the log output because it is dynamically rendered
 	// see https://github.com/rs/zerolog/issues/109
-	log = zerolog.New(f).With().Timestamp().Str("cmd:", c.Command).Str("cid:", c.ContainerID).Logger()
+	log = zerolog.New(f).With().Timestamp().Str("cmd", c.Command).Str("cid", c.ContainerID).Logger()
 
 	level, err := parseLogLevel(c.LogLevelString)
 	if err != nil {
-		log.Error().Err(err).Stringer("loglevel:", level).Msg("using fallback log-level")
+		log.Error().Err(err).Stringer("val", level).Msg("using fallback log-level")
 	}
 	c.LogLevel = level
 
@@ -215,7 +214,7 @@ func parseLogLevel(s string) (lxc.LogLevel, error) {
 	case "error":
 		return lxc.ERROR, nil
 	default:
-		return lxc.ERROR, fmt.Errorf("Invalid log-level %s", s)
+		return lxc.INFO, fmt.Errorf("Invalid log-level %s", s)
 	}
 }
 
@@ -339,7 +338,7 @@ func (c *crioLXC) safeGetInitPid() (pid int, proc *os.File) {
 	// It's unlikely a permissions problem because crio runs as privileged process.
 	// This leads to race conditions and should appear in the logs.
 	if proc == nil {
-		log.Error().Err(err).Int("pid:", pid).Msg("failed to open /proc directory for init PID - procfs mounted?")
+		log.Error().Err(err).Int("pid", pid).Msg("failed to open /proc directory for init PID - procfs mounted?")
 	}
 
 	return pid, proc

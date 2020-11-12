@@ -38,11 +38,11 @@ func doState(ctx *cli.Context) error {
 	}
 
 	s.Pid, s.Status, err = clxc.getContainerState()
-	log.Debug().Int("pid:", s.Pid).Str("state:", s.Status).Msg("container state")
+	log.Debug().Int("pid", s.Pid).Str("status", s.Status).Msg("container state")
 
 	if stateJSON, err := json.Marshal(s); err == nil {
 		fmt.Fprint(os.Stdout, string(stateJSON))
-		log.Trace().RawJSON("state:", stateJSON).Msg("container state")
+		log.Trace().RawJSON("state", stateJSON).Msg("container state")
 	} else {
 		return errors.Wrap(err, "failed to marshal json")
 	}

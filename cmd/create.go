@@ -59,9 +59,9 @@ func doCreate(ctx *cli.Context) error {
 	if clxc.Backup || (err != nil && clxc.BackupOnError) {
 		backupDir, backupErr := clxc.backupRuntimeResources()
 		if backupErr == nil {
-			log.Warn().Str("dir:", backupDir).Msg("runtime backup completed")
+			log.Warn().Str("file", backupDir).Msg("runtime backup completed")
 		} else {
-			log.Error().Err(backupErr).Str("dir:", backupDir).Msg("runtime backup failed")
+			log.Error().Err(backupErr).Str("file", backupDir).Msg("runtime backup failed")
 		}
 	}
 	return err
@@ -476,7 +476,7 @@ func startContainer(spec *specs.Spec, timeout time.Duration) error {
 	}
 
 	if clxc.PidFile != "" {
-		log.Debug().Str("path:", clxc.PidFile).Msg("creating PID file")
+		log.Debug().Str("file", clxc.PidFile).Msg("creating PID file")
 		err := createPidFile(clxc.PidFile, cmd.Process.Pid)
 		if err != nil {
 			return err
