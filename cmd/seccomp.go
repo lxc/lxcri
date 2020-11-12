@@ -59,7 +59,7 @@ func writeSeccompProfile(profilePath string, seccomp *specs.LinuxSeccomp) error 
 	if err != nil {
 		return errors.Wrap(err, "Failed to detect platform architecture")
 	}
-	log.Debug().Str("action:", action).Strs("archs:", platformArchs).Msg("create seccomp profile")
+	log.Debug().Str("action", action).Strs("archs", platformArchs).Msg("create seccomp profile")
 	for _, arch := range platformArchs {
 		fmt.Fprintf(w, "[%s]\n", arch)
 		for _, sc := range seccomp.Syscalls {
@@ -86,7 +86,7 @@ func defaultAction(seccomp *specs.LinuxSeccomp) (string, error) {
 	case specs.ActAllow:
 		return "allow", nil
 	case specs.ActTrace, specs.ActLog: // Not (yet) supported by lxc
-		log.Warn().Str("action:", string(seccomp.DefaultAction)).Msg("unsupported seccomp default action")
+		log.Warn().Str("action", string(seccomp.DefaultAction)).Msg("unsupported seccomp default action")
 		fallthrough
 	//case specs.ActKillProcess: fallthrough // specs > 1.0.2
 	default:

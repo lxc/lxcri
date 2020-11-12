@@ -160,12 +160,9 @@ func main() {
 			return err
 		}
 
-		for _, env := range os.Environ() {
-			log.Trace().Str("env:", env).Msg("effective environment variable")
-		}
-		for _, appFlag := range app.Flags {
-			name := appFlag.Names()[0]
-			log.Trace().Str("name:", name).Str("value:", ctx.String(name)).Msg("effective cmdline flag")
+		for _, f := range app.Flags {
+			name := f.Names()[0]
+			log.Debug().Str("flag", name).Str("val", ctx.String(name)).Msg("flag value")
 		}
 
 		log.Info().Strs("args", os.Args).Msg("run cmd")
@@ -202,9 +199,9 @@ func main() {
 	err := app.Run(os.Args)
 	cmdDuration := time.Since(startTime)
 	if err != nil {
-		log.Error().Err(err).Dur("duration:", cmdDuration).Msg("cmd failed")
+		log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
 	} else {
-		log.Info().Dur("duration:", cmdDuration).Msg("cmd done")
+		log.Info().Dur("duration", cmdDuration).Msg("cmd done")
 	}
 
 	if err := clxc.release(); err != nil {
@@ -217,10 +214,11 @@ func main() {
 	}
 }
 
-// TODO This should be added to the urfave/cli API - create a pull request
+// TODO Maybe this should be added to the urfave/cli API - create a pull request.
 func loadEnvDefaults(envFile string) error {
 	_, err := os.Stat(envFile)
 	if os.IsNotExist(err) {
+		log.Warn().Str("file", envFile).Msg("environment file does not exist")
 		return nil
 	}
 	if err != nil {
@@ -230,6 +228,7 @@ func loadEnvDefaults(envFile string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to load env file")
 	}
+	log.Info().Str("file", envFile).Msg("loaded environment file")
 	lines := strings.Split(string(data), "\n")
 	for n, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -239,16 +238,19 @@ func loadEnvDefaults(envFile string) error {
 		}
 		vals := strings.SplitN(trimmed, "=", 2)
 		if len(vals) != 2 {
-			return fmt.Errorf("Invalid environment variable at %s +%d", envFile, n)
+			return fmt.Errorf("Invalid environment variable at line %s:%d", envFile, n)
 		}
 		key := strings.TrimSpace(vals[0])
 		val := strings.Trim(strings.TrimSpace(vals[1]), `"'`)
 		// existing environment variables have precedence
-		if _, exist := os.LookupEnv(key); !exist {
+		if existVal, exist := os.LookupEnv(key); !exist {
 			err := os.Setenv(key, val)
 			if err != nil {
 				return errors.Wrap(err, "setenv failed")
 			}
+			log.Trace().Str("env", key).Str("val", val).Msg("using value from environment file")
+		} else {
+			log.Trace().Str("env", key).Str("val", existVal).Msg("environment file value overriden by existing environment value")
 		}
 	}
 	return nil

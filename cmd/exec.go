@@ -52,7 +52,7 @@ func doExec(ctx *cli.Context) error {
 	specFilePath := ctx.String("process")
 
 	if specFilePath != "" {
-		log.Debug().Str("spec:", specFilePath).Msg("read process spec")
+		log.Debug().Str("spec", specFilePath).Msg("read process spec")
 		specData, err := ioutil.ReadFile(specFilePath)
 		log.Trace().Err(err).RawJSON("spec", specData).Msg("process spec data")
 
@@ -74,8 +74,8 @@ func doExec(ctx *cli.Context) error {
 				attachOpts.Groups[i] = int(g)
 			}
 		}
-		log.Debug().Int("uid:", attachOpts.UID).Int("gid:", attachOpts.GID).Ints("groups", attachOpts.Groups).Msg("process user")
-		log.Debug().Strs("arg:", procArgs).Msg("process args")
+		log.Debug().Int("uid", attachOpts.UID).Int("gid", attachOpts.GID).Ints("groups", attachOpts.Groups).Msg("process user")
+		log.Debug().Strs("arg", procArgs).Msg("process args")
 		attachOpts.Cwd = procSpec.Cwd
 		// Use the environment defined by the process spec.
 		attachOpts.ClearEnv = true

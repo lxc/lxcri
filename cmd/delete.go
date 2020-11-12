@@ -96,7 +96,7 @@ func tryRemoveAllCgroupDir(c *lxc.Container, cgroupPath string, killProcs bool) 
 	if killProcs {
 		err := loopKillCgroupProcs(dirName, time.Second*2)
 		if err != nil {
-			log.Trace().Err(err).Str("dir:", dirName).Msg("failed to kill cgroup procs")
+			log.Trace().Err(err).Str("file", dirName).Msg("failed to kill cgroup procs")
 		}
 	}
 	entries, err := dir.Readdir(-1)
@@ -143,7 +143,7 @@ func loopKillCgroupProcs(scope string, timeout time.Duration) error {
 // same control group as the process for which the PID is given.
 func killCgroupProcs(scope string) (int, error) {
 	cgroupProcsPath := filepath.Join(scope, "cgroup.procs")
-	log.Trace().Str("path:", cgroupProcsPath).Msg("reading control group process list")
+	log.Trace().Str("file", cgroupProcsPath).Msg("reading control group process list")
 	procsData, err := ioutil.ReadFile(cgroupProcsPath)
 	if err != nil {
 		return -1, errors.Wrapf(err, "failed to read control group process list %s", cgroupProcsPath)
@@ -161,7 +161,7 @@ func killCgroupProcs(scope string) (int, error) {
 	}
 
 	// This indicates improper signal handling / termination of the container.
-	log.Warn().Strs("pids:", pidStrings).Str("cgroup:", scope).Msg("killing left-over container processes")
+	log.Warn().Strs("pids", pidStrings).Str("cgroup", scope).Msg("killing left-over container processes")
 
 	for _, s := range pidStrings {
 		pid, err := strconv.Atoi(s)
