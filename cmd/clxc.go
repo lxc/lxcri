@@ -20,6 +20,8 @@ import (
 // time format used for logger
 const timeFormatLXCMillis = "20060102150405.000"
 
+// The singelton that wraps the lxc.Container
+var clxc crioLXC
 var log zerolog.Logger
 
 var errContainerNotExist = errors.New("container does not exist")
@@ -282,23 +284,19 @@ const (
 	envStateCreated = "CRIO_LXC_STATE=" + stateCreated
 )
 
+// getContainerInitState returns the runtime state of the container.
+// It is used to determine whether the container state is 'created' or 'running'.
+// The init process environment contains #envStateCreated if the the container
+// is created, but not yet running/started.
+// This requires the proc filesystem to be mounted on the host.
 func (c *crioLXC) getContainerState() (int, string, error) {
 	switch state := c.Container.State(); state {
 	case lxc.STARTING:
 		return 0, stateCreating, nil
 	case lxc.STOPPED:
 		return 0, stateStopped, nil
-	default:
-		return c.getContainerInitState()
 	}
-}
 
-// getContainerInitState returns the runtime state of the container.
-// It is used to determine whether the container state is 'created' or 'running'.
-// The init process environment contains #envStateCreated if the the container
-// is created, but not yet running/started.
-// This requires the proc filesystem to be mounted on the host.
-func (c *crioLXC) getContainerInitState() (int, string, error) {
 	pid, proc := c.safeGetInitPid()
 	if proc != nil {
 		// #nosec
@@ -356,21 +354,4 @@ func (c *crioLXC) safeGetInitPid() (pid int, proc *os.File) {
 	}
 
 	return pid, proc
-}
-
-func (c *crioLXC) waitContainerCreated(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		log.Trace().Msg("poll for container init state")
-		pid, state, err := c.getContainerInitState()
-		if err != nil {
-			return errors.Wrap(err, "failed to wait for container container creation")
-		}
-
-		if pid > 0 && state == stateCreated {
-			return nil
-		}
-		time.Sleep(time.Millisecond * 50)
-	}
-	return fmt.Errorf("timeout (%s) waiting for container creation", timeout)
 }
