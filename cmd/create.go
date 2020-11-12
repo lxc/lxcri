@@ -559,6 +559,10 @@ func setHostname(spec *specs.Spec) error {
 			return nil
 		}
 
+		// setns only affects the current thread
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
 		f, err := os.Open(ns.Path)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open uts namespace %s", ns.Path)
@@ -566,15 +570,25 @@ func setHostname(spec *specs.Spec) error {
 		// #nosec
 		defer f.Close()
 
-		// setns only affects the current thread
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
+		self, err := os.Open("/proc/self/ns/uts")
+		if err != nil {
+			return errors.Wrapf(err, "failed to open %s", "/proc/self/ns/uts")
+		}
+		// #nosec
+		defer self.Close()
 
 		err = unix.Setns(int(f.Fd()), unix.CLONE_NEWUTS)
 		if err != nil {
 			return err
 		}
-		return unix.Sethostname([]byte(spec.Hostname))
+		err = unix.Sethostname([]byte(spec.Hostname))
+		if err != nil {
+			return err
+		}
+		err = unix.Setns(int(self.Fd()), unix.CLONE_NEWUTS)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
