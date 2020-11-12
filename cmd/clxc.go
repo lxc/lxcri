@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -173,12 +174,16 @@ func (c *crioLXC) configureLogging() error {
 	zerolog.TimestampFieldName = "t"
 	zerolog.LevelFieldName = "l"
 	zerolog.MessageFieldName = "m"
+	zerolog.CallerFieldName = "c"
 	zerolog.TimeFieldFormat = timeFormatLXCMillis
 
 	// NOTE It's not possible change the possition of the timestamp.
 	// The ttimestamp is appended to the to the log output because it is dynamically rendered
 	// see https://github.com/rs/zerolog/issues/109
-	log = zerolog.New(f).With().Timestamp().Str("cmd", c.Command).Str("cid", c.ContainerID).Logger()
+	log = zerolog.New(f).With().Timestamp().Caller().Str("cmd", c.Command).Str("cid", c.ContainerID).Logger()
+	zerolog.CallerMarshalFunc = func(file string, line int) string {
+		return filepath.Base(file) + ":" + strconv.Itoa(line)
+	}
 
 	level, err := parseLogLevel(c.LogLevelString)
 	if err != nil {
