@@ -231,13 +231,18 @@ func (c *crioLXC) backupRuntimeResources() (backupDir string, err error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create backup dir")
 	}
-	err = runCommand("cp", "-r", "-p", clxc.runtimePath(), backupDir)
+	err = copyDir(clxc.runtimePath(), backupDir)
 	if err != nil {
 		return backupDir, errors.Wrap(err, "failed to copy lxc runtime directory")
 	}
 	// remove syncfifo because it is not of any use and blocks 'grep' within the backup directory.
-	os.Remove(filepath.Join(backupDir, internal.SyncFifoPath))
-	err = runCommand("cp", clxc.SpecPath, backupDir)
+	syncFifoPath := filepath.Join(backupDir, internal.SyncFifoPath)
+	// #nosec
+	err = os.Remove(syncFifoPath)
+	if err != nil {
+		log.Warn().Err(err).Str("file", syncFifoPath).Msg("failed to remove syncfifo from backup dir")
+	}
+	err = copyDir(clxc.SpecPath, backupDir)
 	if err != nil {
 		return backupDir, errors.Wrap(err, "failed to copy runtime spec to backup dir")
 	}
@@ -245,11 +250,12 @@ func (c *crioLXC) backupRuntimeResources() (backupDir string, err error) {
 }
 
 // TODO avoid shellout
-func runCommand(args ...string) error {
-	cmd := exec.Command(args[0], args[1:]...)
+func copyDir(src, dst string) error {
+	// #nosec
+	cmd := exec.Command("cp", "-r", "-p", src, dst)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return errors.Errorf("%s: %s: %s", strings.Join(args, " "), err, string(output))
+		return errors.Errorf("%s: %s: %s", strings.Join(cmd.Args, " "), err, string(output))
 	}
 	return nil
 }
