@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/lxc/crio-lxc/cmd/internal"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -30,11 +31,19 @@ func doState(ctx *cli.Context) error {
 
 	// TODO save BundlePath to init spec
 	bundlePath := filepath.Join("/var/run/containers/storage/overlay-containers/", clxc.Container.Name(), "userdata")
+	spec, err := internal.ReadSpec(filepath.Join(bundlePath, "config.json"))
+	if err != nil {
+		return errors.Wrapf(err, "failed to load spec from %s", bundlePath)
+	}
 
 	s := specs.State{
 		Version: specs.Version,
 		ID:      clxc.Container.Name(),
 		Bundle:  bundlePath,
+	}
+
+	if spec.Annotations != nil {
+		s.Annotations = spec.Annotations
 	}
 
 	s.Pid, s.Status, err = clxc.getContainerState()
