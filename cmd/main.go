@@ -251,7 +251,7 @@ func loadEnvFile(envFile string) (map[string]string, error) {
 		}
 		vals := strings.SplitN(trimmed, "=", 2)
 		if len(vals) != 2 {
-			return nil, fmt.Errorf("Invalid environment variable at line %s:%d", envFile, n+1)
+			return nil, fmt.Errorf("invalid environment variable at line %s:%d", envFile, n+1)
 		}
 		key := strings.TrimSpace(vals[0])
 		val := strings.Trim(strings.TrimSpace(vals[1]), `"'`)

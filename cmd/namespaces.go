@@ -37,7 +37,7 @@ func configureNamespaces(namespaces []specs.LinuxNamespace) error {
 
 		n, supported := namespaceMap[ns.Type]
 		if !supported {
-			return fmt.Errorf("Unsupported namespace %s", ns.Type)
+			return fmt.Errorf("unsupported namespace %s", ns.Type)
 		}
 		configKey := fmt.Sprintf("lxc.namespace.share.%s", n.Name)
 		if err := clxc.setConfigItem(configKey, ns.Path); err != nil {
