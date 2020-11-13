@@ -179,6 +179,10 @@ func (c *crioLXC) configureLogging() error {
 	zerolog.CallerFieldName = "c"
 	zerolog.TimeFieldFormat = timeFormatLXCMillis
 
+	zerolog.TimestampFunc = func() time.Time {
+		return time.Now().UTC()
+	}
+
 	// NOTE It's not possible change the possition of the timestamp.
 	// The ttimestamp is appended to the to the log output because it is dynamically rendered
 	// see https://github.com/rs/zerolog/issues/109
