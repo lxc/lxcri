@@ -93,7 +93,7 @@ func defaultAction(seccomp *specs.LinuxSeccomp) (string, error) {
 		fallthrough
 	//case specs.ActKillProcess: fallthrough // specs > 1.0.2
 	default:
-		return "kill", fmt.Errorf("Unsupported seccomp default action %q", seccomp.DefaultAction)
+		return "kill", fmt.Errorf("unsupported seccomp default action %q", seccomp.DefaultAction)
 	}
 }
 

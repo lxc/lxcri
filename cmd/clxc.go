@@ -225,7 +225,7 @@ func parseLogLevel(s string) (lxc.LogLevel, error) {
 	case "error":
 		return lxc.ERROR, nil
 	default:
-		return lxc.INFO, fmt.Errorf("Invalid log-level %s", s)
+		return lxc.INFO, fmt.Errorf("invalid log-level %s", s)
 	}
 }
 
