@@ -22,8 +22,8 @@ starts <containerID>
 		&cli.DurationFlag{
 			Name:        "timeout",
 			Usage:       "timeout for reading from syncfifo",
-			EnvVars:     []string{"CRIO_LXC_TIMEOUT_START"},
-			Value:       time.Second * 30,
+			EnvVars:     []string{"CRIO_LXC_START_TIMEOUT"},
+			Value:       time.Second * 60,
 			Destination: &clxc.StartTimeout,
 		},
 	},

@@ -48,7 +48,7 @@ var createCmd = cli.Command{
 			Name:        "timeout",
 			Usage:       "timeout for container creation",
 			EnvVars:     []string{"CRIO_LXC_CREATE_TIMEOUT"},
-			Value:       time.Second * 5,
+			Value:       time.Second * 60,
 			Destination: &clxc.CreateTimeout,
 		},
 	},
