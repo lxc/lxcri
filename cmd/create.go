@@ -438,9 +438,8 @@ func ensureDefaultDevices(spec *specs.Spec) error {
 }
 
 func startContainer(spec *specs.Spec, timeout time.Duration) error {
-	configFilePath := clxc.runtimePath("config")
 	// #nosec
-	cmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, configFilePath)
+	cmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.configFilePath())
 	// Start container with a clean environment.
 	// LXC will export variables defined in the config lxc.environment.
 	// The environment variables defined by the container spec are exported within the init cmd CRIO_LXC_INIT_CMD.
@@ -449,7 +448,7 @@ func startContainer(spec *specs.Spec, timeout time.Duration) error {
 	cmd.Env = []string{}
 
 	if clxc.ConsoleSocket != "" {
-		if err := saveConfig(configFilePath); err != nil {
+		if err := clxc.saveConfig(); err != nil {
 			return err
 		}
 		return startConsole(cmd, clxc.ConsoleSocket)
@@ -465,7 +464,7 @@ func startContainer(spec *specs.Spec, timeout time.Duration) error {
 		cmd.Stderr = os.Stderr
 	}
 
-	if err := saveConfig(configFilePath); err != nil {
+	if err := clxc.saveConfig(); err != nil {
 		return err
 	}
 
@@ -481,17 +480,6 @@ func startContainer(spec *specs.Spec, timeout time.Duration) error {
 	if clxc.PidFile != "" {
 		log.Debug().Str("file", clxc.PidFile).Msg("creating PID file")
 		return createPidFile(clxc.PidFile, cmd.Process.Pid)
-	}
-	return nil
-}
-
-func saveConfig(configFilePath string) error {
-	// Write out final config file for debugging and use with lxc-attach:
-	// Do not edit config after this.
-	err := clxc.Container.SaveConfigFile(configFilePath)
-	log.Debug().Err(err).Str("config", configFilePath).Msg("save config file")
-	if err != nil {
-		return errors.Wrapf(err, "failed to save config file to '%s'", configFilePath)
 	}
 	return nil
 }

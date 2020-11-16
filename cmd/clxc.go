@@ -76,11 +76,15 @@ func (c *crioLXC) runtimePath(subPath ...string) string {
 	return filepath.Join(c.RuntimeRoot, c.ContainerID, filepath.Join(subPath...))
 }
 
+func (c *crioLXC) configFilePath() string {
+	return c.runtimePath("config")
+}
+
 func (c *crioLXC) loadContainer() error {
 	// Check for container existence by looking for config file.
 	// Otherwise lxc.NewContainer will return an empty container
 	// struct and we'll report wrong info
-	_, err := os.Stat(c.runtimePath("config"))
+	_, err := os.Stat(clxc.configFilePath())
 	if os.IsNotExist(err) {
 		return errContainerNotExist
 	}
@@ -92,26 +96,43 @@ func (c *crioLXC) loadContainer() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to load container")
 	}
-	if err := container.LoadConfigFile(c.runtimePath("config")); err != nil {
-		return err
+	err = container.LoadConfigFile(clxc.configFilePath())
+	if err != nil {
+		return errors.Wrap(err, "failed to load config file")
 	}
 	c.Container = container
 	return nil
 }
 
 func (c *crioLXC) createContainer() error {
-	_, err := os.Stat(c.runtimePath("config"))
-	if !os.IsNotExist(err) {
-		return errContainerExist
+	if err := os.MkdirAll(c.runtimePath(), 0700); err != nil {
+		return errors.Wrap(err, "failed to create container dir")
 	}
+	f, err := os.OpenFile(c.runtimePath(".config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
+	if err != nil {
+		return err
+	}
+	f.Close()
 	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
 	if err != nil {
 		return err
 	}
 	c.Container = container
-	if err := os.MkdirAll(c.runtimePath(), 0700); err != nil {
-		return errors.Wrap(err, "failed to create container dir")
+	return nil
+}
+
+func (c *crioLXC) saveConfig() error {
+	// Write out final config file for debugging and use with lxc-attach:
+	// Do not edit config after this.
+	tmpFile := c.runtimePath(".config")
+	err := clxc.Container.SaveConfigFile(tmpFile)
+	if err != nil {
+		return errors.Wrapf(err, "failed to save config file to '%s'", tmpFile)
 	}
+	if err := os.Rename(tmpFile, clxc.configFilePath()); err != nil {
+		return errors.Wrap(err, "failed to rename config file")
+	}
+	log.Debug().Str("file", clxc.configFilePath()).Msg("created lxc config file")
 	return nil
 }
 
