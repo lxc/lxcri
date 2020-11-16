@@ -80,10 +80,9 @@ func (c *crioLXC) configFilePath() string {
 	return c.runtimePath("config")
 }
 
+// loadContainer checks for the existence of the lxc config file.
+// It returns an error if the config file does not exist.
 func (c *crioLXC) loadContainer() error {
-	// Check for container existence by looking for config file.
-	// Otherwise lxc.NewContainer will return an empty container
-	// struct and we'll report wrong info
 	_, err := os.Stat(clxc.configFilePath())
 	if os.IsNotExist(err) {
 		return errContainerNotExist
@@ -104,15 +103,26 @@ func (c *crioLXC) loadContainer() error {
 	return nil
 }
 
+// createContainer creates a new container.
+// It must only be called once during the lifecycle of a container.
 func (c *crioLXC) createContainer() error {
+	// avoid creating a container
+	if _, err := os.Stat(clxc.configFilePath()); err == nil {
+		return errContainerExist
+	}
+
 	if err := os.MkdirAll(c.runtimePath(), 0700); err != nil {
 		return errors.Wrap(err, "failed to create container dir")
 	}
+
+	// An empty tmpfile is created to ensure that createContainer can only succeed once.
+	// The config file is atomically activated in saveConfig.
 	f, err := os.OpenFile(c.runtimePath(".config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
 	if err != nil {
 		return err
 	}
 	f.Close()
+
 	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
 	if err != nil {
 		return err
@@ -121,18 +131,28 @@ func (c *crioLXC) createContainer() error {
 	return nil
 }
 
+// saveConfig creates and atomically enables the lxc config file.
+// Any config changes via clxc.setConfigItem must be done
+// before calling saveConfig.
 func (c *crioLXC) saveConfig() error {
-	// Write out final config file for debugging and use with lxc-attach:
-	// Do not edit config after this.
+	// Allow it to be called once and only after createContainer.
 	tmpFile := c.runtimePath(".config")
+	if _, err := os.Stat(tmpFile); err != nil {
+		return errors.Wrap(err, "failed to stat config tmpfile")
+	}
+	// Don't overwrite an existing config.
+	cfgFile := c.configFilePath()
+	if _, err := os.Stat(cfgFile); err == nil {
+		return fmt.Errorf("config file %s already exists", cfgFile)
+	}
 	err := clxc.Container.SaveConfigFile(tmpFile)
 	if err != nil {
 		return errors.Wrapf(err, "failed to save config file to '%s'", tmpFile)
 	}
-	if err := os.Rename(tmpFile, clxc.configFilePath()); err != nil {
+	if err := os.Rename(tmpFile, cfgFile); err != nil {
 		return errors.Wrap(err, "failed to rename config file")
 	}
-	log.Debug().Str("file", clxc.configFilePath()).Msg("created lxc config file")
+	log.Debug().Str("file", cfgFile).Msg("created lxc config file")
 	return nil
 }
 
