@@ -2,11 +2,16 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	"golang.org/x/sys/unix"
 )
 
 // https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md
@@ -229,4 +234,121 @@ func parseSystemdCgroupPath(s string) (cg cgroupPath) {
 		cg.Scope = strings.Join(parts[1:], "-") + ".scope"
 	}
 	return cg
+}
+
+func tryRemoveCgroups(c *crioLXC) {
+	configItems := []string{"lxc.cgroup.dir", "lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor"}
+	for _, item := range configItems {
+		dir := clxc.getConfigItem(item)
+		if dir == "" {
+			continue
+		}
+		err := tryRemoveAllCgroupDir(c, dir, true)
+		if err != nil {
+			log.Warn().Err(err).Str("lxc.config", item).Msg("failed to remove cgroup scope")
+			continue
+		}
+		// try to remove outer directory, in case this is the POD that is deleted
+		// FIXME crio should delete the kubepods slice
+		outerSlice := filepath.Dir(dir)
+		err = tryRemoveAllCgroupDir(c, outerSlice, false)
+		if err != nil {
+			log.Debug().Err(err).Str("file", outerSlice).Msg("failed to remove cgroup slice")
+		}
+	}
+}
+
+func tryRemoveAllCgroupDir(c *crioLXC, cgroupPath string, killProcs bool) error {
+	dirName := filepath.Join("/sys/fs/cgroup", cgroupPath)
+	// #nosec
+	dir, err := os.Open(dirName)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if killProcs {
+		err := loopKillCgroupProcs(dirName, time.Second*2)
+		if err != nil {
+			log.Trace().Err(err).Str("file", dirName).Msg("failed to kill cgroup procs")
+		}
+	}
+	entries, err := dir.Readdir(-1)
+	if err != nil {
+		return err
+	}
+	// leftover lxc.pivot path
+	for _, i := range entries {
+		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
+			fullPath := filepath.Join(dirName, i.Name())
+			if err := unix.Rmdir(fullPath); err != nil {
+				return errors.Wrapf(err, "failed rmdir %s", fullPath)
+			}
+		}
+	}
+	return unix.Rmdir(dirName)
+}
+
+// loopKillCgroupProcs loops over PIDs in cgroup.procs and sends
+// each PID the kill signal until there are no more PIDs left.
+// Looping is required because processes that have been created (forked / exec)
+// may not 'yet' be visible in cgroup.procs.
+func loopKillCgroupProcs(scope string, timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	for {
+		select {
+		case <-timer.C:
+			return fmt.Errorf("timeout killing processes")
+		default:
+			nprocs, err := killCgroupProcs(scope)
+			if err != nil {
+				return err
+			}
+			if nprocs == 0 {
+				return nil
+			}
+			time.Sleep(time.Millisecond * 50)
+		}
+	}
+}
+
+// getCgroupProcs returns the PIDs for all processes which are in the
+// same control group as the process for which the PID is given.
+func killCgroupProcs(scope string) (int, error) {
+	cgroupProcsPath := filepath.Join(scope, "cgroup.procs")
+	log.Trace().Str("file", cgroupProcsPath).Msg("reading control group process list")
+	// #nosec
+	procsData, err := ioutil.ReadFile(cgroupProcsPath)
+	if err != nil {
+		return -1, errors.Wrapf(err, "failed to read control group process list %s", cgroupProcsPath)
+	}
+	// cgroup.procs contains one PID per line and is newline separated.
+	// A trailing newline is always present.
+	s := strings.TrimSpace(string(procsData))
+	if s == "" {
+		return 0, nil
+	}
+	pidStrings := strings.Split(s, "\n")
+	numPids := len(pidStrings)
+	if numPids == 0 {
+		return 0, nil
+	}
+
+	// This indicates improper signal handling / termination of the container.
+	log.Warn().Strs("pids", pidStrings).Str("cgroup", scope).Msg("killing left-over container processes")
+
+	for _, s := range pidStrings {
+		pid, err := strconv.Atoi(s)
+		if err != nil {
+			// Reading garbage from cgroup.procs should not happen.
+			return -1, errors.Wrapf(err, "failed to convert PID %q to number", s)
+		}
+		if err := unix.Kill(pid, 9); err != nil {
+			return -1, errors.Wrapf(err, "failed to kill %d", pid)
+		}
+	}
+
+	return numPids, nil
 }
