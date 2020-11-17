@@ -104,7 +104,8 @@ func doCreateInternal() error {
 	if err := configureContainer(spec); err != nil {
 		return errors.Wrap(err, "failed to configure container")
 	}
-	return startContainer(spec, clxc.CreateTimeout)
+	log.Info().Msg("start container process")
+	return runStartCmd(spec, clxc.CreateTimeout)
 }
 
 func configureContainer(spec *specs.Spec) error {
@@ -437,14 +438,14 @@ func ensureDefaultDevices(spec *specs.Spec) error {
 	return nil
 }
 
-func startContainer(spec *specs.Spec, timeout time.Duration) error {
+func runStartCmd(spec *specs.Spec, timeout time.Duration) error {
 	// #nosec
 	cmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.configFilePath())
 	// Start container with a clean environment.
 	// LXC will export variables defined in the config lxc.environment.
 	// The environment variables defined by the container spec are exported within the init cmd CRIO_LXC_INIT_CMD.
 	// This is required because environment variables defined by containers contain newlines and other tokens
-	// that can not be handled properly by lxc.
+	// that can not be handled properly within the lxc config file.
 	cmd.Env = []string{}
 
 	if clxc.ConsoleSocket != "" {
@@ -472,9 +473,8 @@ func startContainer(spec *specs.Spec, timeout time.Duration) error {
 		return errors.Wrapf(err, "failed to write init spec")
 	}
 
-	log.Debug().Strs("args", cmd.Args).Msg("running start cmd")
 	if err := cmd.Start(); err != nil {
-		return errors.Wrap(err, "failed to run start cmd")
+		return errors.Wrap(err, "failed to start container process")
 	}
 
 	if clxc.PidFile != "" {

@@ -44,15 +44,15 @@ func configureCgroup(spec *specs.Spec) error {
 		}
 	}
 	if blockio := spec.Linux.Resources.BlockIO; blockio != nil {
-		log.Warn().Msg("TODO cgroup blockio controller not implemented")
+		log.Debug().Msg("TODO cgroup blockio controller not implemented")
 	}
 
 	if hugetlb := spec.Linux.Resources.HugepageLimits; hugetlb != nil {
 		// set Hugetlb limit (in bytes)
-		log.Warn().Msg("TODO cgroup hugetlb controller not implemented")
+		log.Debug().Msg("TODO cgroup hugetlb controller not implemented")
 	}
 	if net := spec.Linux.Resources.Network; net != nil {
-		log.Warn().Msg("TODO cgroup network controller not implemented")
+		log.Debug().Msg("TODO cgroup network controller not implemented")
 	}
 	return nil
 }

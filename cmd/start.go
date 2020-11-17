@@ -30,6 +30,7 @@ starts <containerID>
 }
 
 func doStart(ctx *cli.Context) error {
+	log.Info().Msg("notify init to start container process")
 	fifoPath := clxc.runtimePath(internal.SyncFifoPath)
 	// #nosec
 	f, err := os.OpenFile(fifoPath, os.O_RDONLY, 0)

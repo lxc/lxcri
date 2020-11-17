@@ -244,7 +244,7 @@ func (c *crioLXC) configureLogging() error {
 	case lxc.DEBUG:
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
 	case lxc.INFO, lxc.NOTICE:
-	  // zerolog does not support a `notice` log-level notice
+		// zerolog does not support a `notice` log-level notice
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	case lxc.WARN:
 		zerolog.SetGlobalLevel(zerolog.WarnLevel)
