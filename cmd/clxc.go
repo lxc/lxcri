@@ -243,7 +243,8 @@ func (c *crioLXC) configureLogging() error {
 		zerolog.SetGlobalLevel(zerolog.TraceLevel)
 	case lxc.DEBUG:
 		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case lxc.INFO:
+	case lxc.INFO, lxc.NOTICE:
+	  // zerolog does not support a `notice` log-level notice
 		zerolog.SetGlobalLevel(zerolog.InfoLevel)
 	case lxc.WARN:
 		zerolog.SetGlobalLevel(zerolog.WarnLevel)
@@ -261,6 +262,8 @@ func parseLogLevel(s string) (lxc.LogLevel, error) {
 		return lxc.DEBUG, nil
 	case "info":
 		return lxc.INFO, nil
+	case "notice":
+		return lxc.NOTICE, nil
 	case "warn":
 		return lxc.WARN, nil
 	case "error":
