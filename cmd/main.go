@@ -174,7 +174,7 @@ func main() {
 			for key, val := range env {
 				log.Trace().Str("env", key).Str("val", val).Msg("environment file value")
 			}
-			log.Info().Str("file", envFile).Msg("loaded environment variables from file")
+			log.Debug().Str("file", envFile).Msg("loaded environment variables from file")
 		} else {
 			if os.IsNotExist(envErr) {
 				log.Warn().Str("file", envFile).Msg("environment file does not exist")

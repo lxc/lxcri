@@ -75,8 +75,6 @@ func doExec(ctx *cli.Context) error {
 				attachOpts.Groups[i] = int(g)
 			}
 		}
-		log.Debug().Int("uid", attachOpts.UID).Int("gid", attachOpts.GID).Ints("groups", attachOpts.Groups).Msg("process user")
-		log.Debug().Strs("arg", procArgs).Msg("process args")
 		attachOpts.Cwd = procSpec.Cwd
 		// Use the environment defined by the process spec.
 		attachOpts.ClearEnv = true
@@ -107,7 +105,10 @@ func doExec(ctx *cli.Context) error {
 	attachOpts.StderrFd = os.Stderr.Fd()
 
 	detach := ctx.Bool("detach")
-	log.Debug().Bool("detach", detach).Strs("args", procArgs).Msg("exec cmd")
+
+	log.Info().Bool("detach", detach).Strs("args", procArgs).
+		Int("uid", attachOpts.UID).Int("gid", attachOpts.GID).
+		Ints("groups", attachOpts.Groups).Msg("attach cmd to container")
 
 	if detach {
 		pidFile := ctx.String("pid-file")

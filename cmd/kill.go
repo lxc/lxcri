@@ -106,6 +106,6 @@ func doKill(ctx *cli.Context) error {
 	if pid <= 0 {
 		return errors.New("init process is neither running nor created")
 	}
-	log.Debug().Int("pid", pid).Int("signal", int(signum)).Msg("send kill signal")
+	log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
 	return unix.Kill(pid, signum)
 }
