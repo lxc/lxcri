@@ -30,13 +30,13 @@ func doDelete(ctx *cli.Context) error {
 		return err
 	}
 
-	_, state, err := clxc.getContainerState()
-	if state != stateStopped {
-		return fmt.Errorf("container is not not stopped, current state is %s", state)
-	}
-
-	if err := clxc.Container.Stop(); err != nil {
-		return errors.Wrap(err, "failed to stop container")
+	if !clxc.isContainerStopped() {
+		if !ctx.Bool("force") {
+			return fmt.Errorf("container is not not stopped (current state %s)", clxc.Container.State())
+		}
+		if err := clxc.Container.Stop(); err != nil {
+			return errors.Wrap(err, "failed to stop container")
+		}
 	}
 
 	if err := clxc.Container.Destroy(); err != nil {

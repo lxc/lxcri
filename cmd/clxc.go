@@ -332,6 +332,10 @@ const (
 	envStateCreated = "CRIO_LXC_STATE=" + stateCreated
 )
 
+func (c *crioLXC) isContainerStopped() bool {
+	return c.Container.State() == lxc.STOPPED
+}
+
 // getContainerInitState returns the runtime state of the container.
 // It is used to determine whether the container state is 'created' or 'running'.
 // The init process environment contains #envStateCreated if the the container
