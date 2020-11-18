@@ -2,13 +2,9 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -251,29 +247,7 @@ func parseSystemdCgroupPath(s string) (cg cgroupPath) {
 	return cg
 }
 
-func tryRemoveCgroups(c *crioLXC) {
-	configItems := []string{"lxc.cgroup.dir", "lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor"}
-	for _, item := range configItems {
-		dir := clxc.getConfigItem(item)
-		if dir == "" {
-			continue
-		}
-		err := tryRemoveAllCgroupDir(c, dir, true)
-		if err != nil {
-			log.Warn().Err(err).Str("lxc.config", item).Msg("failed to remove cgroup scope")
-			continue
-		}
-		// try to remove outer directory, in case this is the POD that is deleted
-		// FIXME crio should delete the kubepods slice
-		outerSlice := filepath.Dir(dir)
-		err = tryRemoveAllCgroupDir(c, outerSlice, false)
-		if err != nil {
-			log.Debug().Err(err).Str("file", outerSlice).Msg("failed to remove cgroup slice")
-		}
-	}
-}
-
-func tryRemoveAllCgroupDir(c *crioLXC, cgroupPath string, killProcs bool) error {
+func tryRemoveAllCgroupDir(cgroupPath string) error {
 	dirName := filepath.Join("/sys/fs/cgroup", cgroupPath)
 	// #nosec
 	dir, err := os.Open(dirName)
@@ -282,12 +256,6 @@ func tryRemoveAllCgroupDir(c *crioLXC, cgroupPath string, killProcs bool) error 
 	}
 	if err != nil {
 		return err
-	}
-	if killProcs {
-		err := loopKillCgroupProcs(dirName, time.Second*2)
-		if err != nil {
-			log.Trace().Err(err).Str("file", dirName).Msg("failed to kill cgroup procs")
-		}
 	}
 	entries, err := dir.Readdir(-1)
 	if err != nil {
@@ -303,115 +271,4 @@ func tryRemoveAllCgroupDir(c *crioLXC, cgroupPath string, killProcs bool) error 
 		}
 	}
 	return unix.Rmdir(dirName)
-}
-
-// loopKillCgroupProcs loops over PIDs in cgroup.procs and sends
-// each PID the kill signal until there are no more PIDs left.
-// Looping is required because processes that have been created (forked / exec)
-// may not 'yet' be visible in cgroup.procs.
-func loopKillCgroupProcs(scope string, timeout time.Duration) error {
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	for {
-		select {
-		case <-timer.C:
-			return fmt.Errorf("timeout killing processes")
-		default:
-			nprocs, err := killCgroupProcs(scope)
-			if err != nil {
-				return err
-			}
-			if nprocs == 0 {
-				return nil
-			}
-			time.Sleep(time.Millisecond * 50)
-		}
-	}
-}
-
-// getCgroupProcs returns the PIDs for all processes which are in the
-// same control group as the process for which the PID is given.
-func killCgroupProcs(scope string) (int, error) {
-	cgroupProcsPath := filepath.Join(scope, "cgroup.procs")
-	log.Trace().Str("file", cgroupProcsPath).Msg("reading control group process list")
-	// #nosec
-	procsData, err := ioutil.ReadFile(cgroupProcsPath)
-	if err != nil {
-		return -1, errors.Wrapf(err, "failed to read control group process list %s", cgroupProcsPath)
-	}
-	// cgroup.procs contains one PID per line and is newline separated.
-	// A trailing newline is always present.
-	s := strings.TrimSpace(string(procsData))
-	if s == "" {
-		return 0, nil
-	}
-	pidStrings := strings.Split(s, "\n")
-	numPids := len(pidStrings)
-	if numPids == 0 {
-		return 0, nil
-	}
-
-	// This indicates improper signal handling / termination of the container.
-	log.Warn().Strs("pids", pidStrings).Str("cgroup", scope).Msg("killing left-over container processes")
-
-	for _, s := range pidStrings {
-		pid, err := strconv.Atoi(s)
-		if err != nil {
-			// Reading garbage from cgroup.procs should not happen.
-			return -1, errors.Wrapf(err, "failed to convert PID %q to number", s)
-		}
-		if err := unix.Kill(pid, 9); err != nil {
-			return -1, errors.Wrapf(err, "failed to kill %d", pid)
-		}
-	}
-
-	return numPids, nil
-}
-
-func enableCgroupControllers(cg cgroupPath) error {
-	slice := cg.ScopePath()
-	// #nosec
-	if err := os.MkdirAll(slice, 755); err != nil {
-		return err
-	}
-	// enable all available controllers in the scope
-	data, err := ioutil.ReadFile("/sys/fs/cgroup/cgroup.controllers")
-	if err != nil {
-		return errors.Wrap(err, "failed to read cgroup.controllers")
-	}
-	controllers := strings.Split(strings.TrimSpace(string(data)), " ")
-
-	var b strings.Builder
-	for i, c := range controllers {
-		if i > 0 {
-			b.WriteByte(' ')
-		}
-		b.WriteByte('+')
-		b.WriteString(c)
-	}
-	b.WriteString("\n")
-
-	s := b.String()
-
-	base := "/sys/fs/cgroup"
-	for _, elem := range cg.Slices {
-		base = filepath.Join(base, elem)
-		c := filepath.Join(base, "cgroup.subtree_control")
-		err := ioutil.WriteFile(c, []byte(s), 0)
-		if err != nil {
-			return errors.Wrapf(err, "failed to enable cgroup controllers in %s", base)
-		}
-		log.Info().Str("file", base).Str("controllers", s).Msg("cgroup activated")
-	}
-	return nil
-}
-
-func auditCgroupSubtreeControl(cg cgroupPath, auditKey string) error {
-	log.Debug().Str("file", cg.SlicePath()).Str("key", auditKey).Msg("audit cgroup subtree control")
-	watchPath := filepath.Join(cg.SlicePath(), "cgroup.subtree_control")
-	out, err := exec.Command("auditctl", "-w", watchPath, "-p", "w", "-k", auditKey).CombinedOutput()
-	if err != nil {
-		return errors.Wrapf(err, "auditctl error %s", string(out))
-	}
-	return nil
 }

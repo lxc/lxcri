@@ -83,7 +83,7 @@ func (c *crioLXC) configFilePath() string {
 // loadContainer checks for the existence of the lxc config file.
 // It returns an error if the config file does not exist.
 func (c *crioLXC) loadContainer() error {
-	_, err := os.Stat(clxc.configFilePath())
+	_, err := os.Stat(c.configFilePath())
 	if os.IsNotExist(err) {
 		return errContainerNotExist
 	}
@@ -95,7 +95,7 @@ func (c *crioLXC) loadContainer() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to load container")
 	}
-	err = container.LoadConfigFile(clxc.configFilePath())
+	err = container.LoadConfigFile(c.configFilePath())
 	if err != nil {
 		return errors.Wrap(err, "failed to load config file")
 	}
@@ -107,7 +107,7 @@ func (c *crioLXC) loadContainer() error {
 // It must only be called once during the lifecycle of a container.
 func (c *crioLXC) createContainer() error {
 	// avoid creating a container
-	if _, err := os.Stat(clxc.configFilePath()); err == nil {
+	if _, err := os.Stat(c.configFilePath()); err == nil {
 		return errContainerExist
 	}
 
@@ -145,7 +145,7 @@ func (c *crioLXC) saveConfig() error {
 	if _, err := os.Stat(cfgFile); err == nil {
 		return fmt.Errorf("config file %s already exists", cfgFile)
 	}
-	err := clxc.Container.SaveConfigFile(tmpFile)
+	err := c.Container.SaveConfigFile(tmpFile)
 	if err != nil {
 		return errors.Wrapf(err, "failed to save config file to '%s'", tmpFile)
 	}
@@ -286,7 +286,7 @@ func (c *crioLXC) backupRuntimeResources() (backupDir string, err error) {
 	if err != nil {
 		return "", errors.Wrap(err, "failed to create backup dir")
 	}
-	err = copyDir(clxc.runtimePath(), backupDir)
+	err = copyDir(c.runtimePath(), backupDir)
 	if err != nil {
 		return backupDir, errors.Wrap(err, "failed to copy lxc runtime directory")
 	}
@@ -297,7 +297,7 @@ func (c *crioLXC) backupRuntimeResources() (backupDir string, err error) {
 	if err != nil {
 		log.Warn().Err(err).Str("file", syncFifoPath).Msg("failed to remove syncfifo from backup dir")
 	}
-	err = copyDir(clxc.SpecPath, backupDir)
+	err = copyDir(c.SpecPath, backupDir)
 	if err != nil {
 		return backupDir, errors.Wrap(err, "failed to copy runtime spec to backup dir")
 	}
@@ -365,4 +365,41 @@ func (c *crioLXC) getContainerState() (int, string, error) {
 		}
 	}
 	return pid, stateRunning, nil
+}
+
+func (c *crioLXC) deleteContainer() error {
+	if err := c.Container.Destroy(); err != nil {
+		return errors.Wrap(err, "failed to destroy container")
+	}
+
+	// "Note that resources associated with the container,
+	// but not created by this container, MUST NOT be deleted."
+	// TODO - because we set rootfs.managed=0, Destroy() doesn't
+	// delete the /var/lib/lxc/$containerID/config file:
+
+	c.tryRemoveCgroups()
+
+	return os.RemoveAll(c.runtimePath())
+}
+
+func (c *crioLXC) tryRemoveCgroups() {
+	configItems := []string{"lxc.cgroup.dir", "lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor"}
+	for _, item := range configItems {
+		dir := c.getConfigItem(item)
+		if dir == "" {
+			continue
+		}
+		err := tryRemoveAllCgroupDir(dir)
+		if err != nil {
+			log.Warn().Err(err).Str("lxc.config", item).Msg("failed to remove cgroup scope")
+			continue
+		}
+		// try to remove outer directory, in case this is the POD that is deleted
+		// FIXME crio should delete the kubepods slice
+		outerSlice := filepath.Dir(dir)
+		err = tryRemoveAllCgroupDir(outerSlice)
+		if err != nil {
+			log.Debug().Err(err).Str("file", outerSlice).Msg("failed to remove cgroup slice")
+		}
+	}
 }

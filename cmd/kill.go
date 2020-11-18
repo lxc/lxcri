@@ -4,6 +4,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"golang.org/x/sys/unix"
@@ -98,9 +100,12 @@ func doKill(ctx *cli.Context) error {
 		return errors.Wrap(err, "failed to load container")
 	}
 
-	pid := clxc.Container.InitPid()
-	if pid <= 0 {
-		return errors.New("init process is neither running nor created")
+	bundlePath := filepath.Join("/var/run/containers/storage/overlay-containers/", clxc.Container.Name(), "userdata")
+	pidFilePath := filepath.Join(bundlePath, "pidfile")
+
+	pid, err := readPidFile(pidFilePath)
+	if err != nil && !os.IsNotExist(err) {
+		return errors.Wrapf(err, "failed to load pidfile")
 	}
 	log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
 	return unix.Kill(pid, signum)
