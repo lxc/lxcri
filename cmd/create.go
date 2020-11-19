@@ -55,6 +55,15 @@ var createCmd = cli.Command{
 	},
 }
 
+func checkAccess(externalCmds ...string) error {
+	for _, cmd := range externalCmds {
+		if err := unix.Access(cmd, unix.X_OK); err != nil {
+			return errors.Wrapf(err, "failed to access cmd %s", cmd)
+		}
+	}
+	return nil
+}
+
 func doCreate(ctx *cli.Context) error {
 	err := doCreateInternal()
 	if clxc.Backup || (err != nil && clxc.BackupOnError) {
@@ -69,12 +78,17 @@ func doCreate(ctx *cli.Context) error {
 }
 
 func doCreateInternal() error {
+	err := checkAccess(clxc.StartCommand, clxc.HookCommand, clxc.InitCommand)
+	if err != nil {
+		return err
+	}
+
 	// minimal lxc version is 3.1 https://discuss.linuxcontainers.org/t/lxc-3-1-has-been-released/3527
 	if !lxc.VersionAtLeast(3, 1, 0) {
 		return fmt.Errorf("LXC runtime version > 3.1.0 required, but was %s", lxc.Version())
 	}
 
-	err := clxc.loadContainer()
+	err = clxc.loadContainer()
 	if err == nil {
 		return fmt.Errorf("container already exists")
 	}
