@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -247,8 +249,47 @@ func parseSystemdCgroupPath(s string) (cg cgroupPath) {
 	return cg
 }
 
-func tryRemoveAllCgroupDir(cgroupPath string) error {
-	dirName := filepath.Join("/sys/fs/cgroup", cgroupPath)
+type cgroupInfo struct {
+	Name  string
+	Procs []int
+	// controllers
+}
+
+func (cg *cgroupInfo) loadProcs() error {
+	cgroupProcsPath := filepath.Join("/sys/fs/cgroup", cg.Name, "cgroup.procs")
+	// #nosec
+	procsData, err := ioutil.ReadFile(cgroupProcsPath)
+	if err != nil {
+		return errors.Wrapf(err, "failed to read control group process list %s", cgroupProcsPath)
+	}
+	// cgroup.procs contains one PID per line and is newline separated.
+	// A trailing newline is always present.
+	s := strings.TrimSpace(string(procsData))
+	if s == "" {
+		return nil
+	}
+	pidStrings := strings.Split(s, "\n")
+	cg.Procs = make([]int, 0, len(pidStrings))
+	for _, s := range pidStrings {
+		pid, err := strconv.Atoi(s)
+		if err != nil {
+			return errors.Wrapf(err, "failed to convert PID %q to number", s)
+		}
+		cg.Procs = append(cg.Procs, pid)
+	}
+	return nil
+}
+
+func loadCgroup(cgName string) (*cgroupInfo, error) {
+	info := &cgroupInfo{Name: cgName}
+	if err := info.loadProcs(); err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+func deleteCgroup(cgName string) error {
+	dirName := filepath.Join("/sys/fs/cgroup", cgName)
 	// #nosec
 	dir, err := os.Open(dirName)
 	if os.IsNotExist(err) {
@@ -266,7 +307,7 @@ func tryRemoveAllCgroupDir(cgroupPath string) error {
 		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
 			fullPath := filepath.Join(dirName, i.Name())
 			if err := unix.Rmdir(fullPath); err != nil {
-				return errors.Wrapf(err, "failed rmdir %s", fullPath)
+				return errors.Wrapf(err, "failed rmdir %s %T", fullPath, err)
 			}
 		}
 	}

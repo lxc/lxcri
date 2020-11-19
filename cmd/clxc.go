@@ -132,10 +132,11 @@ func (c *crioLXC) createContainer() error {
 }
 
 // saveConfig creates and atomically enables the lxc config file.
+// It must be called after #createContainer and only once.
 // Any config changes via clxc.setConfigItem must be done
 // before calling saveConfig.
 func (c *crioLXC) saveConfig() error {
-	// Allow it to be called once and only after createContainer.
+	// createContainer creates the tmpfile
 	tmpFile := c.runtimePath(".config")
 	if _, err := os.Stat(tmpFile); err != nil {
 		return errors.Wrap(err, "failed to stat config tmpfile")
@@ -389,15 +390,13 @@ func (c *crioLXC) tryRemoveCgroups() {
 		if dir == "" {
 			continue
 		}
-		err := tryRemoveAllCgroupDir(dir)
+		err := deleteCgroup(dir)
 		if err != nil {
 			log.Warn().Err(err).Str("lxc.config", item).Msg("failed to remove cgroup scope")
 			continue
 		}
-		// try to remove outer directory, in case this is the POD that is deleted
-		// FIXME crio should delete the kubepods slice
 		outerSlice := filepath.Dir(dir)
-		err = tryRemoveAllCgroupDir(outerSlice)
+		err = deleteCgroup(outerSlice)
 		if err != nil {
 			log.Debug().Err(err).Str("file", outerSlice).Msg("failed to remove cgroup slice")
 		}
