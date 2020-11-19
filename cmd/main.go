@@ -71,9 +71,8 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "root",
-			Aliases:     []string{"lxc-path"}, // 'root' is used by crio/conmon
-			Usage:       "set the root path where container resources are created (logs, init and hook scripts). Must have access permissions",
-			Value:       "/var/lib/lxc",
+			Usage:       "container runtime root where (logs, init and hook scripts). tmpfs is recommended, exec permissions are required",
+			Value:       "/run/crio-lxc",
 			Destination: &clxc.RuntimeRoot,
 		},
 		&cli.BoolFlag{
