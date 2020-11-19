@@ -36,14 +36,21 @@ func main() {
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
 			Name:        "log-level",
-			Usage:       "set log level (trace|debug|info|warn|error)",
+			Usage:       "set the runtime log level (trace|debug|info|warn|error)",
 			EnvVars:     []string{"CRIO_LXC_LOG_LEVEL"},
-			Value:       "warn",
-			Destination: &clxc.LogLevelString,
+			Value:       defaultLogLevel.String(),
+			Destination: &clxc.LogLevel,
+		},
+		&cli.StringFlag{
+			Name:        "container-log-level",
+			Usage:       "set the container (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
+			EnvVars:     []string{"CRIO_LXC_CONTAINER_LOG_LEVEL"},
+			Value:       defaultContainerLogLevel.String(),
+			Destination: &clxc.ContainerLogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "log-file",
-			Usage:       "log file for LXC and crio-lxc (default is per container in lxc-path)",
+			Usage:       "path to log-file for combined runtime and container output",
 			EnvVars:     []string{"CRIO_LXC_LOG_FILE"},
 			Value:       "/var/log/crio-lxc.log",
 			Destination: &clxc.LogFilePath,

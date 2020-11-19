@@ -20,6 +20,9 @@ import (
 // time format used for logger
 const timeFormatLXCMillis = "20060102150405.000"
 
+const defaultContainerLogLevel = lxc.WARN
+const defaultLogLevel = zerolog.WarnLevel
+
 // The singelton that wraps the lxc.Container
 var clxc crioLXC
 var log zerolog.Logger
@@ -33,20 +36,20 @@ type crioLXC struct {
 	Command string
 
 	// [ global settings ]
-	RuntimeRoot    string
-	ContainerID    string
-	LogFile        *os.File
-	LogFilePath    string
-	LogLevel       lxc.LogLevel
-	LogLevelString string
-	BackupDir      string
-	Backup         bool
-	BackupOnError  bool
-	SystemdCgroup  bool
-	MonitorCgroup  string
-	StartCommand   string
-	InitCommand    string
-	HookCommand    string
+	RuntimeRoot       string
+	ContainerID       string
+	LogFile           *os.File
+	LogFilePath       string
+	LogLevel          string
+	ContainerLogLevel string
+	BackupDir         string
+	Backup            bool
+	BackupOnError     bool
+	SystemdCgroup     bool
+	MonitorCgroup     string
+	StartCommand      string
+	InitCommand       string
+	HookCommand       string
 
 	// feature gates
 	Seccomp       bool
@@ -99,8 +102,9 @@ func (c *crioLXC) loadContainer() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to load config file")
 	}
+
 	c.Container = container
-	return nil
+	return c.setContainerLogLevel()
 }
 
 // createContainer creates a new container.
@@ -128,7 +132,7 @@ func (c *crioLXC) createContainer() error {
 		return err
 	}
 	c.Container = container
-	return nil
+	return c.setContainerLogLevel()
 }
 
 // saveConfig creates and atomically enables the lxc config file.
@@ -209,68 +213,82 @@ func (c *crioLXC) configureLogging() error {
 		return errors.Wrapf(err, "failed to create log file directory %s", logDir)
 	}
 
-	f, err := os.OpenFile(c.LogFilePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+	c.LogFile, err = os.OpenFile(c.LogFilePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
 		return errors.Wrapf(err, "failed to open log file %s", c.LogFilePath)
 	}
-	c.LogFile = f
 
-	zerolog.TimestampFieldName = "t"
 	zerolog.LevelFieldName = "l"
 	zerolog.MessageFieldName = "m"
-	zerolog.CallerFieldName = "c"
-	zerolog.TimeFieldFormat = timeFormatLXCMillis
 
+	// match liblxc timestamp format
+	zerolog.TimestampFieldName = "t"
+	zerolog.TimeFieldFormat = timeFormatLXCMillis
 	zerolog.TimestampFunc = func() time.Time {
 		return time.Now().UTC()
 	}
 
-	// NOTE It's not possible change the possition of the timestamp.
-	// The ttimestamp is appended to the to the log output because it is dynamically rendered
-	// see https://github.com/rs/zerolog/issues/109
-	log = zerolog.New(f).With().Timestamp().Caller().Str("cmd", c.Command).Str("cid", c.ContainerID).Logger()
+	zerolog.CallerFieldName = "c"
 	zerolog.CallerMarshalFunc = func(file string, line int) string {
 		return filepath.Base(file) + ":" + strconv.Itoa(line)
 	}
 
-	level, err := parseLogLevel(c.LogLevelString)
-	if err != nil {
-		log.Error().Err(err).Stringer("val", level).Msg("using fallback log-level")
-	}
-	c.LogLevel = level
+	// NOTE Unfortunately it's not possible change the possition of the timestamp.
+	// The ttimestamp is appended to the to the log output because it is dynamically rendered
+	// see https://github.com/rs/zerolog/issues/109
+	log = zerolog.New(c.LogFile).With().Timestamp().Caller().
+		Str("cmd", c.Command).Str("cid", c.ContainerID).Logger()
 
-	switch level {
-	case lxc.TRACE:
-		zerolog.SetGlobalLevel(zerolog.TraceLevel)
-	case lxc.DEBUG:
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case lxc.INFO, lxc.NOTICE:
-		// zerolog does not support a `notice` log-level notice
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	case lxc.WARN:
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-	case lxc.ERROR:
-		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
+	level, err := zerolog.ParseLevel(strings.ToLower(c.LogLevel))
+	if err != nil {
+		level = defaultLogLevel
+		log.Warn().Err(err).Str("val", c.LogLevel).Stringer("default", level).
+			Msg("failed to parse log-level - fallback to default")
+	}
+	zerolog.SetGlobalLevel(level)
+	return nil
+}
+
+func (c *crioLXC) setContainerLogLevel() error {
+	// Never let lxc write to stdout, stdout belongs to the container init process.
+	// Explicitly disable it - allthough it is currently the default.
+	c.Container.SetVerbosity(lxc.Quiet)
+	// The log level for a running container is set, and may change, per runtime call.
+	err := c.Container.SetLogLevel(c.parseContainerLogLevel())
+	if err != nil {
+		return errors.Wrap(err, "failed to set container loglevel")
+	}
+	if err := c.Container.SetLogFile(c.LogFilePath); err != nil {
+		return errors.Wrap(err, "failed to set container log file")
 	}
 	return nil
 }
 
-func parseLogLevel(s string) (lxc.LogLevel, error) {
-	switch strings.ToLower(s) {
+func (c *crioLXC) parseContainerLogLevel() lxc.LogLevel {
+	switch strings.ToLower(c.ContainerLogLevel) {
 	case "trace":
-		return lxc.TRACE, nil
+		return lxc.TRACE
 	case "debug":
-		return lxc.DEBUG, nil
+		return lxc.DEBUG
 	case "info":
-		return lxc.INFO, nil
+		return lxc.INFO
 	case "notice":
-		return lxc.NOTICE, nil
+		return lxc.NOTICE
 	case "warn":
-		return lxc.WARN, nil
+		return lxc.WARN
 	case "error":
-		return lxc.ERROR, nil
+		return lxc.ERROR
+	case "crit":
+		return lxc.CRIT
+	case "alert":
+		return lxc.ALERT
+	case "fatal":
+		return lxc.FATAL
 	default:
-		return lxc.INFO, fmt.Errorf("invalid log-level %s", s)
+		log.Warn().Str("val", c.ContainerLogLevel).
+			Stringer("default", defaultContainerLogLevel).
+			Msg("failed to parse container-log-level - fallback to default")
+		return defaultContainerLogLevel
 	}
 }
 
