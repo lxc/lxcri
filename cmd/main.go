@@ -70,8 +70,9 @@ func main() {
 			Destination: &clxc.Backup,
 		},
 		&cli.StringFlag{
-			Name:        "root",
-			Usage:       "container runtime root where (logs, init and hook scripts). tmpfs is recommended, exec permissions are required",
+			Name:  "root",
+			Usage: "container runtime root where (logs, init and hook scripts). tmpfs is recommended.",
+			// exec permissions are not required because init is bind mounted into the root
 			Value:       "/run/crio-lxc",
 			Destination: &clxc.RuntimeRoot,
 		},
