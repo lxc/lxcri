@@ -102,14 +102,6 @@ func doCreateInternal() error {
 		return err
 	}
 
-	err = clxc.Container.SetLogLevel(clxc.LogLevel)
-	if err != nil {
-		return errors.Wrap(err, "failed to set container loglevel")
-	}
-	if clxc.LogLevel == lxc.TRACE {
-		clxc.Container.SetVerbosity(lxc.Verbose)
-	}
-
 	clxc.SpecPath = filepath.Join(clxc.BundlePath, "config.json")
 	spec, err := internal.ReadSpec(clxc.SpecPath)
 	if err != nil {
