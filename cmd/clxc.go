@@ -111,7 +111,7 @@ func (c *crioLXC) createContainer() error {
 		return errContainerExist
 	}
 
-	if err := os.Mkdir(c.runtimePath(), 0700); err != nil {
+	if err := os.MkdirAll(c.runtimePath(), 0700); err != nil {
 		return errors.Wrap(err, "failed to create container dir")
 	}
 
