@@ -108,7 +108,7 @@ func doExec(ctx *cli.Context) error {
 
 	log.Info().Bool("detach", detach).Strs("args", procArgs).
 		Int("uid", attachOpts.UID).Int("gid", attachOpts.GID).
-		Ints("groups", attachOpts.Groups).Msg("attach cmd to container")
+		Ints("groups", attachOpts.Groups).Msg("running cmd in container")
 
 	if detach {
 		pidFile := ctx.String("pid-file")
@@ -116,7 +116,7 @@ func doExec(ctx *cli.Context) error {
 		if err != nil {
 			return errors.Wrapf(err, "c.RunCommandNoWait failed")
 		}
-		log.Debug().Err(err).Int("pid", pid).Msg("cmd executed detached")
+		log.Debug().Err(err).Int("pid", pid).Msg("cmd is running detached")
 		if pidFile == "" {
 			log.Warn().Msg("detaching process but pid-file value is empty")
 			return nil
@@ -128,7 +128,7 @@ func doExec(ctx *cli.Context) error {
 	if err != nil {
 		return errors.Wrapf(err, "c.RunCommandStatus returned with exit code %d", exitStatus)
 	}
-	log.Debug().Int("exit", exitStatus).Msg("cmd executed synchronous")
+	log.Debug().Int("exit", exitStatus).Msg("cmd terminated")
 
 	return nil
 }
