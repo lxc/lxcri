@@ -9,16 +9,8 @@ import (
 	"strings"
 )
 
-func createPidFile(path string, pid int) error {
-	return createPidFileSimple(path, pid)
-}
-
-func createPidFileSimple(path string, pid int) error {
-	return ioutil.WriteFile(path, []byte(strconv.Itoa(pid)), 0640)
-}
-
 // createPidFile atomically creates a pid file for the given pid at the given path
-func createPidFileComplex(path string, pid int) error {
+func createPidFile(path string, pid int) error {
 	tmpDir := filepath.Dir(path)
 	tmpName := filepath.Join(tmpDir, fmt.Sprintf(".%s", filepath.Base(path)))
 
