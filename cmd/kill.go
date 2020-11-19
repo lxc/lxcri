@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"golang.org/x/sys/unix"
 
@@ -21,7 +22,7 @@ var killCmd = cli.Command{
 	ArgsUsage: `[containerID] [signal]
 
 <containerID> is the ID of the container to send a signal to
-[signal] name (without SIG) or signal num ?
+[signal] signal name or numerical value (e.g [9|kill|KILL|sigkill|SIGKILL])
 `,
 }
 
@@ -78,13 +79,14 @@ func getSignal(ctx *cli.Context) (unix.Signal, error) {
 				return signum, nil
 			}
 		}
-		return sigzero, fmt.Errorf("signal %s does not exist", sig)
+		return sigzero, fmt.Errorf("signal %s is not supported", sig)
 	}
 
-	// handle string signal value
-	signum, exists := signalMap[sig]
+	// gracefully handle all string variants e.g 'sigkill|SIGKILL|kill|KILL'
+	s := strings.TrimPrefix("SIG", strings.ToUpper(sig))
+	signum, exists := signalMap[s]
 	if !exists {
-		return unix.Signal(0), fmt.Errorf("signal %s does not exist", sig)
+		return unix.Signal(0), fmt.Errorf("signal %s not supported", sig)
 	}
 	return signum, nil
 }
@@ -108,5 +110,22 @@ func doKill(ctx *cli.Context) error {
 		return errors.Wrapf(err, "failed to load pidfile")
 	}
 	log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
-	return unix.Kill(pid, signum)
+
+	if err := clxc.setConfigItem("lxc.signal.stop", strconv.Itoa(int(signum))); err != nil {
+		return err
+	}
+	if err := clxc.Container.Stop(); err != nil {
+		return err
+	}
+
+	// send signal to the monitor process if it still exist
+	if err := unix.Kill(pid, 0); err == nil {
+		err := unix.Kill(pid, signum)
+		// container process has already died
+		if signum == unix.SIGKILL || signum == unix.SIGTERM {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
