@@ -49,7 +49,7 @@ type crioLXC struct {
 	MonitorCgroup     string
 	StartCommand      string
 	InitCommand       string
-	HookCommand       string
+  ContainerHook     string
 
 	// feature gates
 	Seccomp       bool
