@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lxc/crio-lxc/cmd/specs"
 	"github.com/rs/zerolog"
 	"gopkg.in/lxc/go-lxc.v2"
 )
@@ -23,6 +24,9 @@ const (
 	timeFormatLXCMillis      = "20060102150405.000"
 	defaultContainerLogLevel = lxc.WARN
 	defaultLogLevel          = zerolog.WarnLevel
+
+	// crio-lxc-init is started but blocking at the syncfifo
+	envStateCreated = "CRIO_LXC_STATE=" + string(specs.StateCreated)
 )
 
 // The singelton that wraps the lxc.Container
@@ -31,23 +35,6 @@ var log zerolog.Logger
 
 var errContainerNotExist = errors.New("container does not exist")
 var errContainerExist = errors.New("container already exists")
-
-// runtime states https://github.com/opencontainers/runtime-spec/blob/v1.0.2/runtime.md
-const (
-	// the container is being created (step 2 in the lifecycle)
-	stateCreating = "creating"
-	// the runtime has finished the create operation (after step 2 in the lifecycle),
-	// and the container process has neither exited nor executed the user-specified program
-	stateCreated = "created"
-	// the container process has executed the user-specified program
-	// but has not exited (after step 5 in the lifecycle)
-	stateRunning = "running"
-	// the container process has exited (step 7 in the lifecycle)
-	stateStopped = "stopped"
-
-	// crio-lxc-init is started but blocking at the syncfifo
-	envStateCreated = "CRIO_LXC_STATE=" + stateCreated
-)
 
 type crioLXC struct {
 	Container *lxc.Container
@@ -357,30 +344,31 @@ func (c *crioLXC) isContainerStopped() bool {
 // The init process environment contains #envStateCreated if the the container
 // is created, but not yet running/started.
 // This requires the proc filesystem to be mounted on the host.
-func (c *crioLXC) getContainerState() (int, string, error) {
+func (c *crioLXC) getContainerState() (int, specs.ContainerState) {
 	if c.isContainerStopped() {
-		return 0, stateStopped, nil
+		return 0, specs.StateStopped
 	}
 
 	pid := c.Container.InitPid()
 	if pid < 0 {
-		return 0, stateCreating, nil
+		return 0, specs.StateCreating
 	}
 
 	envFile := fmt.Sprintf("/proc/%d/environ", pid)
 	// #nosec
 	data, err := ioutil.ReadFile(envFile)
 	if err != nil {
-		return 0, stateStopped, errors.Wrapf(err, "failed to read init process environment %s", envFile)
+		// container has died
+		return 0, specs.StateStopped
 	}
 
 	environ := strings.Split(string(data), "\000")
 	for _, env := range environ {
 		if env == envStateCreated {
-			return pid, stateCreated, nil
+			return pid, specs.StateCreated
 		}
 	}
-	return pid, stateRunning, nil
+	return pid, specs.StateRunning
 }
 
 func (c *crioLXC) deleteContainer() error {

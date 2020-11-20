@@ -45,19 +45,15 @@ func doState(ctx *cli.Context) error {
 	}
 
 	s := specs.State{
-		Version: specs.Version,
-		ID:      clxc.Container.Name(),
-		Bundle:  bundlePath,
-		Pid:     pid,
+		Version:     specs.Version,
+		ID:          clxc.Container.Name(),
+		Bundle:      bundlePath,
+		Pid:         pid,
+		Annotations: spec.Annotations,
 	}
 
-	if spec.Annotations != nil {
-		s.Annotations = spec.Annotations
-	}
-
-	// FIXME do not return the init pid, but the container process PID instead ...
-	_, status, err := clxc.getContainerState()
-	s.Status = status
+	_, state := clxc.getContainerState()
+	s.Status = string(state)
 
 	log.Info().Int("pid", s.Pid).Str("status", s.Status).Msg("container state")
 
