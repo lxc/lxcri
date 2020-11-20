@@ -20,9 +20,9 @@ func main() {
 	app.Name = "crio-lxc"
 	app.Usage = "crio-lxc is a CRI compliant runtime wrapper for lxc"
 	app.Version = versionString()
-	// The default handler will exit the appp if the command returns an error
-	// that implements the cli.ExitCoder interface.
-	// E.g an unwrapped error from os.Exec
+	// Disable the default ExitErrHandler.
+	// It will call os.Exit if a command returns an error that implements
+	// the cli.ExitCoder interface. E.g an unwrapped error from os.Exec.
 	app.ExitErrHandler = func(context *cli.Context, err error) {}
 	app.Commands = []*cli.Command{
 		&stateCmd,
@@ -31,6 +31,8 @@ func main() {
 		&killCmd,
 		&deleteCmd,
 		&execCmd,
+		// TODO extend urfave/cli to render a default environment file.
+
 	}
 
 	app.Flags = []cli.Flag{
@@ -43,14 +45,14 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "container-log-level",
-			Usage:       "set the container (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
+			Usage:       "set the container process (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
 			EnvVars:     []string{"CRIO_LXC_CONTAINER_LOG_LEVEL"},
-			Value:       defaultContainerLogLevel.String(),
+			Value:       strings.ToLower(defaultContainerLogLevel.String()),
 			Destination: &clxc.ContainerLogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "log-file",
-			Usage:       "path to log-file for combined runtime and container output",
+			Usage:       "path to the log file for runtime and container output",
 			EnvVars:     []string{"CRIO_LXC_LOG_FILE"},
 			Value:       "/var/log/crio-lxc.log",
 			Destination: &clxc.LogFilePath,
@@ -90,23 +92,23 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "monitor-cgroup",
-			Usage:       "cgroup for LXC monitor processes",
+			Usage:       "cgroup slice for liblxc monitor process",
 			Destination: &clxc.MonitorCgroup,
 			EnvVars:     []string{"CRIO_LXC_MONITOR_CGROUP"},
 			Value:       "crio-lxc-monitor.slice",
 		},
 		&cli.StringFlag{
 			Name:        "cmd-init",
-			Usage:       "Absolute path to container init binary",
-			EnvVars:     []string{"CRIO_LXC_CMD_INIT"},
+			Usage:       "absolute path to container init executable",
+			EnvVars:     []string{"CRIO_LXC_INIT_CMD"},
 			Value:       "/usr/local/bin/crio-lxc-init",
 			Destination: &clxc.InitCommand,
 		},
 		&cli.StringFlag{
 			Name:        "cmd-start",
-			Usage:       "Name or path to container start binary",
-			EnvVars:     []string{"CRIO_LXC_CMD_START"},
-			Value:       "crio-lxc-start",
+			Usage:       "absolute path to container start executable",
+			EnvVars:     []string{"CRIO_LXC_START_CMD"},
+			Value:       "/usr/local/bin/crio-lxc-start",
 			Destination: &clxc.StartCommand,
 		},
 		&cli.StringFlag{
@@ -132,14 +134,14 @@ func main() {
 		},
 		&cli.BoolFlag{
 			Name:        "apparmor",
-			Usage:       "Set apparmor profile defined in container spec",
+			Usage:       "set apparmor profile defined in container spec",
 			Destination: &clxc.Apparmor,
 			EnvVars:     []string{"CRIO_LXC_APPARMOR"},
 			Value:       true,
 		},
 		&cli.BoolFlag{
 			Name:        "cgroup-devices",
-			Usage:       "Allow only devices permitted by container spec",
+			Usage:       "allow only devices permitted by container spec",
 			Destination: &clxc.CgroupDevices,
 			EnvVars:     []string{"CRIO_LXC_CGROUP_DEVICES"},
 			Value:       true,
@@ -148,9 +150,12 @@ func main() {
 
 	startTime := time.Now()
 
-	env, envErr := loadEnvFile(envFile)
-	// Environment variables must be injected from file before app is run,
+	// Environment variables must be injected from file before app.Run() is called.
 	// Otherwise the values are not set to the crioLXC instance.
+	// FIXME when calling '--help' defaults are overwritten with environment variables.
+	// So you will never see the real default value if either an environment file is present
+	// or an environment variable is set.
+	env, envErr := loadEnvFile(envFile)
 	if env != nil {
 		for key, val := range env {
 			if err := setEnvIfNew(key, val); err != nil {
