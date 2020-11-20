@@ -45,12 +45,11 @@ var createCmd = cli.Command{
 			Destination: &clxc.PidFile,
 		},
 		&cli.DurationFlag{
-			Name:    "timeout",
-			Usage:   "timeout for sending pty master to socket",
-			EnvVars: []string{"CRIO_LXC_CREATE_TIMEOUT"},
-			Value:   time.Second * 60,
-			// TODO rename to console-socket-timeout
-			Destination: &clxc.CreateTimeout,
+			Name:        "socket-timeout",
+			Usage:       "timeout for sending pty master to socket",
+			EnvVars:     []string{"CRIO_LXC_CREATE_SOCKET_TIMEOUT"},
+			Value:       time.Second * 60,
+			Destination: &clxc.ConsoleSocketTimeout,
 		},
 	},
 }
@@ -497,7 +496,7 @@ func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string) error {
 		return errors.Wrap(err, "connecting to console socket failed")
 	}
 	defer conn.Close()
-	deadline := time.Now().Add(time.Second * clxc.CreateTimeout)
+	deadline := time.Now().Add(clxc.ConsoleSocketTimeout)
 	err = conn.SetDeadline(deadline)
 	if err != nil {
 		return errors.Wrap(err, "failed to set connection deadline")
