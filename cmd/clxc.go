@@ -17,11 +17,13 @@ import (
 	"gopkg.in/lxc/go-lxc.v2"
 )
 
-// time format used for logger
-const timeFormatLXCMillis = "20060102150405.000"
-
-const defaultContainerLogLevel = lxc.WARN
-const defaultLogLevel = zerolog.WarnLevel
+// logging constants
+const (
+	// liblxc timestamp formattime format
+	timeFormatLXCMillis      = "20060102150405.000"
+	defaultContainerLogLevel = lxc.WARN
+	defaultLogLevel          = zerolog.WarnLevel
+)
 
 // The singelton that wraps the lxc.Container
 var clxc crioLXC
@@ -29,6 +31,23 @@ var log zerolog.Logger
 
 var errContainerNotExist = errors.New("container does not exist")
 var errContainerExist = errors.New("container already exists")
+
+// runtime states https://github.com/opencontainers/runtime-spec/blob/v1.0.2/runtime.md
+const (
+	// the container is being created (step 2 in the lifecycle)
+	stateCreating = "creating"
+	// the runtime has finished the create operation (after step 2 in the lifecycle),
+	// and the container process has neither exited nor executed the user-specified program
+	stateCreated = "created"
+	// the container process has executed the user-specified program
+	// but has not exited (after step 5 in the lifecycle)
+	stateRunning = "running"
+	// the container process has exited (step 7 in the lifecycle)
+	stateStopped = "stopped"
+
+	// crio-lxc-init is started but blocking at the syncfifo
+	envStateCreated = "CRIO_LXC_STATE=" + stateCreated
+)
 
 type crioLXC struct {
 	Container *lxc.Container
@@ -228,6 +247,7 @@ func (c *crioLXC) configureLogging() error {
 		return time.Now().UTC()
 	}
 
+	// TODO only log caller information in debug and trace level
 	zerolog.CallerFieldName = "c"
 	zerolog.CallerMarshalFunc = func(file string, line int) string {
 		return filepath.Base(file) + ":" + strconv.Itoa(line)
@@ -333,23 +353,6 @@ func copyDir(src, dst string) error {
 	}
 	return nil
 }
-
-// runtime states https://github.com/opencontainers/runtime-spec/blob/v1.0.2/runtime.md
-const (
-	// the container is being created (step 2 in the lifecycle)
-	stateCreating = "creating"
-	// the runtime has finished the create operation (after step 2 in the lifecycle),
-	// and the container process has neither exited nor executed the user-specified program
-	stateCreated = "created"
-	// the container process has executed the user-specified program
-	// but has not exited (after step 5 in the lifecycle)
-	stateRunning = "running"
-	// the container process has exited (step 7 in the lifecycle)
-	stateStopped = "stopped"
-
-	// crio-lxc-init is started but blocking at the syncfifo
-	envStateCreated = "CRIO_LXC_STATE=" + stateCreated
-)
 
 func (c *crioLXC) isContainerStopped() bool {
 	return c.Container.State() == lxc.STOPPED
