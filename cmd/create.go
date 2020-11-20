@@ -292,7 +292,7 @@ func configureInit(spec *specs.Spec) error {
 	if err := clxc.setConfigItem("lxc.hook.version", "1"); err != nil {
 		return err
 	}
-	if err := clxc.setConfigItem("lxc.hook.mount", clxc.HookCommand); err != nil {
+	if err := clxc.setConfigItem("lxc.hook.mount", clxc.ContainerHook); err != nil {
 		return err
 	}
 

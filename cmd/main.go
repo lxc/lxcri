@@ -110,11 +110,11 @@ func main() {
 			Destination: &clxc.StartCommand,
 		},
 		&cli.StringFlag{
-			Name:        "cmd-hook",
-			Usage:       "Name or path to binary executed in lxc.hook.mount",
-			EnvVars:     []string{"CRIO_LXC_CMD_HOOK"},
-			Value:       "/usr/local/bin/crio-lxc-hook",
-			Destination: &clxc.HookCommand,
+			Name:        "container-hook",
+			Usage:       "absolute path to container hook executable",
+			EnvVars:     []string{"CRIO_LXC_CONTAINER_HOOK"},
+			Value:       "/usr/local/bin/crio-lxc-container-hook",
+			Destination: &clxc.ContainerHook,
 		},
 		&cli.BoolFlag{
 			Name:        "seccomp",

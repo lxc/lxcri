@@ -9,39 +9,51 @@ import (
 	"path/filepath"
 )
 
-func fail(err error, details string) {
-	msg := fmt.Errorf("ERR: %s failed: %s", details, err.Error())
-	panic(msg)
+// from `man lxc.container.conf`
+// Standard output from the hooks is logged at debug level.
+// Standard error is not logged ...
+func fail(err error, msg string, args ...interface{}) {
+	if err == nil {
+		fmt.Printf("ERR "+msg+"\n", args...)
+	} else {
+		fmt.Printf("ERR:"+msg+": %s\n", append(args, err))
+	}
+	os.Exit(1)
 }
 
 func main() {
 	// get rootfs mountpoint from environment
 	rootfs := os.Getenv("LXC_ROOTFS_MOUNT")
 	if rootfs == "" {
-		panic("LXC_ROOTFS_MOUNT environment is not set")
+		fail(nil, "LXC_ROOTFS_MOUNT environment is not set")
+	}
+
+	// ensure we are running in the correct hook
+	if hook := os.Getenv("LXC_HOOK_TYPE"); hook != "mount" {
+		fail(nil, "LXC_HOOK_TYPE=%s but can only run in 'mount' hook", hook)
 	}
 
 	if _, err := os.Stat(rootfs); err != nil {
-		fail(err, "stat for rootfs mount failed "+rootfs)
+		fail(err, "stat for rootfs mount %q failed", rootfs)
 	}
 
 	specPath := filepath.Join(rootfs, internal.InitSpec)
 	spec, err := internal.ReadSpec(specPath)
 	if err != nil {
-		fail(err, "parse spec "+specPath)
+		fail(err, "failed to parse spec %s", specPath)
 	}
 
 	for _, dev := range spec.Linux.Devices {
 		dev.Path = filepath.Join(rootfs, dev.Path)
 		if err := createDevice(spec, dev); err != nil {
-			fail(err, "failed to create device "+dev.Path)
+			fail(err, "failed to create device %s", dev.Path)
 		}
 	}
 
 	for _, p := range spec.Linux.MaskedPaths {
 		rp := filepath.Join(rootfs, p)
 		if err := maskPath(rp); err != nil {
-			fail(err, "failed to mask path "+rp)
+			fail(err, "failed to mask path %s", rp)
 		}
 	}
 }
