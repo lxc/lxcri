@@ -147,7 +147,7 @@ func (c *crioLXC) createContainer() error {
 		return err
 	}
 	if err := f.Close(); err != nil {
-	  return errors.Wrap(err, "failed to close empty config file")
+		return errors.Wrap(err, "failed to close empty config file")
 	}
 
 	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
