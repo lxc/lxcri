@@ -54,7 +54,7 @@ func WriteSpec(spec *specs.Spec, specFilePath string) error {
 	return f.Sync()
 }
 
-// WriteFifo writes to the SyncFifo to synchronize container process init 
+// WriteFifo writes to the SyncFifo to synchronize container process init
 func WriteFifo() error {
 	f, err := os.OpenFile(SyncFifoPath, os.O_WRONLY, 0)
 	if err != nil {

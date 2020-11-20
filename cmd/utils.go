@@ -31,7 +31,7 @@ func createPidFile(path string, pid int) error {
 }
 
 func readPidFile(path string) (int, error) {
-  // #nosec
+	// #nosec
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return 0, err
