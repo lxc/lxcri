@@ -81,7 +81,7 @@ type crioLXC struct {
 	SpecPath      string // BundlePath + "/config.json"
 	PidFile       string
 	ConsoleSocket string
-	CreateTimeout time.Duration
+	ConsoleSocketTimeout time.Duration
 
 	// start flags
 	StartTimeout time.Duration
