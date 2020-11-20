@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
@@ -12,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lxc/crio-lxc/cmd/internal"
 	"github.com/rs/zerolog"
 	"gopkg.in/lxc/go-lxc.v2"
 )
@@ -61,14 +61,15 @@ type crioLXC struct {
 	LogFilePath       string
 	LogLevel          string
 	ContainerLogLevel string
-	BackupDir         string
-	Backup            bool
-	BackupOnError     bool
 	SystemdCgroup     bool
 	MonitorCgroup     string
-	StartCommand      string
-	InitCommand       string
-  ContainerHook     string
+
+	StartCommand         string
+	InitCommand          string
+	ContainerHook        string
+	RuntimeHook          string
+	RuntimeHookTimeout   time.Duration
+	RuntimeHookRunAlways bool
 
 	// feature gates
 	Seccomp       bool
@@ -77,10 +78,10 @@ type crioLXC struct {
 	CgroupDevices bool
 
 	// create flags
-	BundlePath    string
-	SpecPath      string // BundlePath + "/config.json"
-	PidFile       string
-	ConsoleSocket string
+	BundlePath           string
+	SpecPath             string // BundlePath + "/config.json"
+	PidFile              string
+	ConsoleSocket        string
 	ConsoleSocketTimeout time.Duration
 
 	// start flags
@@ -312,46 +313,35 @@ func (c *crioLXC) parseContainerLogLevel() lxc.LogLevel {
 	}
 }
 
-// BackupRuntimeResources creates a backup of the container runtime resources.
-// It returns the path to the backup directory.
-//
-// The following resources are backed up:
-// - all resources created by crio-lxc (lxc config, init script, device creation script ...)
-// - lxc logfiles (if logging is setup per container)
-// - the runtime spec
-func (c *crioLXC) backupRuntimeResources() (backupDir string, err error) {
-	backupDir = filepath.Join(c.BackupDir, c.ContainerID)
-	err = os.MkdirAll(c.BackupDir, 0700)
-	if err != nil {
-		return "", errors.Wrap(err, "failed to create backup dir")
+func (c *crioLXC) executeRuntimeHook(err error) {
+	if c.RuntimeHook == "" {
+		return
 	}
-	err = copyDir(c.runtimePath(), backupDir)
-	if err != nil {
-		return backupDir, errors.Wrap(err, "failed to copy lxc runtime directory")
+	// prepare environment
+	env := []string{
+		"CONTAINER_ID=" + c.ContainerID,
+		"LXC_CONFIG=" + c.configFilePath(),
+		"RUNTIME_CMD=" + c.Command,
+		"RUNTIME_PATH=" + c.runtimePath(),
+		"BUNDLE_PATH=" + c.BundlePath,
+		"SPEC_PATH=" + c.SpecPath,
 	}
-	// remove syncfifo because it is not of any use and blocks 'grep' within the backup directory.
-	syncFifoPath := filepath.Join(backupDir, internal.SyncFifoPath)
-	// #nosec
-	err = os.Remove(syncFifoPath)
-	if err != nil {
-		log.Warn().Err(err).Str("file", syncFifoPath).Msg("failed to remove syncfifo from backup dir")
-	}
-	err = copyDir(c.SpecPath, backupDir)
-	if err != nil {
-		return backupDir, errors.Wrap(err, "failed to copy runtime spec to backup dir")
-	}
-	return backupDir, nil
-}
 
-// TODO avoid shellout
-func copyDir(src, dst string) error {
-	// #nosec
-	cmd := exec.Command("cp", "-r", "-p", src, dst)
-	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return errors.Errorf("%s: %s: %s", strings.Join(cmd.Args, " "), err, string(output))
+		env = append(env, "RUNTIME_ERROR="+err.Error())
 	}
-	return nil
+
+	log.Debug().Str("file", clxc.RuntimeHook).Msg("execute runtime hook")
+	// TODO drop privileges, capabilities ?
+	ctx, cancel := context.WithTimeout(context.Background(), clxc.RuntimeHookTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, c.RuntimeHook)
+	cmd.Env = env
+	cmd.Dir = "/"
+	if err := cmd.Run(); err != nil {
+		log.Error().Err(err).Str("file", c.RuntimeHook).
+			Bool("timeout-expired", ctx.Err() == context.DeadlineExceeded).Msg("runtime hook failed")
+	}
 }
 
 func (c *crioLXC) isContainerStopped() bool {
