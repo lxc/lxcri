@@ -62,22 +62,16 @@ func checkAccess(externalCmds ...string) error {
 	}
 	return nil
 }
-
 func doCreate(ctx *cli.Context) error {
-	err := doCreateInternal()
-	if clxc.Backup || (err != nil && clxc.BackupOnError) {
-		dir, err := clxc.backupRuntimeResources()
-		if err != nil {
-			log.Error().Err(err).Str("file", dir).Msg("runtime backup failed")
-		} else {
-			log.Trace().Str("file", dir).Msg("runtime backup created")
-		}
+	err := doCreateInternal(ctx)
+	if err != nil || clxc.RuntimeHookRunAlways {
+		clxc.executeRuntimeHook(err)
 	}
 	return err
 }
 
-func doCreateInternal() error {
-	err := checkAccess(clxc.StartCommand, clxc.HookCommand, clxc.InitCommand)
+func doCreateInternal(ctx *cli.Context) error {
+	err := checkAccess(clxc.StartCommand, clxc.ContainerHook, clxc.InitCommand)
 	if err != nil {
 		return err
 	}
