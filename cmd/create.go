@@ -79,21 +79,11 @@ func doCreateInternal(ctx *cli.Context) error {
 		return fmt.Errorf("LXC runtime version >= 4.0.5 required, but was %s", lxc.Version())
 	}
 
-	err = clxc.loadContainer()
-	if err == nil {
-		return fmt.Errorf("container already exists")
-	}
-
 	err = clxc.createContainer()
 	if err != nil {
 		return errors.Wrap(err, "failed to create container")
 	}
 
-	if err := clxc.setConfigItem("lxc.log.file", clxc.LogFilePath); err != nil {
-		return err
-	}
-
-	clxc.SpecPath = filepath.Join(clxc.BundlePath, "config.json")
 	spec, err := internal.ReadSpec(clxc.SpecPath)
 	if err != nil {
 		return errors.Wrap(err, "couldn't load bundle spec")
@@ -109,7 +99,7 @@ func doCreateInternal(ctx *cli.Context) error {
 		return errors.Wrap(err, "failed to start container process")
 	}
 	log.Info().Int("pid", startCmd.Process.Pid).Msg("started container process")
-	return createPidFile(clxc.PidFile, startCmd.Process.Pid)
+	return clxc.createPidFile(startCmd.Process.Pid)
 
 }
 
