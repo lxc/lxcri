@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lxc/crio-lxc/cmd/specs"
 	"github.com/rs/zerolog"
 	"gopkg.in/lxc/go-lxc.v2"
 )
@@ -26,7 +25,25 @@ const (
 	defaultLogLevel          = zerolog.WarnLevel
 
 	// crio-lxc-init is started but blocking at the syncfifo
-	envStateCreated = "CRIO_LXC_STATE=" + string(specs.StateCreated)
+	envStateCreated = "CRIO_LXC_STATE=" + string(StateCreated)
+)
+
+// ContainerState represents the state of a container.
+type ContainerState string
+
+const (
+	// StateCreating indicates that the container is being created
+	StateCreating ContainerState = "creating"
+
+	// StateCreated indicates that the runtime has finished the create operation
+	StateCreated ContainerState = "created"
+
+	// StateRunning indicates that the container process has executed the
+	// user-specified program but has not exited
+	StateRunning ContainerState = "running"
+
+	// StateStopped indicates that the container process has exited
+	StateStopped ContainerState = "stopped"
 )
 
 // The singelton that wraps the lxc.Container
@@ -344,14 +361,14 @@ func (c *crioLXC) isContainerStopped() bool {
 // The init process environment contains #envStateCreated if the the container
 // is created, but not yet running/started.
 // This requires the proc filesystem to be mounted on the host.
-func (c *crioLXC) getContainerState() (int, specs.ContainerState) {
+func (c *crioLXC) getContainerState() (int, ContainerState) {
 	if c.isContainerStopped() {
-		return 0, specs.StateStopped
+		return 0, StateStopped
 	}
 
 	pid := c.Container.InitPid()
 	if pid < 0 {
-		return 0, specs.StateCreating
+		return 0, StateCreating
 	}
 
 	envFile := fmt.Sprintf("/proc/%d/environ", pid)
@@ -359,16 +376,16 @@ func (c *crioLXC) getContainerState() (int, specs.ContainerState) {
 	data, err := ioutil.ReadFile(envFile)
 	if err != nil {
 		// container has died
-		return 0, specs.StateStopped
+		return 0, StateStopped
 	}
 
 	environ := strings.Split(string(data), "\000")
 	for _, env := range environ {
 		if env == envStateCreated {
-			return pid, specs.StateCreated
+			return pid, StateCreated
 		}
 	}
-	return pid, specs.StateRunning
+	return pid, StateRunning
 }
 
 func (c *crioLXC) deleteContainer() error {
