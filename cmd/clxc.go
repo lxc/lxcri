@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lxc/crio-lxc/cmd/internal"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
 	"gopkg.in/lxc/go-lxc.v2"
 )
@@ -82,14 +85,20 @@ type crioLXC struct {
 	CgroupDevices bool
 
 	// create flags
-	BundlePath           string
-	SpecPath             string // BundlePath + "/config.json"
-	PidFile              string
-	ConsoleSocket        string
 	ConsoleSocketTimeout time.Duration
 
 	// start flags
 	StartTimeout time.Duration
+
+	bundleConfig
+}
+
+type bundleConfig struct {
+	BundlePath    string
+	SpecPath      string // BundlePath + "/config.json"
+	PidFile       string
+	ConsoleSocket string
+	//CgroupPath           string
 }
 
 var version string
@@ -105,6 +114,18 @@ func (c *crioLXC) runtimePath(subPath ...string) string {
 
 func (c *crioLXC) configFilePath() string {
 	return c.runtimePath("config")
+}
+
+func (c *crioLXC) readPidFile() (int, error) {
+	return readPidFile(c.PidFile)
+}
+
+func (c *crioLXC) createPidFile(pid int) error {
+	return createPidFile(c.PidFile, pid)
+}
+
+func (c *crioLXC) readSpec() (*specs.Spec, error) {
+	return internal.ReadSpec(clxc.runtimePath(internal.InitSpec))
 }
 
 // loadContainer checks for the existence of the lxc config file.
@@ -126,9 +147,13 @@ func (c *crioLXC) loadContainer() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to load config file")
 	}
-
 	c.Container = container
-	return c.setContainerLogLevel()
+
+	if err := c.setContainerLogLevel(); err != nil {
+		return err
+	}
+
+	return c.readBundleConfig()
 }
 
 // createContainer creates a new container.
@@ -154,12 +179,47 @@ func (c *crioLXC) createContainer() error {
 		return errors.Wrap(err, "failed to close empty config file")
 	}
 
+	c.SpecPath = filepath.Join(clxc.BundlePath, "config.json")
+
+	if err := c.writeBundleConfig(); err != nil {
+		return err
+	}
+
 	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
 	if err != nil {
 		return err
 	}
 	c.Container = container
 	return c.setContainerLogLevel()
+}
+
+func (c *crioLXC) readBundleConfig() error {
+	p := c.runtimePath("bundle.json")
+	data, err := ioutil.ReadFile(p)
+	if err != nil {
+		return errors.Wrapf(err, "failed to read bundle config file %s", p)
+	}
+	err = json.Unmarshal(data, &c.bundleConfig)
+	if err != nil {
+		return errors.Wrap(err, "failed to unmarshal bundle config")
+	}
+	return nil
+}
+
+func (c *crioLXC) writeBundleConfig() error {
+	p := c.runtimePath("bundle.json")
+	f, err := os.OpenFile(p, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create bundle config file %s", p)
+	}
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(c.bundleConfig)
+	if err != nil {
+		f.Close()
+		return errors.Wrap(err, "failed to marshal bundle config")
+	}
+	return f.Close()
 }
 
 // saveConfig creates and atomically enables the lxc config file.

@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -102,10 +101,7 @@ func doKill(ctx *cli.Context) error {
 		return errors.Wrap(err, "failed to load container")
 	}
 
-	bundlePath := filepath.Join("/var/run/containers/storage/overlay-containers/", clxc.Container.Name(), "userdata")
-	pidFilePath := filepath.Join(bundlePath, "pidfile")
-
-	pid, err := readPidFile(pidFilePath)
+	pid, err := clxc.readPidFile()
 	if err != nil && !os.IsNotExist(err) {
 		return errors.Wrapf(err, "failed to load pidfile")
 	}

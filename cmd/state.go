@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 
-	"github.com/lxc/crio-lxc/cmd/internal"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
@@ -29,25 +27,20 @@ func doState(ctx *cli.Context) error {
 		return errors.Wrapf(err, "failed to load container")
 	}
 
-	// TODO save BundlePath to init spec
-	// TODO create a symlink to the pidfile and config in the runtime path
-	bundlePath := filepath.Join("/var/run/containers/storage/overlay-containers/", clxc.Container.Name(), "userdata")
-	pidFilePath := filepath.Join(bundlePath, "pidfile")
-
-	pid, err := readPidFile(pidFilePath)
-	if err != nil && !os.IsNotExist(err) {
+	pid, err := clxc.readPidFile()
+	if err != nil {
 		return errors.Wrapf(err, "failed to load pidfile")
 	}
 
-	spec, err := internal.ReadSpec(filepath.Join(bundlePath, "config.json"))
+	spec, err := clxc.readSpec()
 	if err != nil {
-		return errors.Wrapf(err, "failed to load spec from %s", bundlePath)
+		return err
 	}
 
 	s := specs.State{
 		Version:     specs.Version,
 		ID:          clxc.Container.Name(),
-		Bundle:      bundlePath,
+		Bundle:      clxc.BundlePath,
 		Pid:         pid,
 		Annotations: spec.Annotations,
 	}
