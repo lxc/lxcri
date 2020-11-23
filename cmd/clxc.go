@@ -448,17 +448,20 @@ func (c *crioLXC) getContainerState() (int, ContainerState) {
 	return pid, StateRunning
 }
 
-func (c *crioLXC) deleteContainer() error {
-	if err := c.Container.Destroy(); err != nil {
-		return errors.Wrap(err, "failed to destroy container")
+func (c *crioLXC) destroy() error {
+	if c.Container != nil {
+		if err := c.Container.Destroy(); err != nil {
+			return errors.Wrap(err, "failed to destroy container")
+		}
+		// required because tryRemoveCgroups retrieves the config item from the container config
+		// --> store the cgroup in the runtime config
+		//c.tryRemoveCgroups()
 	}
 
 	// "Note that resources associated with the container,
 	// but not created by this container, MUST NOT be deleted."
 	// TODO - because we set rootfs.managed=0, Destroy() doesn't
 	// delete the /var/lib/lxc/$containerID/config file:
-
-	c.tryRemoveCgroups()
 
 	return os.RemoveAll(c.runtimePath())
 }
