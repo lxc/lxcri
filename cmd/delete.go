@@ -24,7 +24,11 @@ var deleteCmd = cli.Command{
 }
 
 func doDelete(ctx *cli.Context) error {
+
 	err := clxc.loadContainer()
+	if err == errContainerNotExist {
+		return clxc.destroy()
+	}
 	if err != nil {
 		return err
 	}
@@ -40,5 +44,5 @@ func doDelete(ctx *cli.Context) error {
 			return errors.Wrap(err, "failed to stop container")
 		}
 	}
-	return clxc.deleteContainer()
+	return clxc.destroy()
 }
