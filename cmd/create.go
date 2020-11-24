@@ -18,7 +18,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
-	"github.com/lxc/crio-lxc/cmd/internal"
 	lxc "gopkg.in/lxc/go-lxc.v2"
 )
 
@@ -79,18 +78,34 @@ func doCreateInternal(ctx *cli.Context) error {
 		return fmt.Errorf("LXC runtime version >= 4.0.5 required, but was %s", lxc.Version())
 	}
 
+	spec, err := clxc.readSpec()
+	if err != nil {
+		return errors.Wrap(err, "couldn't load bundle spec")
+	}
+
 	err = clxc.createContainer()
 	if err != nil {
 		return errors.Wrap(err, "failed to create container")
 	}
 
-	spec, err := internal.ReadSpec(clxc.SpecPath)
-	if err != nil {
-		return errors.Wrap(err, "couldn't load bundle spec")
-	}
-
 	if err := configureContainer(spec); err != nil {
 		return errors.Wrap(err, "failed to configure container")
+	}
+
+	cmdFile, err := os.OpenFile(clxc.runtimePath("/.crio-lxc/cmdline.txt"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0640)
+	if err != nil {
+		return errors.Wrap(err, "failed to create the cmd file")
+	}
+
+	for _, arg := range spec.Process.Args {
+		fmt.Fprintln(cmdFile, arg)
+	}
+	if err := cmdFile.Close(); err != nil {
+		return errors.Wrap(err, "failed to close cmd file")
+	}
+
+	if err := writeEnviron(clxc.runtimePath("/.crio-lxc/environ"), spec.Process.Env); err != nil {
+		return err
 	}
 
 	// #nosec
@@ -98,9 +113,30 @@ func doCreateInternal(ctx *cli.Context) error {
 	if err := runStartCmd(startCmd, spec); err != nil {
 		return errors.Wrap(err, "failed to start container process")
 	}
-	log.Info().Int("pid", startCmd.Process.Pid).Msg("started container process")
-	return clxc.createPidFile(startCmd.Process.Pid)
+	log.Info().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
 
+	return clxc.createPidFile(startCmd.Process.Pid)
+}
+
+func writeEnviron(envFile string, env []string) error {
+	f, err := os.OpenFile(envFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0640)
+	if err != nil {
+		return err
+	}
+
+	for _, arg := range env {
+		_, err := f.WriteString(arg)
+		if err != nil {
+			f.Close()
+			return err
+		}
+		_, err = f.Write([]byte{'\000'})
+		if err != nil {
+			f.Close()
+			return err
+		}
+	}
+	return f.Close()
 }
 
 func configureContainer(spec *specs.Spec) error {
@@ -200,6 +236,10 @@ func configureContainer(spec *specs.Spec) error {
 		return errors.Wrap(err, "failed to add default devices")
 	}
 
+	if err := clxc.configureCgroupPath(); err != nil {
+		return errors.Wrap(err, "failed to configure cgroups path")
+	}
+
 	if err := configureCgroup(spec); err != nil {
 		return errors.Wrap(err, "failed to configure cgroups")
 	}
@@ -247,24 +287,24 @@ func configureRootfs(spec *specs.Spec) error {
 }
 
 func configureInit(spec *specs.Spec) error {
-	err := os.MkdirAll(filepath.Join(spec.Root.Path, internal.ConfigDir), 0)
+	err := os.MkdirAll(filepath.Join(spec.Root.Path, configDir), 0)
 	if err != nil {
-		return errors.Wrapf(err, "Failed creating %s in rootfs", internal.ConfigDir)
+		return errors.Wrapf(err, "Failed creating %s in rootfs", configDir)
 	}
 	// #nosec
-	err = os.MkdirAll(clxc.runtimePath(internal.ConfigDir), 0755)
+	err = os.MkdirAll(clxc.runtimePath(configDir), 0755)
 	if err != nil {
-		return errors.Wrapf(err, "Failed creating %s in lxc container dir", internal.ConfigDir)
+		return errors.Wrapf(err, "Failed creating %s in lxc container dir", configDir)
 	}
 
 	// create named fifo in lxcpath and mount it into the container
-	if err := makeSyncFifo(clxc.runtimePath(internal.SyncFifoPath)); err != nil {
+	if err := makeSyncFifo(clxc.runtimePath(syncFifoPath)); err != nil {
 		return errors.Wrapf(err, "failed to make sync fifo")
 	}
 
 	spec.Mounts = append(spec.Mounts, specs.Mount{
-		Source:      clxc.runtimePath(internal.ConfigDir),
-		Destination: strings.Trim(internal.ConfigDir, "/"),
+		Source:      clxc.runtimePath(configDir),
+		Destination: strings.Trim(configDir, "/"),
 		Type:        "bind",
 		Options:     []string{"bind", "ro", "nodev", "nosuid"},
 	})
@@ -277,32 +317,19 @@ func configureInit(spec *specs.Spec) error {
 		return err
 	}
 
-	path := "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-	for _, kv := range spec.Process.Env {
-		if strings.HasPrefix(kv, "PATH=") {
-			path = kv
-		}
-	}
-	if err := clxc.setConfigItem("lxc.environment", path); err != nil {
-		return err
-	}
-	if err := clxc.setConfigItem("lxc.environment", envStateCreated); err != nil {
-		return err
-	}
-
 	// create destination file for bind mount
-	initBin := clxc.runtimePath(internal.InitCmd)
+	initBin := clxc.runtimePath(initCmd)
 	err = touchFile(initBin, 0)
 	if err != nil {
 		return errors.Wrapf(err, "failed to create %s", initBin)
 	}
 	spec.Mounts = append(spec.Mounts, specs.Mount{
 		Source:      clxc.InitCommand,
-		Destination: internal.InitCmd,
+		Destination: initCmd,
 		Type:        "bind",
 		Options:     []string{"bind", "ro", "nosuid"},
 	})
-	return clxc.setConfigItem("lxc.init.cmd", internal.InitCmd)
+	return clxc.setConfigItem("lxc.init.cmd", initCmd+" "+clxc.ContainerID)
 }
 
 func touchFile(filePath string, perm os.FileMode) error {
@@ -433,6 +460,18 @@ func ensureDefaultDevices(spec *specs.Spec) error {
 	return nil
 }
 
+func setenv(env []string, key, val string, overwrite bool) []string {
+	for i, kv := range env {
+		if strings.HasPrefix(kv, key+"=") {
+			if overwrite {
+				env[i] = key + "=" + val
+			}
+			return env
+		}
+	}
+	return append(env, key+"="+val)
+}
+
 func runStartCmd(cmd *exec.Cmd, spec *specs.Spec) error {
 	// Start container with a clean environment.
 	// LXC will export variables defined in the config lxc.environment.
@@ -440,6 +479,22 @@ func runStartCmd(cmd *exec.Cmd, spec *specs.Spec) error {
 	// This is required because environment variables defined by containers contain newlines and other tokens
 	// that can not be handled properly within the lxc config file.
 	cmd.Env = []string{}
+	/*
+		if cmd.SysProcAttr == nil {
+			cmd.SysProcAttr = &unix.SysProcAttr{}
+		}
+
+		//cmd.SysProcAttr.Noctty = true
+		sig, err := getParentDeathSignal()
+		if err != nil {
+			return err
+		}
+		cmd.SysProcAttr.Pdeathsig = sig
+		//cmd.SysProcAttr.Foreground = false
+		//cmd.SysProcAttr.Setsid = true
+	*/
+
+	cmd.Dir = clxc.runtimePath()
 
 	if clxc.ConsoleSocket != "" {
 		if err := clxc.saveConfig(); err != nil {
@@ -462,10 +517,64 @@ func runStartCmd(cmd *exec.Cmd, spec *specs.Spec) error {
 		return err
 	}
 
-	if err := internal.WriteSpec(spec, clxc.runtimePath(internal.InitSpec)); err != nil {
-		return errors.Wrapf(err, "failed to write init spec")
+	if err := writeDevices(spec); err != nil {
+		return errors.Wrap(err, "failed to create devices.txt")
 	}
+
+	if err := writeMasked(spec); err != nil {
+		return errors.Wrap(err, "failed to create masked.txt file")
+	}
+
 	return cmd.Start()
+}
+
+func writeDevices(spec *specs.Spec) error {
+	if spec.Linux.Devices == nil {
+		return nil
+	}
+	f, err := os.OpenFile(clxc.runtimePath("devices.txt"), os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	for _, d := range spec.Linux.Devices {
+		uid := spec.Process.User.UID // FIXME use 0 instead ?
+		if d.UID != nil {
+			uid = *d.UID
+		}
+		gid := spec.Process.User.GID // FIXME use 0 instead ?
+		if d.GID == nil {
+			gid = *d.GID
+		}
+		mode := os.FileMode(0600)
+		if d.FileMode != nil {
+			mode = *d.FileMode
+		}
+		_, err = fmt.Fprintf(f, "%s %s %d %d %o %d:%d\n", d.Path, d.Type, d.Major, d.Minor, mode, uid, gid)
+		if err != nil {
+			f.Close()
+			return err
+		}
+	}
+	return f.Close()
+}
+
+func writeMasked(spec *specs.Spec) error {
+	// #nosec
+	if spec.Linux.MaskedPaths == nil {
+		return nil
+	}
+	f, err := os.OpenFile(clxc.runtimePath("masked.txt"), os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	for _, p := range spec.Linux.MaskedPaths {
+		_, err = fmt.Fprintln(f, p)
+		if err != nil {
+			f.Close()
+			return err
+		}
+	}
+	return f.Close()
 }
 
 func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string) error {

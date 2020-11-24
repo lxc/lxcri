@@ -8,6 +8,7 @@ PREFIX ?= /usr/local
 PKG_CONFIG_PATH ?= $(PREFIX)/lib/pkgconfig
 export PKG_CONFIG_PATH
 LDFLAGS=-X main.version=$(COMMIT)
+CC ?= cc
 
 all: fmt $(BINS)
 
@@ -21,15 +22,16 @@ crio-lxc: $(GO_SRC) Makefile go.mod
 	go build -ldflags '$(LDFLAGS)' -o $@ ./cmd
 
 crio-lxc-start: cmd/start/crio-lxc-start.c
-	cc -Wall $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags lxc) $? -o $@
+	$(CC) -Wall $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags lxc) -o $@ $? 
 
-crio-lxc-init: $(GO_SRC) Makefile go.mod
-	CGO_ENABLED=0 go build -ldflags '$(LDFLAGS) -extldflags "-static"' -o $@ ./cmd/init
+crio-lxc-init: cmd/init/crio-lxc-init.c
+	/usr/local/musl/bin/musl-gcc -Wpedantic -Wall  -static -g  -o $@ $? 
+	#musl-gcc -g3 -Wall -static $? -o $@
 	# ensure that crio-lxc-init is statically compiled
 	! ldd $@  2>/dev/null
 
-crio-lxc-container-hook: $(GO_SRC) Makefile go.mod
-	go build -ldflags '$(LDFLAGS) -extldflags "-static"' -o $@ ./cmd/container-hook
+crio-lxc-container-hook: cmd/container-hook/hook.c
+	musl-gcc -DDEBUG -Wall -Wpedantic $? -o $@
 
 # make test TEST=basic will run only the basic test.
 .PHONY: check

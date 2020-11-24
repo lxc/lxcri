@@ -3,11 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/pkg/errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -33,16 +30,6 @@ func createPidFile(path string, pid int) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
-}
-
-func readPidFile(path string) (int, error) {
-	// #nosec
-	data, err := ioutil.ReadFile(path)
-	if err != nil {
-		return 0, err
-	}
-	s := strings.TrimSpace(string(data))
-	return strconv.Atoi(s)
 }
 
 func canExecute(cmds ...string) error {

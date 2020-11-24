@@ -8,3 +8,5 @@ oci/
 roots/
 .stacker/
 .keeptempdirs
+cmd/container-hook/musl-1.2.1.tar.gz
+cmd/container-hook/musl-1.2.1/
