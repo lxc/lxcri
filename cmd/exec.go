@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 
-	"github.com/lxc/crio-lxc/cmd/internal"
 	lxc "gopkg.in/lxc/go-lxc.v2"
 )
 
@@ -88,7 +87,7 @@ func doExec(ctx *cli.Context) error {
 	}
 
 	// Load container spec to get the list of supported namespaces.
-	spec, err := internal.ReadSpec(clxc.runtimePath(internal.InitSpec))
+	spec, err := clxc.readSpec()
 	if err != nil {
 		return errors.Wrap(err, "failed to read container runtime spec")
 	}

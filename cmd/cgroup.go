@@ -17,15 +17,6 @@ import (
 // TODO New spec will contain a property Unified for cgroupv2 properties
 // https://github.com/opencontainers/runtime-spec/blob/master/config-linux.md#unified
 func configureCgroup(spec *specs.Spec) error {
-	if err := configureCgroupPath(spec.Linux); err != nil {
-		return errors.Wrap(err, "failed to configure cgroup path")
-	}
-
-	// lxc.cgroup.root and lxc.cgroup.relative must not be set for cgroup v2
-	if err := clxc.setConfigItem("lxc.cgroup.relative", "0"); err != nil {
-		return err
-	}
-
 	if devices := spec.Linux.Resources.Devices; devices != nil {
 		if err := configureDeviceController(spec); err != nil {
 			return err
@@ -57,42 +48,6 @@ func configureCgroup(spec *specs.Spec) error {
 	}
 	if net := spec.Linux.Resources.Network; net != nil {
 		log.Debug().Msg("TODO cgroup network controller not implemented")
-	}
-	return nil
-}
-
-func configureCgroupPath(linux *specs.Linux) error {
-	if linux.CgroupsPath == "" {
-		return fmt.Errorf("empty cgroups path in spec")
-	}
-	if !clxc.SystemdCgroup {
-		return clxc.setConfigItem("lxc.cgroup.dir", linux.CgroupsPath)
-	}
-	cgPath := parseSystemdCgroupPath(linux.CgroupsPath)
-
-	/*
-		if err := enableCgroupControllers(cgPath); err != nil {
-			return errors.Wrapf(err, "cgroup path error")
-		}
-	*/
-	// @since lxc @a900cbaf257c6a7ee9aa73b09c6d3397581d38fb
-	// checking for on of the config items shuld be enough, because they were introduced together ...
-	if supportsConfigItem("lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor") {
-		if err := clxc.setConfigItem("lxc.cgroup.dir.container", cgPath.String()); err != nil {
-			return err
-		}
-		if err := clxc.setConfigItem("lxc.cgroup.dir.monitor", filepath.Join(clxc.MonitorCgroup, clxc.Container.Name()+".scope")); err != nil {
-			return err
-		}
-	} else {
-		if err := clxc.setConfigItem("lxc.cgroup.dir", cgPath.String()); err != nil {
-			return err
-		}
-	}
-	if supportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
-		if err := clxc.setConfigItem("lxc.cgroup.dir.monitor.pivot", clxc.MonitorCgroup); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -208,45 +163,25 @@ func configureCPUController(linux *specs.LinuxCPU) error {
 
 // https://kubernetes.io/docs/setup/production-environment/container-runtimes/
 // kubelet --cgroup-driver systemd --cgroups-per-qos
-type cgroupPath struct {
-	Slices []string
-	Scope  string
-}
-
-func (cg cgroupPath) String() string {
-	return filepath.Join(append(cg.Slices, cg.Scope)...)
-}
-
-func (cg cgroupPath) SlicePath() string {
-	return filepath.Join("/sys/fs/cgroup", filepath.Join(cg.Slices...))
-}
-
-func (cg cgroupPath) ScopePath() string {
-	return filepath.Join(cg.SlicePath(), cg.Scope)
-}
-
 // kubernetes creates the cgroup hierarchy which can be changed by serveral cgroup related flags.
 // kubepods.slice/kubepods-besteffort.slice/kubepods-besteffort-pod87f8bc68_7c18_4a1d_af9f_54eff815f688.slice
 // kubepods-burstable-pod9da3b2a14682e1fb23be3c2492753207.slice:crio:fe018d944f87b227b3b7f86226962639020e99eac8991463bf7126ef8e929589
 // https://github.com/cri-o/cri-o/issues/2632
-func parseSystemdCgroupPath(s string) (cg cgroupPath) {
-	if s == "" {
-		return cg
-	}
+func parseSystemdCgroupPath(s string) string {
 	parts := strings.Split(s, ":")
 
-	slices := parts[0]
-	for i, r := range slices {
+	var cgPath []string
+
+	for i, r := range parts[0] {
 		if r == '-' && i > 0 {
-			slice := slices[0:i] + ".slice"
-			cg.Slices = append(cg.Slices, slice)
+			cgPath = append(cgPath, parts[0][0:i]+".slice")
 		}
 	}
-	cg.Slices = append(cg.Slices, slices)
-	if len(parts) > 0 {
-		cg.Scope = strings.Join(parts[1:], "-") + ".scope"
+	cgPath = append(cgPath, parts[0])
+	if len(parts) > 1 {
+		cgPath = append(cgPath, strings.Join(parts[1:], "-")+".scope")
 	}
-	return cg
+	return filepath.Join(cgPath...)
 }
 
 type cgroupInfo struct {

@@ -13,6 +13,9 @@ For the installation and initialization of a kubernetes cluster see [K8S.md](K8S
 
 * `runtime` the crio-lxc binary and the command set that implement the [OCI runtime spec](https://github.com/opencontainers/runtime-spec/releases/download/v1.0.2/oci-runtime-spec-v1.0.2.html)
 * `container process`  the process that starts and runs the container using liblxc (crio-lxc-start)
+* `container config` the LXC config file
+* `bundle config` the crio-lxc container state (bundle path, pidfile ....)
+* `runtime spec` the OCI runtime spec from the bundle
 
 ## Bugs
 

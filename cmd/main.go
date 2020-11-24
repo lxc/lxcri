@@ -228,9 +228,9 @@ func main() {
 	err := app.Run(os.Args)
 	cmdDuration := time.Since(startTime)
 	if err != nil {
-		log.Error().Err(err).Dur("duration", cmdDuration).Msg("runtime cmd failed")
+		log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
 	} else {
-		log.Debug().Dur("duration", cmdDuration).Msg("runtime cmd completed")
+		log.Info().Dur("duration", cmdDuration).Msg("cmd completed")
 	}
 
 	if err := clxc.release(); err != nil {
