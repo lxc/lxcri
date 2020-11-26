@@ -54,7 +54,7 @@ func main() {
 			Name:        "log-file",
 			Usage:       "path to the log file for runtime and container output",
 			EnvVars:     []string{"CRIO_LXC_LOG_FILE"},
-			Value:       "/var/log/crio-lxc.log",
+			Value:       "/var/log/crio-lxc/crio-lxc.log",
 			Destination: &clxc.LogFilePath,
 		},
 		&cli.StringFlag{
