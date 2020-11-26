@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -223,7 +225,12 @@ func loadCgroup(cgName string) (*cgroupInfo, error) {
 	return info, nil
 }
 
-/*
+func deleteCgroupWait(cgroupPath string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return deleteCgroupContext(ctx, cgroupPath)
+}
+
 func deleteCgroupContext(ctx context.Context, cgroupPath string) error {
 	for {
 		select {
@@ -243,10 +250,9 @@ func deleteCgroupContext(ctx context.Context, cgroupPath string) error {
 		}
 	}
 }
-*/
 
-func deleteCgroup(cgName string) error {
-	dirName := filepath.Join("/sys/fs/cgroup", cgName)
+func deleteCgroup(cgroupName string) error {
+	dirName := filepath.Join("/sys/fs/cgroup", cgroupName)
 	// #nosec
 	dir, err := os.Open(dirName)
 	if os.IsNotExist(err) {

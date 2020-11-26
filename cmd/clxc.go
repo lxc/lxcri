@@ -550,10 +550,10 @@ func (c *crioLXC) destroy() error {
 	// Ensure that cgroup directories are gone after container is destroyed.
 	// kubernetes will show the container as 'Terminated' until the cgroup is removed.
 	// Cgroups may exist if container process was killed with SIGKILL and could not cleanup cgroups itself.
-	if err := deleteCgroup(c.CgroupsPath); err != nil {
+	if err := deleteCgroupWait(c.CgroupsPath, time.Second); err != nil {
 		log.Warn().Err(err).Str("cgroup", c.CgroupsPath).Msg("failed to remove cgroup")
 	}
-	if err := deleteCgroup(c.MonitorCgroup); err != nil {
+	if err := deleteCgroupWait(c.MonitorCgroup, time.Second); err != nil {
 		log.Warn().Err(err).Str("cgroup", c.MonitorCgroup).Msg("failed to remove monitor cgroup")
 	}
 
