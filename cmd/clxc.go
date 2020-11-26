@@ -446,11 +446,12 @@ func (c *crioLXC) parseContainerLogLevel() lxc.LogLevel {
 	}
 }
 
-func (c *crioLXC) executeRuntimeHook(err error) {
+// executeRuntimeHook executes the runtime hook executable if defined.
+// Execution errors are logged at log level error.
+func (c *crioLXC) executeRuntimeHook(runtimeError error) {
 	if c.RuntimeHook == "" {
 		return
 	}
-	// prepare environment
 	env := []string{
 		"CONTAINER_ID=" + c.ContainerID,
 		"LXC_CONFIG=" + c.configFilePath(),
@@ -461,8 +462,8 @@ func (c *crioLXC) executeRuntimeHook(err error) {
 		"LOG_FILE=" + c.LogFilePath,
 	}
 
-	if err != nil {
-		env = append(env, "RUNTIME_ERROR="+err.Error())
+	if runtimeError != nil {
+		env = append(env, "RUNTIME_ERROR="+runtimeError.Error())
 	}
 
 	log.Debug().Str("file", clxc.RuntimeHook).Msg("execute runtime hook")
