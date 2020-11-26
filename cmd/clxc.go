@@ -330,7 +330,7 @@ func (c crioLXC) release() error {
 func supportsConfigItem(keys ...string) bool {
 	for _, key := range keys {
 		if !lxc.IsSupportedConfigItem(key) {
-			log.Debug().Str("lxc.config", key).Msg("unsupported config item")
+			log.Info().Str("lxc.config", key).Msg("unsupported config item")
 			return false
 		}
 	}
