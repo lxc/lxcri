@@ -268,7 +268,12 @@ func deleteCgroup(cgName string) error {
 			if err := unix.Rmdir(fullPath); err != nil {
 				return err
 			}
+			log.Debug().Str("file", fullPath).Msg("removed cgroup dir")
 		}
 	}
-	return unix.Rmdir(dirName)
+	err = unix.Rmdir(dirName)
+	if err == nil {
+		log.Debug().Str("file", dirName).Msg("removed cgroup dir")
+	}
+	return err
 }
