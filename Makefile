@@ -13,13 +13,13 @@ CC ?= cc
 all: fmt $(BINS)
 
 install: all
-	cp $(BINS) $(PREFIX)/bin
+	cp -v $(BINS) $(PREFIX)/bin
 
 lint:
 	golangci-lint run -c ./lint.yaml ./...
 
 crio-lxc: $(GO_SRC) Makefile go.mod
-	go build -ldflags '$(LDFLAGS)' -o $@ ./cmd
+	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd
 
 crio-lxc-start: cmd/start/crio-lxc-start.c
 	$(CC) -Wall $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags lxc) -o $@ $? 

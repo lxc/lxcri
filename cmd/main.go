@@ -71,7 +71,7 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "monitor-cgroup",
-			Usage:       "cgroup slice for liblxc monitor process",
+			Usage:       "cgroup slice for liblxc monitor process and pivot path",
 			Destination: &clxc.MonitorCgroup,
 			EnvVars:     []string{"CRIO_LXC_MONITOR_CGROUP"},
 			Value:       "crio-lxc-monitor.slice",

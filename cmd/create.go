@@ -83,7 +83,7 @@ func doCreateInternal(ctx *cli.Context) error {
 		return errors.Wrap(err, "couldn't load bundle spec")
 	}
 
-	err = clxc.createContainer()
+	err = clxc.createContainer(spec)
 	if err != nil {
 		return errors.Wrap(err, "failed to create container")
 	}
