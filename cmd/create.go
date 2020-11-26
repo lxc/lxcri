@@ -317,6 +317,10 @@ func configureInit(spec *specs.Spec) error {
 		return err
 	}
 
+	if err := clxc.setConfigItem("lxc.init.cwd", spec.Process.Cwd); err != nil {
+		return err
+	}
+
 	// create destination file for bind mount
 	initBin := clxc.runtimePath(initCmd)
 	err = touchFile(initBin, 0)
