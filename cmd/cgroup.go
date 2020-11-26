@@ -243,7 +243,7 @@ func deleteCgroupContext(ctx context.Context, cgroupPath string) error {
 			}
 			if err == unix.EBUSY {
 				log.Warn().Err(err).Str("cgroup", cgroupPath).Msg("failed to remove cgroup")
-				time.Sleep(time.Millisecond * 50)
+				time.Sleep(time.Millisecond * 100)
 				continue
 			}
 			return err
@@ -272,6 +272,22 @@ func deleteCgroup(cgroupName string) error {
 		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
 			fullPath := filepath.Join(dirName, i.Name())
 			if err := unix.Rmdir(fullPath); err != nil {
+				log.Warn().Err(err).Str("file", fullPath).Msg("failed to remove cgroup dir")
+				cg, err := loadCgroup(filepath.Join(cgroupName, i.Name()))
+				if err != nil {
+					log.Warn().Err(err).Str("file", fullPath).Msg("failed to read cgroup proces")
+				}
+				for _, pid := range cg.Procs {
+					log.Warn().Int("pid", pid).Msg("killing left-over process")
+					err := unix.Kill(pid, unix.SIGKILL)
+					if err != nil {
+						errors.Wrapf(err, "failed to kill %d", pid)
+					}
+				}
+				// try again
+				if err := unix.Rmdir(fullPath); err != nil {
+					log.Warn().Err(err).Str("file", fullPath).Msg("failed to remove cgroup dir #2")
+				}
 				return err
 			}
 			log.Debug().Str("file", fullPath).Msg("removed cgroup dir")

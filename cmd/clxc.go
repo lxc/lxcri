@@ -73,6 +73,7 @@ type crioLXC struct {
 	LogLevel          string
 	ContainerLogLevel string
 	SystemdCgroup     bool
+	MonitorCgroup     string
 
 	StartCommand         string
 	InitCommand          string
@@ -97,13 +98,13 @@ type crioLXC struct {
 }
 
 type bundleConfig struct {
-	BundlePath    string
-	SpecPath      string // BundlePath + "/config.json"
-	PidFile       string
-	ConsoleSocket string
-	MonitorCgroup string
+	BundlePath       string
+	SpecPath         string // BundlePath + "/config.json"
+	PidFile          string
+	ConsoleSocket    string
+	MonitorCgroupDir string
 	// values derived from spec
-	CgroupsPath string
+	CgroupDir string
 }
 
 var version string
@@ -156,15 +157,6 @@ func (c *crioLXC) readSpec() (*specs.Spec, error) {
 		return nil, err
 	}
 
-	if spec.Linux.CgroupsPath == "" {
-		return nil, fmt.Errorf("empty cgroups path in spec")
-	}
-	if c.SystemdCgroup {
-		c.CgroupsPath = parseSystemdCgroupPath(spec.Linux.CgroupsPath)
-	} else {
-		c.CgroupsPath = spec.Linux.CgroupsPath
-	}
-
 	return spec, nil
 }
 
@@ -198,7 +190,7 @@ func (c *crioLXC) loadContainer() error {
 
 // createContainer creates a new container.
 // It must only be called once during the lifecycle of a container.
-func (c *crioLXC) createContainer() error {
+func (c *crioLXC) createContainer(spec *specs.Spec) error {
 	if _, err := os.Stat(c.configFilePath()); err == nil {
 		return errContainerExist
 	}
@@ -218,7 +210,20 @@ func (c *crioLXC) createContainer() error {
 		return errors.Wrap(err, "failed to close empty config file")
 	}
 
-	c.MonitorCgroup = filepath.Join(c.MonitorCgroup, c.ContainerID+".scope")
+	if spec.Linux.CgroupsPath == "" {
+		return fmt.Errorf("empty cgroups path in spec")
+	}
+	if c.SystemdCgroup {
+		c.CgroupDir = parseSystemdCgroupPath(spec.Linux.CgroupsPath)
+	} else {
+		c.CgroupDir = spec.Linux.CgroupsPath
+	}
+
+	c.MonitorCgroupDir = filepath.Join(c.MonitorCgroup, c.ContainerID+".scope")
+
+	if err := enableCgroupControllers(filepath.Dir(c.CgroupDir)); err != nil {
+		return err
+	}
 
 	if err := c.writeBundleConfig(); err != nil {
 		return err
@@ -237,25 +242,37 @@ func (c *crioLXC) configureCgroupPath() error {
 		return err
 	}
 
-	// @since lxc @a900cbaf257c6a7ee9aa73b09c6d3397581d38fb
-	// checking for on of the config items shuld be enough, because they were introduced together ...
-	if supportsConfigItem("lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor") {
-		if err := c.setConfigItem("lxc.cgroup.dir.container", c.CgroupsPath); err != nil {
-			return err
-		}
-		if err := c.setConfigItem("lxc.cgroup.dir.monitor", c.MonitorCgroup); err != nil {
-			return err
-		}
-	} else {
-		if err := c.setConfigItem("lxc.cgroup.dir", c.CgroupsPath); err != nil {
-			return err
-		}
+	if err := c.setConfigItem("lxc.cgroup.dir", c.CgroupDir); err != nil {
+		return err
 	}
+
 	if supportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
 		if err := c.setConfigItem("lxc.cgroup.dir.monitor.pivot", c.MonitorCgroup); err != nil {
 			return err
 		}
 	}
+
+	/*
+		// @since lxc @a900cbaf257c6a7ee9aa73b09c6d3397581d38fb
+		// checking for on of the config items shuld be enough, because they were introduced together ...
+		if supportsConfigItem("lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor") {
+			if err := c.setConfigItem("lxc.cgroup.dir.container", c.CgroupDir); err != nil {
+				return err
+			}
+			if err := c.setConfigItem("lxc.cgroup.dir.monitor", c.MonitorCgroupDir); err != nil {
+				return err
+			}
+		} else {
+			if err := c.setConfigItem("lxc.cgroup.dir", c.CgroupDir); err != nil {
+				return err
+			}
+		}
+		if supportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
+			if err := c.setConfigItem("lxc.cgroup.dir.monitor.pivot", c.MonitorCgroup); err != nil {
+				return err
+			}
+		}
+	*/
 	return nil
 }
 
@@ -520,6 +537,48 @@ func (c *crioLXC) getContainerState() (ContainerState, error) {
 	return StateRunning, nil
 }
 
+func enableCgroupControllers(cg string) error {
+	//slice := cg.ScopePath()
+	// #nosec
+	cgPath := filepath.Join("/sys/fs/cgroup", cg)
+	if err := os.MkdirAll(cgPath, 755); err != nil {
+		return err
+	}
+	/*
+	   // enable all available controllers in the scope
+	   data, err := ioutil.ReadFile("/sys/fs/cgroup/cgroup.controllers")
+	   if err != nil {
+	           return errors.Wrap(err, "failed to read cgroup.controllers")
+	   }
+	   controllers := strings.Split(strings.TrimSpace(string(data)), " ")
+
+	   var b strings.Builder
+	   for i, c := range controllers {
+	           if i > 0 {
+	                   b.WriteByte(' ')
+	           }
+	           b.WriteByte('+')
+	           b.WriteString(c)
+	   }
+	   b.WriteString("\n")
+
+	   s := b.String()
+	*/
+	s := "+cpuset +cpu +io +memory +hugetlb +pids +rdma\n"
+
+	base := "/sys/fs/cgroup"
+	for _, elem := range strings.Split(cg, "/") {
+		base = filepath.Join(base, elem)
+		c := filepath.Join(base, "cgroup.subtree_control")
+		err := ioutil.WriteFile(c, []byte(s), 0)
+		if err != nil {
+			return errors.Wrapf(err, "failed to enable cgroup controllers in %s", base)
+		}
+		log.Info().Str("file", base).Str("controllers", strings.TrimSpace(s)).Msg("cgroup activated")
+	}
+	return nil
+}
+
 func (c *crioLXC) killContainer(signum unix.Signal) error {
 	pid, err := c.readPidFile()
 	if err != nil && !os.IsNotExist(err) {
@@ -550,12 +609,16 @@ func (c *crioLXC) destroy() error {
 	// Ensure that cgroup directories are gone after container is destroyed.
 	// kubernetes will show the container as 'Terminated' until the cgroup is removed.
 	// Cgroups may exist if container process was killed with SIGKILL and could not cleanup cgroups itself.
-	if err := deleteCgroupWait(c.CgroupsPath, time.Second); err != nil {
-		log.Warn().Err(err).Str("cgroup", c.CgroupsPath).Msg("failed to remove cgroup")
+	//if err := deleteCgroupWait(c.CgroupDir, 10*time.Second); err != nil {
+	if err := deleteCgroup(c.CgroupDir); err != nil {
+		log.Warn().Err(err).Str("cgroup", c.CgroupDir).Msg("failed to remove cgroup")
 	}
-	if err := deleteCgroupWait(c.MonitorCgroup, time.Second); err != nil {
-		log.Warn().Err(err).Str("cgroup", c.MonitorCgroup).Msg("failed to remove monitor cgroup")
-	}
+	/*
+		//if err := deleteCgroupWait(c.MonitorCgroupDir, 10*time.Second); err != nil {
+		if err := deleteCgroup(c.MonitorCgroupDir); err != nil {
+			log.Warn().Err(err).Str("cgroup", c.MonitorCgroupDir).Msg("failed to remove monitor cgroup")
+		}
+	*/
 
 	// "Note that resources associated with the container,
 	// but not created by this container, MUST NOT be deleted."
