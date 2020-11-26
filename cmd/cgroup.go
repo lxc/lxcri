@@ -223,6 +223,28 @@ func loadCgroup(cgName string) (*cgroupInfo, error) {
 	return info, nil
 }
 
+/*
+func deleteCgroupContext(ctx context.Context, cgroupPath string) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			err := deleteCgroup(cgroupPath)
+			if err == nil {
+				return nil
+			}
+			if err == unix.EBUSY {
+				log.Warn().Err(err).Str("cgroup", cgroupPath).Msg("failed to remove cgroup")
+				time.Sleep(time.Millisecond * 50)
+				continue
+			}
+			return err
+		}
+	}
+}
+*/
+
 func deleteCgroup(cgName string) error {
 	dirName := filepath.Join("/sys/fs/cgroup", cgName)
 	// #nosec
@@ -234,15 +256,17 @@ func deleteCgroup(cgName string) error {
 		return err
 	}
 	entries, err := dir.Readdir(-1)
+	if err := dir.Close(); err != nil {
+		return err
+	}
 	if err != nil {
 		return err
 	}
-	// leftover lxc.pivot path
 	for _, i := range entries {
 		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
 			fullPath := filepath.Join(dirName, i.Name())
 			if err := unix.Rmdir(fullPath); err != nil {
-				return errors.Wrapf(err, "failed rmdir %s %T", fullPath, err)
+				return err
 			}
 		}
 	}

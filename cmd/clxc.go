@@ -547,8 +547,15 @@ func (c *crioLXC) destroy() error {
 		}
 	}
 
-	// cgroup directories must be removed if container process was killed with SIGKILL
-	c.tryRemoveCgroups()
+	// Ensure that cgroup directories are gone after container is destroyed.
+	// kubernetes will show the container as 'Terminated' until the cgroup is removed.
+	// Cgroups may exist if container process was killed with SIGKILL and could not cleanup cgroups itself.
+	if err := deleteCgroup(c.CgroupsPath); err != nil {
+		log.Warn().Err(err).Str("cgroup", c.CgroupsPath).Msg("failed to remove cgroup")
+	}
+	if err := deleteCgroup(c.MonitorCgroup); err != nil {
+		log.Warn().Err(err).Str("cgroup", c.MonitorCgroup).Msg("failed to remove monitor cgroup")
+	}
 
 	// "Note that resources associated with the container,
 	// but not created by this container, MUST NOT be deleted."
@@ -556,13 +563,4 @@ func (c *crioLXC) destroy() error {
 	// delete the /var/lib/lxc/$containerID/config file:
 
 	return os.RemoveAll(c.runtimePath())
-}
-
-func (c *crioLXC) tryRemoveCgroups() {
-	if err := deleteCgroup(c.CgroupsPath); err != nil {
-		log.Warn().Err(err).Str("cgroup", c.CgroupsPath).Msg("failed to remove cgroup")
-	}
-	if err := deleteCgroup(c.MonitorCgroup); err != nil {
-		log.Warn().Err(err).Str("cgroup", c.MonitorCgroup).Msg("failed to remove monitor cgroup")
-	}
 }
