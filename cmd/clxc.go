@@ -624,6 +624,11 @@ func (c *crioLXC) destroy() error {
 		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to drain cgroup")
 	}
 
+	err = deleteCgroup(c.CgroupDir)
+	if err != nil && !os.IsNotExist(err) {
+		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to remove cgroup dir")
+	}
+
 	// "Note that resources associated with the container,
 	// but not created by this container, MUST NOT be deleted."
 	// TODO - because we set rootfs.managed=0, Destroy() doesn't
