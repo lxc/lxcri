@@ -596,6 +596,12 @@ func (c *crioLXC) killContainer(signum unix.Signal) error {
 		}
 		return err
 	}
+
+	err = killCgroupProcs(c.CgroupDir, signum)
+	if err != nil && !os.IsNotExist(err) {
+		log.Warn().Err(err).Msg("failed to kill cgroup procs")
+	}
+
 	return nil
 }
 
@@ -608,17 +614,15 @@ func (c *crioLXC) destroy() error {
 
 	// Ensure that cgroup directories are gone after container is destroyed.
 	// kubernetes will show the container as 'Terminated' until the cgroup is removed.
-	// Cgroups may exist if container process was killed with SIGKILL and could not cleanup cgroups itself.
-	//if err := deleteCgroupWait(c.CgroupDir, 10*time.Second); err != nil {
-	if err := deleteCgroup(c.CgroupDir); err != nil {
-		log.Warn().Err(err).Str("cgroup", c.CgroupDir).Msg("failed to remove cgroup")
+	err := killCgroupProcs(c.CgroupDir, unix.SIGKILL)
+	if err != nil && !os.IsNotExist(err) {
+		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to kill cgroup procs")
 	}
-	/*
-		//if err := deleteCgroupWait(c.MonitorCgroupDir, 10*time.Second); err != nil {
-		if err := deleteCgroup(c.MonitorCgroupDir); err != nil {
-			log.Warn().Err(err).Str("cgroup", c.MonitorCgroupDir).Msg("failed to remove monitor cgroup")
-		}
-	*/
+
+	err = waitCgroupDrained(c.CgroupDir, time.Second*5)
+	if err != nil && !os.IsNotExist(err) {
+		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to drain cgroup")
+	}
 
 	// "Note that resources associated with the container,
 	// but not created by this container, MUST NOT be deleted."
