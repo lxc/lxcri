@@ -1,7 +1,7 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -225,33 +225,7 @@ func loadCgroup(cgName string) (*cgroupInfo, error) {
 	return info, nil
 }
 
-func deleteCgroupWait(cgroupPath string, timeout time.Duration) error {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return deleteCgroupContext(ctx, cgroupPath)
-}
-
-func deleteCgroupContext(ctx context.Context, cgroupPath string) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			err := deleteCgroup(cgroupPath)
-			if err == nil {
-				return nil
-			}
-			if err == unix.EBUSY {
-				log.Warn().Err(err).Str("cgroup", cgroupPath).Msg("failed to remove cgroup")
-				time.Sleep(time.Millisecond * 100)
-				continue
-			}
-			return err
-		}
-	}
-}
-
-func deleteCgroup(cgroupName string) error {
+func killCgroupProcs(cgroupName string, sig unix.Signal) error {
 	dirName := filepath.Join("/sys/fs/cgroup", cgroupName)
 	// #nosec
 	dir, err := os.Open(dirName)
@@ -271,31 +245,55 @@ func deleteCgroup(cgroupName string) error {
 	for _, i := range entries {
 		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
 			fullPath := filepath.Join(dirName, i.Name())
-			if err := unix.Rmdir(fullPath); err != nil {
-				log.Warn().Err(err).Str("file", fullPath).Msg("failed to remove cgroup dir")
-				cg, err := loadCgroup(filepath.Join(cgroupName, i.Name()))
-				if err != nil {
-					log.Warn().Err(err).Str("file", fullPath).Msg("failed to read cgroup proces")
-				}
-				for _, pid := range cg.Procs {
-					log.Warn().Int("pid", pid).Msg("killing left-over process")
-					err := unix.Kill(pid, unix.SIGKILL)
-					if err != nil {
-						errors.Wrapf(err, "failed to kill %d", pid)
-					}
-				}
-				// try again
-				if err := unix.Rmdir(fullPath); err != nil {
-					log.Warn().Err(err).Str("file", fullPath).Msg("failed to remove cgroup dir #2")
-				}
+			cg, err := loadCgroup(filepath.Join(cgroupName, i.Name()))
+			if err != nil {
+				log.Warn().Err(err).Str("file", fullPath).Msg("failed to read cgroup proces")
 				return err
 			}
-			log.Debug().Str("file", fullPath).Msg("removed cgroup dir")
+			for _, pid := range cg.Procs {
+				log.Warn().Int("pid", pid).Msg("killing left-over process")
+				err := unix.Kill(pid, sig)
+				if err != nil && err != unix.ESRCH {
+					return errors.Wrapf(err, "failed to kill %d", pid)
+				}
+			}
 		}
 	}
-	err = unix.Rmdir(dirName)
-	if err == nil {
-		log.Debug().Str("file", dirName).Msg("removed cgroup dir")
+	return nil
+}
+
+// TODO maybe use polling instead
+// fds := []unix.PollFd{{Fd: int32(f.Fd()), Events: unix.POLLIN}}
+// n, err := unix.Poll(fds, timeout)
+func waitCgroupDrained(cgroupName string, timeout time.Duration) error {
+	p := filepath.Join("/sys/fs/cgroup", cgroupName, "cgroup.events")
+	f, err := os.OpenFile(p, os.O_RDONLY, 0)
+	if err != nil {
+		return err
 	}
-	return err
+
+	var buf bytes.Buffer
+	buf.Grow(64)
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		buf.Reset()
+		_, err = f.Seek(0, os.SEEK_SET)
+		if err != nil {
+			return err
+		}
+		_, err := buf.ReadFrom(f)
+		if err != nil {
+			return err
+		}
+
+		for _, line := range strings.Split(buf.String(), "\n") {
+			if line == "populated 0" {
+				return nil
+			}
+		}
+		// TODO change log level to trace
+		log.Info().Str("cgroup", cgroupName).Msg("wait for cgroup to get empty")
+		time.Sleep(time.Millisecond * 50)
+	}
+	return fmt.Errorf("timeout")
 }
