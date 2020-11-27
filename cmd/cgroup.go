@@ -291,9 +291,38 @@ func waitCgroupDrained(cgroupName string, timeout time.Duration) error {
 				return nil
 			}
 		}
-		// TODO change log level to trace
-		log.Info().Str("cgroup", cgroupName).Msg("wait for cgroup to get empty")
+		log.Trace().Str("cgroup", cgroupName).Msg("waiting for cgroup to drain")
 		time.Sleep(time.Millisecond * 50)
 	}
 	return fmt.Errorf("timeout")
+}
+
+func deleteCgroup(cgroupName string) error {
+	dirName := filepath.Join("/sys/fs/cgroup", cgroupName)
+	// #nosec
+	dir, err := os.Open(dirName)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	entries, err := dir.Readdir(-1)
+	if err := dir.Close(); err != nil {
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	for _, i := range entries {
+		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
+			p := filepath.Join(dirName, i.Name())
+			err := unix.Rmdir(p)
+			if err != nil && !os.IsNotExist(err) {
+				log.Warn().Err(err).Str("file", p).Msg("failed to read cgroup dir")
+				return err
+			}
+		}
+	}
+	return unix.Rmdir(dirName)
 }
