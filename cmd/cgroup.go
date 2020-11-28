@@ -265,7 +265,7 @@ func killCgroupProcs(cgroupName string, sig unix.Signal) error {
 // TODO maybe use polling instead
 // fds := []unix.PollFd{{Fd: int32(f.Fd()), Events: unix.POLLIN}}
 // n, err := unix.Poll(fds, timeout)
-func waitCgroupDrained(cgroupName string, timeout time.Duration) error {
+func drainCgroup(cgroupName string, sig unix.Signal, timeout time.Duration) error {
 	p := filepath.Join("/sys/fs/cgroup", cgroupName, "cgroup.events")
 	f, err := os.OpenFile(p, os.O_RDONLY, 0)
 	if err != nil {
@@ -290,6 +290,10 @@ func waitCgroupDrained(cgroupName string, timeout time.Duration) error {
 			if line == "populated 0" {
 				return nil
 			}
+		}
+		err = killCgroupProcs(cgroupName, sig)
+		if err != nil {
+			return errors.Wrapf(err, "failed to kill cgroup procs %s", cgroupName)
 		}
 		log.Trace().Str("cgroup", cgroupName).Msg("waiting for cgroup to drain")
 		time.Sleep(time.Millisecond * 50)
