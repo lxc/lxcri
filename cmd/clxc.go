@@ -612,14 +612,7 @@ func (c *crioLXC) destroy() error {
 		}
 	}
 
-	// Ensure that cgroup directories are gone after container is destroyed.
-	// kubernetes will show the container as 'Terminated' until the cgroup is removed.
-	err := killCgroupProcs(c.CgroupDir, unix.SIGKILL)
-	if err != nil && !os.IsNotExist(err) {
-		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to kill cgroup procs")
-	}
-
-	err = waitCgroupDrained(c.CgroupDir, time.Second*5)
+	err := drainCgroup(c.CgroupDir, unix.SIGKILL, time.Second*10)
 	if err != nil && !os.IsNotExist(err) {
 		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to drain cgroup")
 	}
