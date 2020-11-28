@@ -92,19 +92,11 @@ func doCreateInternal(ctx *cli.Context) error {
 		return errors.Wrap(err, "failed to configure container")
 	}
 
-	cmdFile, err := os.OpenFile(clxc.runtimePath("/.crio-lxc/cmdline.txt"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0640)
-	if err != nil {
-		return errors.Wrap(err, "failed to create the cmd file")
+	if err := writeCmdline(clxc.runtimePath("/.crio-lxc/cmdline.txt"), spec); err != nil {
+		return err
 	}
 
-	for _, arg := range spec.Process.Args {
-		fmt.Fprintln(cmdFile, arg)
-	}
-	if err := cmdFile.Close(); err != nil {
-		return errors.Wrap(err, "failed to close cmd file")
-	}
-
-	if err := writeEnviron(clxc.runtimePath("/.crio-lxc/environ"), spec.Process.Env); err != nil {
+	if err := writeEnviron(clxc.runtimePath("/.crio-lxc/environ"), spec); err != nil {
 		return err
 	}
 
@@ -118,13 +110,32 @@ func doCreateInternal(ctx *cli.Context) error {
 	return clxc.createPidFile(startCmd.Process.Pid)
 }
 
-func writeEnviron(envFile string, env []string) error {
-	f, err := os.OpenFile(envFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0640)
+func writeCmdline(cmdFile string, spec *specs.Spec) error {
+	// #nosec
+	f, err := os.OpenFile(cmdFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return errors.Wrap(err, "failed to create the cmd file")
+	}
+	for _, arg := range spec.Process.Args {
+		fmt.Fprintln(f, arg)
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := unix.Chown(cmdFile, int(spec.Process.User.UID), int(spec.Process.User.GID)); err != nil {
+		return err
+	}
+	return unix.Chmod(cmdFile, 0400)
+}
+
+func writeEnviron(envFile string, spec *specs.Spec) error {
+	// #nosec
+	f, err := os.OpenFile(envFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}
 
-	for _, arg := range env {
+	for _, arg := range spec.Process.Env {
 		_, err := f.WriteString(arg)
 		if err != nil {
 			f.Close()
@@ -136,7 +147,13 @@ func writeEnviron(envFile string, env []string) error {
 			return err
 		}
 	}
-	return f.Close()
+	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := unix.Chown(envFile, int(spec.Process.User.UID), int(spec.Process.User.GID)); err != nil {
+		return err
+	}
+	return unix.Chmod(envFile, 0400)
 }
 
 func configureContainer(spec *specs.Spec) error {
@@ -608,8 +625,8 @@ func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string) error {
 
 	// Send the pty file descriptor over the console socket (to the 'conmon' process)
 	// For technical backgrounds see:
-	// man sendmsg 2', 'man unix 3', 'man cmsg 1'
-	// see https://blog.cloudflare.com/know-your-scm_rights/
+	// * `man sendmsg 2`, `man unix 3`, `man cmsg 1`
+	// * https://blog.cloudflare.com/know-your-scm_rights/
 	oob := unix.UnixRights(int(ptmx.Fd()))
 	// Don't know whether 'terminal' is the right data to send, but conmon doesn't care anyway.
 	err = unix.Sendmsg(int(sockFile.Fd()), []byte("terminal"), oob, nil, 0)
