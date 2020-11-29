@@ -238,7 +238,7 @@ func (c *crioLXC) createContainer(spec *specs.Spec) error {
 }
 
 func (c *crioLXC) configureCgroupPath() error {
-	if err := clxc.setConfigItem("lxc.cgroup.relative", "0"); err != nil {
+	if err := c.setConfigItem("lxc.cgroup.relative", "0"); err != nil {
 		return err
 	}
 
@@ -586,15 +586,26 @@ func (c *crioLXC) killContainer(signum unix.Signal) error {
 	}
 	log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
 
-	// send signal to the monitor process if it still exist
-	// signals other than SIGTERM are forwarded from liblxc to the container int process
+	if signum == unix.SIGKILL || signum == unix.SIGTERM {
+		if err := c.setConfigItem("lxc.signal.stop", strconv.Itoa(int(signum))); err != nil {
+			return err
+		}
+		if err := c.Container.Stop(); err != nil {
+			return err
+		}
+		if !c.Container.Wait(lxc.STOPPED, time.Second*10) {
+			log.Warn().Msg("failed to stop lxc container - sending kill")
+		}
+	}
+
+	// TODO wait for the monitor process to die ?
+
+	// kill remaining processes within the cgroup
 	if err := unix.Kill(pid, 0); err == nil {
 		err := unix.Kill(pid, signum)
-		// container process has already died
-		if signum == unix.SIGKILL || signum == unix.SIGTERM {
-			return nil
+		if err != unix.ESRCH {
+			return errors.Wrap(err, "failed to kill container process")
 		}
-		return err
 	}
 
 	err = killCgroupProcs(c.CgroupDir, signum)
@@ -612,9 +623,12 @@ func (c *crioLXC) destroy() error {
 		}
 	}
 
+	start := time.Now()
 	err := drainCgroup(c.CgroupDir, unix.SIGKILL, time.Second*10)
 	if err != nil && !os.IsNotExist(err) {
 		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to drain cgroup")
+	} else {
+		log.Info().Dur("duration", time.Since(start)).Str("file", c.CgroupDir).Msg("cgroup drained")
 	}
 
 	err = deleteCgroup(c.CgroupDir)

@@ -323,7 +323,7 @@ func deleteCgroup(cgroupName string) error {
 			p := filepath.Join(dirName, i.Name())
 			err := unix.Rmdir(p)
 			if err != nil && !os.IsNotExist(err) {
-				log.Warn().Err(err).Str("file", p).Msg("failed to read cgroup dir")
+				log.Warn().Err(err).Str("file", p).Msg("failed to remove ecgroup dir")
 				return err
 			}
 		}
