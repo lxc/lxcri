@@ -35,6 +35,14 @@ func doStart(ctx *cli.Context) error {
 		return err
 	}
 
+	state, err := clxc.getContainerState()
+	if err != nil {
+		return err
+	}
+	if state != StateCreated {
+		return fmt.Errorf("invalid container state. expected %q, but was %q", StateCreated, state)
+	}
+
 	done := make(chan error)
 	go func() {
 		done <- readFifo()
