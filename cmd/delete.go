@@ -29,7 +29,6 @@ func doDelete(ctx *cli.Context) error {
 	err := clxc.loadContainer()
 	if err == errContainerNotExist {
 		return nil
-		//return clxc.destroy()
 	}
 	if err != nil {
 		return err

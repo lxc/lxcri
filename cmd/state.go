@@ -45,8 +45,6 @@ func doState(ctx *cli.Context) error {
 		Annotations: spec.Annotations,
 	}
 
-	//s.Annotations = spec.Annotations
-
 	state, err := clxc.getContainerState()
 	s.Status = string(state)
 	if err != nil {
