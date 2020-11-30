@@ -236,10 +236,15 @@ func main() {
 	if err := clxc.release(); err != nil {
 		log.Error().Err(err).Msg("failed to release container")
 	}
+
 	if err != nil {
-		// write diagnostics message to stderr for crio/kubelet
-		println(err.Error())
-		os.Exit(1)
+		if err, yes := err.(execError); yes {
+			os.Exit(err.ExitStatus)
+		} else {
+			// write diagnostics message to stderr for crio/kubelet
+			println(err.Error())
+			os.Exit(1)
+		}
 	}
 }
 
