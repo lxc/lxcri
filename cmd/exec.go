@@ -13,6 +13,15 @@ import (
 	lxc "gopkg.in/lxc/go-lxc.v2"
 )
 
+type execError struct {
+	Err        error
+	ExitStatus int
+}
+
+func (e execError) Error() string {
+	return fmt.Sprintf("cmd exited with status %d: %s", e.ExitStatus, e.Err)
+}
+
 var execCmd = cli.Command{
 	Name:      "exec",
 	Usage:     "execute a new process in a running container",
@@ -124,10 +133,8 @@ func doExec(ctx *cli.Context) error {
 	}
 
 	exitStatus, err := c.RunCommandStatus(procArgs, attachOpts)
-	if err != nil {
-		return errors.Wrapf(err, "c.RunCommandStatus returned with exit code %d", exitStatus)
+	if err != nil || exitStatus != 0 {
+		return execError{err, exitStatus}
 	}
-	log.Debug().Int("exit", exitStatus).Msg("cmd terminated")
-
 	return nil
 }
