@@ -86,14 +86,9 @@ type Runtime struct {
 
 // createContainer creates a new container.
 // It must only be called once during the lifecycle of a container.
-func (c *Runtime) createContainer() error {
+func (c *Runtime) createContainer(spec *specs.Spec) error {
 	if _, err := os.Stat(c.ConfigFilePath()); err == nil {
 		return errContainerExist
-	}
-
-	// load spec
-	if err := c.ReadSpec(); err != nil {
-		return err
 	}
 
 	if err := os.MkdirAll(c.RuntimePath(), 0700); err != nil {
@@ -111,13 +106,13 @@ func (c *Runtime) createContainer() error {
 		return errors.Wrap(err, "failed to close empty config file")
 	}
 
-	if c.Spec.Linux.CgroupsPath == "" {
+	if spec.Linux.CgroupsPath == "" {
 		return fmt.Errorf("empty cgroups path in spec")
 	}
 	if c.SystemdCgroup {
-		c.CgroupDir = parseSystemdCgroupPath(c.Spec.Linux.CgroupsPath)
+		c.CgroupDir = parseSystemdCgroupPath(spec.Linux.CgroupsPath)
 	} else {
-		c.CgroupDir = c.Spec.Linux.CgroupsPath
+		c.CgroupDir = spec.Linux.CgroupsPath
 	}
 
 	c.MonitorCgroupDir = filepath.Join(c.MonitorCgroup, c.ContainerID+".scope")
@@ -125,6 +120,9 @@ func (c *Runtime) createContainer() error {
 	if err := enableCgroupControllers(filepath.Dir(c.CgroupDir)); err != nil {
 		return err
 	}
+
+	c.Annotations = spec.Annotations
+	c.Namespaces = spec.Linux.Namespaces
 
 	if err := c.ContainerInfo.Create(); err != nil {
 		return err
@@ -157,11 +155,12 @@ func (c *Runtime) loadContainer() error {
 	if err != nil {
 		return errors.Wrap(err, "failed to create new lxc container")
 	}
+	c.Container = container
+
 	err = container.LoadConfigFile(c.ConfigFilePath())
 	if err != nil {
 		return errors.Wrap(err, "failed to load config file")
 	}
-	c.Container = container
 
 	return c.setContainerLogLevel()
 }
@@ -636,7 +635,7 @@ func (c *Runtime) State() (*specs.State, error) {
 		ID:          c.Container.Name(),
 		Bundle:      c.BundlePath,
 		Pid:         pid,
-		Annotations: c.Spec.Annotations,
+		Annotations: c.Annotations,
 	}
 
 	s, err := c.getContainerState()
@@ -666,7 +665,7 @@ func (c *Runtime) Kill(signum unix.Signal) error {
 }
 
 func (c *Runtime) ExecDetached(args []string, proc *specs.Process) (pid int, err error) {
-	opts, err := attachOptions(c.Spec, proc)
+	opts, err := attachOptions(proc, c.Namespaces)
 	if err != nil {
 		return 0, err
 	}
@@ -679,7 +678,7 @@ func (c *Runtime) ExecDetached(args []string, proc *specs.Process) (pid int, err
 }
 
 func (c *Runtime) Exec(args []string, proc *specs.Process) (exitStatus int, err error) {
-	opts, err := attachOptions(c.Spec, proc)
+	opts, err := attachOptions(proc, c.Namespaces)
 	if err != nil {
 		return 0, err
 	}
@@ -722,20 +721,18 @@ func supportsConfigItem(keys ...string) bool {
 	return true
 }
 
-func attachOptions(spec *specs.Spec, procSpec *specs.Process) (lxc.AttachOptions, error) {
+func attachOptions(procSpec *specs.Process, ns []specs.LinuxNamespace) (lxc.AttachOptions, error) {
 	opts := lxc.AttachOptions{
 		StdinFd:  0,
 		StdoutFd: 1,
 		StderrFd: 2,
 	}
 
-	for _, ns := range spec.Linux.Namespaces {
-		n, supported := namespaceMap[ns.Type]
-		if !supported {
-			return opts, fmt.Errorf("can not attach to %s: unsupported namespace", ns.Type)
-		}
-		opts.Namespaces |= n.CloneFlag
+	clone, err := cloneFlags(ns)
+	if err != nil {
+		return opts, err
 	}
+	opts.Namespaces = clone
 
 	if procSpec != nil {
 		opts.Cwd = procSpec.Cwd

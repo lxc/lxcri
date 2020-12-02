@@ -36,18 +36,23 @@ func doCreateInternal() error {
 		return fmt.Errorf("LXC runtime version >= 4.0.5 required, but was %s", lxc.Version())
 	}
 
-	err = clxc.createContainer()
+	spec, err := clxc.ReadSpec()
+	if err != nil {
+		return err
+	}
+
+	err = clxc.createContainer(spec)
 	if err != nil {
 		return errors.Wrap(err, "failed to create container")
 	}
 
-	if err := configureContainer(clxc.Spec); err != nil {
+	if err := configureContainer(spec); err != nil {
 		return errors.Wrap(err, "failed to configure container")
 	}
 
 	// #nosec
 	startCmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.ConfigFilePath())
-	if err := runStartCmd(startCmd, clxc.Spec); err != nil {
+	if err := runStartCmd(startCmd, spec); err != nil {
 		return errors.Wrap(err, "failed to start container process")
 	}
 	log.Info().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
