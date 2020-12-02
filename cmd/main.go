@@ -239,7 +239,7 @@ func main() {
 
 	if err != nil {
 		if err, yes := err.(execError); yes {
-			os.Exit(err.ExitStatus)
+			os.Exit(err.ExitStatus())
 		} else {
 			// write diagnostics message to stderr for crio/kubelet
 			println(err.Error())

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"os"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
@@ -13,13 +12,14 @@ import (
 	lxc "gopkg.in/lxc/go-lxc.v2"
 )
 
-type execError struct {
-	Err        error
-	ExitStatus int
+type execError int
+
+func (e execError) ExitStatus() int {
+	return int(e)
 }
 
 func (e execError) Error() string {
-	return fmt.Sprintf("cmd exited with status %d: %s", e.ExitStatus, e.Err)
+	return fmt.Sprintf("exec cmd exited with status %d", int(e))
 }
 
 var execCmd = cli.Command{
@@ -108,9 +108,9 @@ func doExec(ctx *cli.Context) error {
 		attachOpts.Namespaces |= n.CloneFlag
 	}
 
-	attachOpts.StdinFd = os.Stdin.Fd()
-	attachOpts.StdoutFd = os.Stdout.Fd()
-	attachOpts.StderrFd = os.Stderr.Fd()
+	attachOpts.StdinFd = 0
+	attachOpts.StdoutFd = 1
+	attachOpts.StderrFd = 2
 
 	detach := ctx.Bool("detach")
 
@@ -133,8 +133,11 @@ func doExec(ctx *cli.Context) error {
 	}
 
 	exitStatus, err := c.RunCommandStatus(procArgs, attachOpts)
-	if err != nil || exitStatus != 0 {
-		return execError{err, exitStatus}
+	if err != nil {
+		return err
+	}
+	if exitStatus != 0 {
+		return execError(exitStatus)
 	}
 	return nil
 }
