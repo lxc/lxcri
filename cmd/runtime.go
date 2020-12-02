@@ -358,9 +358,9 @@ func (c *Runtime) executeRuntimeHook(runtimeError error) {
 		env = append(env, "RUNTIME_ERROR="+runtimeError.Error())
 	}
 
-	log.Debug().Str("file", clxc.RuntimeHook).Msg("execute runtime hook")
+	log.Debug().Str("file", c.RuntimeHook).Msg("execute runtime hook")
 	// TODO drop privileges, capabilities ?
-	ctx, cancel := context.WithTimeout(context.Background(), clxc.RuntimeHookTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), c.RuntimeHookTimeout)
 	defer cancel()
 	// #nosec
 	cmd := exec.CommandContext(ctx, c.RuntimeHook)
@@ -575,6 +575,58 @@ func (c *Runtime) saveConfig() error {
 	}
 	if err := os.Rename(tmpFile, cfgFile); err != nil {
 		return errors.Wrap(err, "failed to rename config file")
+	}
+	return nil
+}
+
+func (c *Runtime) Start(timeout time.Duration) error {
+	log.Info().Msg("notify init to start container process")
+
+	err := c.loadContainer()
+	if err != nil {
+		return err
+	}
+
+	state, err := c.getContainerState()
+	if err != nil {
+		return err
+	}
+	if state != StateCreated {
+		return fmt.Errorf("invalid container state. expected %q, but was %q", StateCreated, state)
+	}
+
+	done := make(chan error)
+	go func() {
+		done <- c.readFifo()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(time.Second * 5):
+		return fmt.Errorf("timeout reading from syncfifo")
+	}
+
+	return c.waitRunning(timeout)
+}
+
+func (c *Runtime) readFifo() error {
+	// #nosec
+	f, err := os.OpenFile(syncFifoPath(), os.O_RDONLY, 0)
+	if err != nil {
+		return errors.Wrap(err, "failed to open sync fifo")
+	}
+	// can not set deadline on fifo
+	// #nosec
+	defer f.Close()
+
+	data := make([]byte, len(c.ContainerID))
+	_, err = f.Read(data)
+	if err != nil {
+		return errors.Wrap(err, "problem reading from fifo")
+	}
+	if c.ContainerID != string(data) {
+		return errors.Errorf("bad fifo content: %s", string(data))
 	}
 	return nil
 }
