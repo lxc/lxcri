@@ -96,7 +96,7 @@ func doExec(ctx *cli.Context) error {
 	}
 
 	// Load container spec to get the list of supported namespaces.
-	spec, err := clxc.readSpec()
+	spec, err := clxc.Spec()
 	if err != nil {
 		return errors.Wrap(err, "failed to read container runtime spec")
 	}

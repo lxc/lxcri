@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
@@ -47,20 +46,25 @@ const (
 )
 
 // The singelton that wraps the lxc.Container
-var clxc crioLXC
+var clxc Runtime
 var log zerolog.Logger
 
 var errContainerNotExist = errors.New("container does not exist")
 var errContainerExist = errors.New("container already exists")
 
-type crioLXC struct {
+var version string
+
+func versionString() string {
+	return fmt.Sprintf("%s (%s) (lxc:%s)", version, runtime.Version(), lxc.Version())
+}
+
+type Runtime struct {
 	Container *lxc.Container
+	ContainerInfo
 
 	Command string
 
 	// [ global settings ]
-	RuntimeRoot       string
-	ContainerID       string
 	LogFile           *os.File
 	LogFilePath       string
 	LogLevel          string
@@ -75,127 +79,28 @@ type crioLXC struct {
 	RuntimeHookTimeout   time.Duration
 	RuntimeHookRunAlways bool
 
-	// feature gates
-	Seccomp       bool
-	Capabilities  bool
-	Apparmor      bool
-	CgroupDevices bool
-
 	// create flags
 	ConsoleSocketTimeout time.Duration
 
 	// start flags
 	StartTimeout time.Duration
-
-	bundleConfig
-}
-
-type bundleConfig struct {
-	BundlePath       string
-	SpecPath         string // BundlePath + "/config.json"
-	PidFile          string
-	ConsoleSocket    string
-	MonitorCgroupDir string
-	// values derived from spec
-	CgroupDir string
-}
-
-var version string
-
-func versionString() string {
-	return fmt.Sprintf("%s (%s) (lxc:%s)", version, runtime.Version(), lxc.Version())
-}
-
-// runtimePath builds an absolute filepath which is relative to the container runtime root.
-func (c *crioLXC) runtimePath(subPath ...string) string {
-	return filepath.Join(c.RuntimeRoot, c.ContainerID, filepath.Join(subPath...))
-}
-func (c *crioLXC) bundlePath(subPath ...string) string {
-	return filepath.Join(c.BundlePath, filepath.Join(subPath...))
-}
-
-func (c *crioLXC) configFilePath() string {
-	return c.runtimePath("config")
-}
-
-func (c *crioLXC) readPidFile() (int, error) {
-	// #nosec
-	data, err := ioutil.ReadFile(c.PidFile)
-	if err != nil {
-		return 0, err
-	}
-	s := strings.TrimSpace(string(data))
-	return strconv.Atoi(s)
-}
-
-func (c *crioLXC) createPidFile(pid int) error {
-	return createPidFile(c.PidFile, pid)
-}
-
-// ReadSpec deserializes the JSON encoded runtime spec from the given path.
-func (c *crioLXC) readSpec() (*specs.Spec, error) {
-	// #nosec
-	// FIXME set this once
-	c.SpecPath = c.bundlePath("config.json")
-
-	specFile, err := os.Open(c.SpecPath)
-	if err != nil {
-		return nil, err
-	}
-	// #nosec
-	defer specFile.Close()
-	spec := &specs.Spec{}
-	err = json.NewDecoder(specFile).Decode(spec)
-	if err != nil {
-		return nil, err
-	}
-
-	return spec, nil
-}
-
-// loadContainer checks for the existence of the lxc config file.
-// It returns an error if the config file does not exist.
-func (c *crioLXC) loadContainer() error {
-	_, err := os.Stat(c.configFilePath())
-	if os.IsNotExist(err) {
-		return errContainerNotExist
-	}
-	if err != nil {
-		return errors.Wrap(err, "failed to access config file")
-	}
-
-	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
-	if err != nil {
-		return errors.Wrap(err, "failed to load container")
-	}
-	err = container.LoadConfigFile(c.configFilePath())
-	if err != nil {
-		return errors.Wrap(err, "failed to load config file")
-	}
-	c.Container = container
-
-	if err := c.setContainerLogLevel(); err != nil {
-		return err
-	}
-
-	return c.readBundleConfig()
 }
 
 // createContainer creates a new container.
 // It must only be called once during the lifecycle of a container.
-func (c *crioLXC) createContainer(spec *specs.Spec) error {
-	if _, err := os.Stat(c.configFilePath()); err == nil {
+func (c *Runtime) createContainer(spec *specs.Spec) error {
+	if _, err := os.Stat(c.ConfigFilePath()); err == nil {
 		return errContainerExist
 	}
 
-	if err := os.MkdirAll(c.runtimePath(), 0700); err != nil {
+	if err := os.MkdirAll(c.RuntimePath(), 0700); err != nil {
 		return errors.Wrap(err, "failed to create container dir")
 	}
 
 	// An empty tmpfile is created to ensure that createContainer can only succeed once.
 	// The config file is atomically activated in saveConfig.
 	// #nosec
-	f, err := os.OpenFile(c.runtimePath(".config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
+	f, err := os.OpenFile(c.RuntimePath(".config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
 	if err != nil {
 		return err
 	}
@@ -218,7 +123,9 @@ func (c *crioLXC) createContainer(spec *specs.Spec) error {
 		return err
 	}
 
-	if err := c.writeBundleConfig(); err != nil {
+	c.CreatedAt = time.Now()
+
+	if err := c.ContainerInfo.Create(); err != nil {
 		return err
 	}
 
@@ -230,7 +137,36 @@ func (c *crioLXC) createContainer(spec *specs.Spec) error {
 	return c.setContainerLogLevel()
 }
 
-func (c *crioLXC) configureCgroupPath() error {
+// loadContainer checks for the existence of the lxc config file.
+// It returns an error if the config file does not exist.
+func (c *Runtime) loadContainer() error {
+
+	if err := c.ContainerInfo.Load(); err != nil {
+		return err
+	}
+
+	_, err := os.Stat(c.ConfigFilePath())
+	if os.IsNotExist(err) {
+		return errContainerNotExist
+	}
+	if err != nil {
+		return errors.Wrap(err, "failed to access config file")
+	}
+
+	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
+	if err != nil {
+		return errors.Wrap(err, "failed to load container")
+	}
+	err = container.LoadConfigFile(c.ConfigFilePath())
+	if err != nil {
+		return errors.Wrap(err, "failed to load config file")
+	}
+	c.Container = container
+
+	return c.setContainerLogLevel()
+}
+
+func (c *Runtime) configureCgroupPath() error {
 	if err := c.setConfigItem("lxc.cgroup.relative", "0"); err != nil {
 		return err
 	}
@@ -269,63 +205,8 @@ func (c *crioLXC) configureCgroupPath() error {
 	return nil
 }
 
-func (c *crioLXC) readBundleConfig() error {
-	p := c.runtimePath("bundle.json")
-	data, err := ioutil.ReadFile(p)
-	if err != nil {
-		return errors.Wrapf(err, "failed to read bundle config file %s", p)
-	}
-	err = json.Unmarshal(data, &c.bundleConfig)
-	if err != nil {
-		return errors.Wrap(err, "failed to unmarshal bundle config")
-	}
-	return nil
-}
-
-func (c *crioLXC) writeBundleConfig() error {
-	p := c.runtimePath("bundle.json")
-	f, err := os.OpenFile(p, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
-	if err != nil {
-		return errors.Wrapf(err, "failed to create bundle config file %s", p)
-	}
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	err = enc.Encode(c.bundleConfig)
-	if err != nil {
-		f.Close()
-		return errors.Wrap(err, "failed to marshal bundle config")
-	}
-	return f.Close()
-}
-
-// saveConfig creates and atomically enables the lxc config file.
-// It must be called after #createContainer and only once.
-// Any config changes via clxc.setConfigItem must be done
-// before calling saveConfig.
-func (c *crioLXC) saveConfig() error {
-	// createContainer creates the tmpfile
-	tmpFile := c.runtimePath(".config")
-	if _, err := os.Stat(tmpFile); err != nil {
-		return errors.Wrap(err, "failed to stat config tmpfile")
-	}
-	// Don't overwrite an existing config.
-	cfgFile := c.configFilePath()
-	if _, err := os.Stat(cfgFile); err == nil {
-		return fmt.Errorf("config file %s already exists", cfgFile)
-	}
-	err := c.Container.SaveConfigFile(tmpFile)
-	if err != nil {
-		return errors.Wrapf(err, "failed to save config file to '%s'", tmpFile)
-	}
-	if err := os.Rename(tmpFile, cfgFile); err != nil {
-		return errors.Wrap(err, "failed to rename config file")
-	}
-	log.Debug().Str("file", cfgFile).Msg("created lxc config file")
-	return nil
-}
-
 // Release releases/closes allocated resources (lxc.Container, LogFile)
-func (c crioLXC) release() error {
+func (c Runtime) release() error {
 	if c.Container != nil {
 		if err := c.Container.Release(); err != nil {
 			log.Error().Err(err).Msg("failed to release container")
@@ -347,7 +228,7 @@ func supportsConfigItem(keys ...string) bool {
 	return true
 }
 
-func (c *crioLXC) getConfigItem(key string) string {
+func (c *Runtime) getConfigItem(key string) string {
 	vals := c.Container.ConfigItem(key)
 	if len(vals) > 0 {
 		first := vals[0]
@@ -360,7 +241,7 @@ func (c *crioLXC) getConfigItem(key string) string {
 	return ""
 }
 
-func (c *crioLXC) setConfigItem(key, value string) error {
+func (c *Runtime) setConfigItem(key, value string) error {
 	err := c.Container.SetConfigItem(key, value)
 	if err != nil {
 		return errors.Wrapf(err, "failed to set config item '%s=%s'", key, value)
@@ -369,7 +250,7 @@ func (c *crioLXC) setConfigItem(key, value string) error {
 	return nil
 }
 
-func (c *crioLXC) configureLogging() error {
+func (c *Runtime) configureLogging() error {
 	logDir := filepath.Dir(c.LogFilePath)
 	err := os.MkdirAll(logDir, 0750)
 	if err != nil {
@@ -414,7 +295,7 @@ func (c *crioLXC) configureLogging() error {
 	return nil
 }
 
-func (c *crioLXC) setContainerLogLevel() error {
+func (c *Runtime) setContainerLogLevel() error {
 	// Never let lxc write to stdout, stdout belongs to the container init process.
 	// Explicitly disable it - allthough it is currently the default.
 	c.Container.SetVerbosity(lxc.Quiet)
@@ -429,7 +310,7 @@ func (c *crioLXC) setContainerLogLevel() error {
 	return nil
 }
 
-func (c *crioLXC) parseContainerLogLevel() lxc.LogLevel {
+func (c *Runtime) parseContainerLogLevel() lxc.LogLevel {
 	switch strings.ToLower(c.ContainerLogLevel) {
 	case "trace":
 		return lxc.TRACE
@@ -459,17 +340,17 @@ func (c *crioLXC) parseContainerLogLevel() lxc.LogLevel {
 
 // executeRuntimeHook executes the runtime hook executable if defined.
 // Execution errors are logged at log level error.
-func (c *crioLXC) executeRuntimeHook(runtimeError error) {
+func (c *Runtime) executeRuntimeHook(runtimeError error) {
 	if c.RuntimeHook == "" {
 		return
 	}
 	env := []string{
 		"CONTAINER_ID=" + c.ContainerID,
-		"LXC_CONFIG=" + c.configFilePath(),
+		"LXC_CONFIG=" + c.ConfigFilePath(),
 		"RUNTIME_CMD=" + c.Command,
-		"RUNTIME_PATH=" + c.runtimePath(),
+		"RUNTIME_PATH=" + c.RuntimePath(),
 		"BUNDLE_PATH=" + c.BundlePath,
-		"SPEC_PATH=" + c.SpecPath,
+		"SPEC_PATH=" + c.SpecPath(),
 		"LOG_FILE=" + c.LogFilePath,
 	}
 
@@ -484,18 +365,18 @@ func (c *crioLXC) executeRuntimeHook(runtimeError error) {
 	// #nosec
 	cmd := exec.CommandContext(ctx, c.RuntimeHook)
 	cmd.Env = env
-	cmd.Dir = c.runtimePath()
+	cmd.Dir = c.RuntimePath()
 	if err := cmd.Run(); err != nil {
 		log.Error().Err(err).Str("file", c.RuntimeHook).
 			Bool("timeout-expired", ctx.Err() == context.DeadlineExceeded).Msg("runtime hook failed")
 	}
 }
 
-func (c *crioLXC) isContainerStopped() bool {
+func (c *Runtime) isContainerStopped() bool {
 	return c.Container.State() == lxc.STOPPED
 }
 
-func (c *crioLXC) waitCreated(timeout time.Duration) error {
+func (c *Runtime) waitCreated(timeout time.Duration) error {
 	if !c.Container.Wait(lxc.RUNNING, timeout) {
 		return fmt.Errorf("timeout starting init cmd")
 	}
@@ -510,7 +391,7 @@ func (c *crioLXC) waitCreated(timeout time.Duration) error {
 	return nil
 }
 
-func (c *crioLXC) waitRunning(timeout time.Duration) error {
+func (c *Runtime) waitRunning(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		initState, err := c.getContainerInitState()
@@ -534,7 +415,7 @@ func (c *crioLXC) waitRunning(timeout time.Duration) error {
 // The init process environment contains #envStateCreated if the the container
 // is created, but not yet running/started.
 // This requires the proc filesystem to be mounted on the host.
-func (c *crioLXC) getContainerState() (ContainerState, error) {
+func (c *Runtime) getContainerState() (ContainerState, error) {
 	state := c.Container.State()
 	switch state {
 	case lxc.STOPPED:
@@ -550,7 +431,7 @@ func (c *crioLXC) getContainerState() (ContainerState, error) {
 
 // getContainerInitState returns the detailed state of the container init process.
 // If the init process is not running StateStopped is returned along with an error.
-func (c *crioLXC) getContainerInitState() (ContainerState, error) {
+func (c *Runtime) getContainerInitState() (ContainerState, error) {
 	initPid := c.Container.InitPid()
 	if initPid < 1 {
 		return StateStopped, fmt.Errorf("init cmd is not running")
@@ -613,7 +494,7 @@ func enableCgroupControllers(cg string) error {
 	return nil
 }
 
-func (c *crioLXC) killContainer(signum unix.Signal) error {
+func (c *Runtime) killContainer(signum unix.Signal) error {
 	if signum == unix.SIGKILL || signum == unix.SIGTERM {
 		if err := c.setConfigItem("lxc.signal.stop", strconv.Itoa(int(signum))); err != nil {
 			return err
@@ -638,7 +519,7 @@ func (c *crioLXC) killContainer(signum unix.Signal) error {
 	}
 
 	//  send non-terminating signals to monitor process
-	pid, err := c.readPidFile()
+	pid, err := c.Pid()
 	if err != nil && !os.IsNotExist(err) {
 		return errors.Wrapf(err, "failed to load pidfile")
 	}
@@ -658,7 +539,7 @@ func (c *crioLXC) killContainer(signum unix.Signal) error {
 // but not created by this container, MUST NOT be deleted."
 // TODO - because we set rootfs.managed=0, Destroy() doesn't
 // delete the /var/lib/lxc/$containerID/config file:
-func (c *crioLXC) destroy() error {
+func (c *Runtime) destroy() error {
 	if c.Container != nil {
 		if err := c.Container.Destroy(); err != nil {
 			return errors.Wrap(err, "failed to destroy container")
@@ -670,5 +551,30 @@ func (c *crioLXC) destroy() error {
 		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to remove cgroup dir")
 	}
 
-	return os.RemoveAll(c.runtimePath())
+	return os.RemoveAll(c.RuntimePath())
+}
+
+// saveConfig creates and atomically enables the lxc config file.
+// It must be called after #createContainer and only once.
+// Any config changes via clxc.setConfigItem must be done
+// before calling saveConfig.
+func (c *Runtime) saveConfig() error {
+	// createContainer creates the tmpfile
+	tmpFile := c.RuntimePath(".config")
+	if _, err := os.Stat(tmpFile); err != nil {
+		return errors.Wrap(err, "failed to stat config tmpfile")
+	}
+	// Don't overwrite an existing config.
+	cfgFile := c.ConfigFilePath()
+	if _, err := os.Stat(cfgFile); err == nil {
+		return fmt.Errorf("config file %s already exists", cfgFile)
+	}
+	err := c.Container.SaveConfigFile(tmpFile)
+	if err != nil {
+		return errors.Wrapf(err, "failed to save config file to '%s'", tmpFile)
+	}
+	if err := os.Rename(tmpFile, cfgFile); err != nil {
+		return errors.Wrap(err, "failed to rename config file")
+	}
+	return nil
 }

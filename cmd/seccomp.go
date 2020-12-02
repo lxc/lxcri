@@ -28,7 +28,7 @@ func configureSeccomp(spec *specs.Spec) error {
 		return nil
 	}
 
-	profilePath := clxc.runtimePath("seccomp.conf")
+	profilePath := clxc.RuntimePath("seccomp.conf")
 	if err := writeSeccompProfile(profilePath, spec.Linux.Seccomp); err != nil {
 		return err
 	}
