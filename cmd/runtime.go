@@ -652,3 +652,37 @@ func (c *Runtime) Delete(force bool) error {
 	}
 	return c.destroy()
 }
+
+func (c *Runtime) State() (*specs.State, error) {
+	err := c.loadContainer()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to load container")
+	}
+
+	pid, err := c.Pid()
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to load pidfile")
+	}
+
+	spec, err := c.Spec()
+	if err != nil {
+		return nil, err
+	}
+
+	state := &specs.State{
+		Version:     specs.Version,
+		ID:          c.Container.Name(),
+		Bundle:      c.BundlePath,
+		Pid:         pid,
+		Annotations: spec.Annotations,
+	}
+
+	s, err := c.getContainerState()
+	state.Status = string(s)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info().Int("pid", state.Pid).Str("status", state.Status).Msg("container state")
+	return state, nil
+}
