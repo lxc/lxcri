@@ -34,7 +34,7 @@ type ContainerInfo struct {
 	Apparmor      bool
 	CgroupDevices bool
 
-	*specs.Spec
+	*specs.Spec `json:"-"`
 }
 
 // RuntimePath returns the absolute path witin the container root
@@ -71,9 +71,15 @@ func (c *ContainerInfo) Load() error {
 
 func (c *ContainerInfo) Create() error {
 	p := c.RuntimePath("container.json")
+	c.CreatedAt = time.Now()
 	return encodeFileJSON(p, c, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
 }
 
-func(c *ContainerInfo) ReadSpec() error {
-	return decodeFileJSON(c.Spec, filepath.Join(c.BundlePath, "config.json"))
+func (c ContainerInfo) SpecPath() string {
+	return filepath.Join(c.BundlePath, "config.json")
+}
+
+func (c *ContainerInfo) ReadSpec() error {
+	c.Spec = &specs.Spec{}
+	return decodeFileJSON(c.Spec, c.SpecPath())
 }

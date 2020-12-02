@@ -465,6 +465,9 @@ func doExec(ctx *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	if procSpec != nil {
+		args = procSpec.Args
+	}
 
 	if detach {
 		pid, err := clxc.ExecDetached(args, procSpec)

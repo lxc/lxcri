@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,8 +10,6 @@ import (
 
 	"golang.org/x/sys/unix"
 )
-
-const undefined = -1
 
 // createPidFile atomically creates a pid file for the given pid at the given path
 func createPidFile(path string, pid int) error {
@@ -38,37 +35,37 @@ func createPidFile(path string, pid int) error {
 func canExecute(cmds ...string) error {
 	for _, c := range cmds {
 		if err := unix.Access(c, unix.X_OK); err != nil {
-			return errors.Wrapf(err, "failed to access cmd %s", c)
+			return fmt.Errorf("can not execute %q: %w", c, err)
 		}
 	}
 	return nil
 }
 
-func filesystemName(fsName string) int64 {
+func fsMagic(fsName string) int64 {
 	switch fsName {
 	case "proc", "procfs":
 		return unix.PROC_SUPER_MAGIC
 	case "cgroup2", "cgroup2fs":
 		return unix.CGROUP2_SUPER_MAGIC
 	default:
-		return undefined
+		return -1
 	}
 }
 
 // TODO check whether dir is the filsystem root (use /proc/mounts)
 func isFilesystem(dir string, fsName string) error {
-	fsType := filesystemName(fsName)
-	if fsType == undefined {
+	fsType := fsMagic(fsName)
+	if fsType == -1 {
 		return fmt.Errorf("undefined filesystem %q", fsName)
 	}
 
 	var stat unix.Statfs_t
 	err := unix.Statfs(dir, &stat)
 	if err != nil {
-		return errors.Wrapf(err, "fstat failed for directory %s", dir)
+		return fmt.Errorf("fstat failed for %q: %w", dir, err)
 	}
 	if stat.Type != fsType {
-		return fmt.Errorf("%s is not on %q filesystem", dir, fsName)
+		return fmt.Errorf("%q is not on filesystem %s", dir, fsName)
 	}
 	return nil
 }
@@ -94,30 +91,35 @@ func decodeFileJSON(obj interface{}, src string) error {
 	// #nosec
 	f, err := os.Open(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open %s: %w", src, err)
 	}
 	// #nosec
-	spec := &specs.Spec{}
 	err = json.NewDecoder(f).Decode(obj)
 	if err != nil {
 		f.Close()
-		return err
+		return fmt.Errorf("failed to decode JSON from %s: %w", src, err)
 	}
-	return f.Close()
+	err = f.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close %s: %w", src, err)
+	}
+	return nil
 }
 
-func encodeFileJSON(dst string, obj interface{}, int flags, mode uint32) error {
-	f, err := os.OpenFile(dst, flags, mode)
+func encodeFileJSON(dst string, obj interface{}, flags int, mode uint32) error {
+	f, err := os.OpenFile(dst, flags, os.FileMode(mode))
 	if err != nil {
-		return errors.Wrapf(err, "failed to create file %q", dst)
+		return fmt.Errorf("failed to open %s: %w", dst, err)
 	}
-	c.CreatedAt = time.Now()
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-	err = enc.Encode(c)
+	err = enc.Encode(obj)
 	if err != nil {
 		f.Close()
-		return errors.Wrap(err, "failed to write JSON to file %q", dst)
+		return fmt.Errorf("failed to encode JSON to %s: %w", dst, err)
 	}
-	return f.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close %s: %w", dst, err)
+	}
+	return nil
 }
