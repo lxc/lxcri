@@ -15,52 +15,11 @@ import (
 	"github.com/creack/pty"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli/v2"
 
 	lxc "gopkg.in/lxc/go-lxc.v2"
 )
 
-var createCmd = cli.Command{
-	Name:      "create",
-	Usage:     "create a container from a bundle directory",
-	ArgsUsage: "<containerID>",
-	Action:    doCreate,
-	Flags: []cli.Flag{
-		&cli.StringFlag{
-			Name:        "bundle",
-			Usage:       "set bundle directory",
-			Value:       ".",
-			Destination: &clxc.BundlePath,
-		},
-		&cli.StringFlag{
-			Name:        "console-socket",
-			Usage:       "send container pty master fd to this socket path",
-			Destination: &clxc.ConsoleSocket,
-		},
-		&cli.StringFlag{
-			Name:        "pid-file",
-			Usage:       "path to write container PID",
-			Destination: &clxc.PidFile,
-		},
-		&cli.DurationFlag{
-			Name:        "socket-timeout",
-			Usage:       "timeout for sending pty master to socket",
-			EnvVars:     []string{"CRIO_LXC_CREATE_SOCKET_TIMEOUT"},
-			Value:       time.Second * 60,
-			Destination: &clxc.ConsoleSocketTimeout,
-		},
-	},
-}
-
-func doCreate(ctx *cli.Context) error {
-	err := doCreateInternal(ctx)
-	if err != nil || clxc.RuntimeHookRunAlways {
-		clxc.executeRuntimeHook(err)
-	}
-	return err
-}
-
-func doCreateInternal(ctx *cli.Context) error {
+func doCreateInternal() error {
 	err := canExecute(clxc.StartCommand, clxc.ContainerHook, clxc.InitCommand)
 	if err != nil {
 		return err
@@ -77,23 +36,18 @@ func doCreateInternal(ctx *cli.Context) error {
 		return fmt.Errorf("LXC runtime version >= 4.0.5 required, but was %s", lxc.Version())
 	}
 
-	spec, err := clxc.Spec()
-	if err != nil {
-		return errors.Wrap(err, "couldn't load bundle spec")
-	}
-
-	err = clxc.createContainer(spec)
+	err = clxc.createContainer()
 	if err != nil {
 		return errors.Wrap(err, "failed to create container")
 	}
 
-	if err := configureContainer(spec); err != nil {
+	if err := configureContainer(clxc.Spec); err != nil {
 		return errors.Wrap(err, "failed to configure container")
 	}
 
 	// #nosec
 	startCmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.ConfigFilePath())
-	if err := runStartCmd(startCmd, spec); err != nil {
+	if err := runStartCmd(startCmd, clxc.Spec); err != nil {
 		return errors.Wrap(err, "failed to start container process")
 	}
 	log.Info().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
@@ -102,8 +56,7 @@ func doCreateInternal(ctx *cli.Context) error {
 		log.Error().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
 		return err
 	}
-
-	return clxc.CreatePidFile(startCmd.Process.Pid)
+	return createPidFile(clxc.PidFile, startCmd.Process.Pid)
 }
 
 func configureContainer(spec *specs.Spec) error {

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -35,10 +33,8 @@ type ContainerInfo struct {
 	Capabilities  bool
 	Apparmor      bool
 	CgroupDevices bool
-}
 
-func (c ContainerInfo) SpecPath() string {
-	return filepath.Join(c.BundlePath, "config.json")
+	*specs.Spec
 }
 
 // RuntimePath returns the absolute path witin the container root
@@ -64,49 +60,20 @@ func (c ContainerInfo) CreatePidFile(pid int) error {
 	return createPidFile(c.PidFile, pid)
 }
 
-// Spec deserializes the JSON encoded runtime spec from the given path.
-func (c ContainerInfo) Spec() (*specs.Spec, error) {
-	// #nosec
-	specFile, err := os.Open(c.SpecPath())
-	if err != nil {
-		return nil, err
-	}
-	// #nosec
-	defer specFile.Close()
-	spec := &specs.Spec{}
-	err = json.NewDecoder(specFile).Decode(spec)
-	if err != nil {
-		return nil, err
-	}
-
-	return spec, nil
-}
-
+// RuntimeRoot and ContainerID must be set
 func (c *ContainerInfo) Load() error {
 	p := c.RuntimePath("container.json")
-	data, err := ioutil.ReadFile(p)
-	if err != nil {
-		return errors.Wrapf(err, "failed to read bundle config file %s", p)
+	if err := decodeFileJSON(c, p); err != nil {
+		return err
 	}
-	err = json.Unmarshal(data, c)
-	if err != nil {
-		return errors.Wrap(err, "failed to unmarshal bundle config")
-	}
-	return nil
+	return c.ReadSpec()
 }
 
 func (c *ContainerInfo) Create() error {
 	p := c.RuntimePath("container.json")
-	f, err := os.OpenFile(p, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
-	if err != nil {
-		return errors.Wrapf(err, "failed to create bundle config file %s", p)
-	}
-	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
-	err = enc.Encode(c)
-	if err != nil {
-		f.Close()
-		return errors.Wrap(err, "failed to marshal bundle config")
-	}
-	return f.Close()
+	return encodeFileJSON(p, c, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
+}
+
+func(c *ContainerInfo) ReadSpec() error {
+	return decodeFileJSON(c.Spec, filepath.Join(c.BundlePath, "config.json"))
 }
