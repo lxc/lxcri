@@ -45,8 +45,6 @@ const (
 	StateStopped ContainerState = "stopped"
 )
 
-// The singelton that wraps the lxc.Container
-var clxc Runtime
 var log zerolog.Logger
 
 var errContainerNotExist = errors.New("container does not exist")
@@ -700,6 +698,5 @@ func (c *Runtime) Kill(signum unix.Signal) error {
 	if !(state == StateCreated || state == StateRunning) {
 		return fmt.Errorf("can only kill container in state Created|Running but was %q", state)
 	}
-
 	return c.killContainer(signum)
 }

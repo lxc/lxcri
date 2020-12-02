@@ -16,6 +16,9 @@ import (
 // Existing environment variables are preserved.
 var envFile = "/etc/default/crio-lxc"
 
+// The singelton that wraps the lxc.Container
+var clxc Runtime
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "crio-lxc"
