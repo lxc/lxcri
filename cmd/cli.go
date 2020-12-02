@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
@@ -320,4 +321,26 @@ starts <containerID>
 
 func doStart(ctx *cli.Context) error {
 	return clxc.Start(ctx.Duration("timeout"))
+}
+
+var stateCmd = cli.Command{
+	Name:   "state",
+	Usage:  "returns state of a container",
+	Action: doState,
+	ArgsUsage: `[containerID]
+
+<containerID> is the ID of the container you want to know about.
+`,
+	Flags: []cli.Flag{},
+}
+
+func doState(ctx *cli.Context) error {
+	state, err := clxc.State()
+	if j, err := json.Marshal(state); err == nil {
+		fmt.Fprint(os.Stdout, string(j))
+		log.Trace().RawJSON("state", j).Msg("container state")
+	} else {
+		return errors.Wrap(err, "failed to marshal json")
+	}
+	return err
 }
