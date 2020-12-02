@@ -284,6 +284,46 @@ func loadEnvFile(envFile string) (map[string]string, error) {
 	return env, nil
 }
 
+var createCmd = cli.Command{
+	Name:      "create",
+	Usage:     "create a container from a bundle directory",
+	ArgsUsage: "<containerID>",
+	Action:    doCreate,
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:        "bundle",
+			Usage:       "set bundle directory",
+			Value:       ".",
+			Destination: &clxc.BundlePath,
+		},
+		&cli.StringFlag{
+			Name:        "console-socket",
+			Usage:       "send container pty master fd to this socket path",
+			Destination: &clxc.ConsoleSocket,
+		},
+		&cli.StringFlag{
+			Name:        "pid-file",
+			Usage:       "path to write container PID",
+			Destination: &clxc.PidFile,
+		},
+		&cli.DurationFlag{
+			Name:        "socket-timeout",
+			Usage:       "timeout for sending pty master to socket",
+			EnvVars:     []string{"CRIO_LXC_CREATE_SOCKET_TIMEOUT"},
+			Value:       time.Second * 60,
+			Destination: &clxc.ConsoleSocketTimeout,
+		},
+	},
+}
+
+func doCreate(ctx *cli.Context) error {
+	err := doCreateInternal()
+	if err != nil || clxc.RuntimeHookRunAlways {
+		clxc.executeRuntimeHook(err)
+	}
+	return err
+}
+
 var startCmd = cli.Command{
 	Name:   "start",
 	Usage:  "starts a container",
@@ -366,4 +406,82 @@ var deleteCmd = cli.Command{
 
 func doDelete(ctx *cli.Context) error {
 	return clxc.Delete(ctx.Bool("force"))
+}
+
+var execCmd = cli.Command{
+	Name:      "exec",
+	Usage:     "execute a new process in a running container",
+	ArgsUsage: "<containerID>",
+	Action:    doExec,
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:    "process",
+			Aliases: []string{"p"},
+			Usage:   "path to process json",
+			Value:   "",
+		},
+		&cli.StringFlag{
+			Name:  "pid-file",
+			Usage: "file to write the process id to",
+			Value: "",
+		},
+		&cli.BoolFlag{
+			Name:    "detach",
+			Aliases: []string{"d"},
+			Usage:   "detach from the executed process",
+		},
+	},
+}
+
+type execError int
+
+func (e execError) ExitStatus() int {
+	return int(e)
+}
+
+func (e execError) Error() string {
+	return fmt.Sprintf("exec cmd exited with status %d", int(e))
+}
+
+func doExec(ctx *cli.Context) error {
+	var args []string
+	if ctx.Args().Len() > 1 {
+		args = ctx.Args().Slice()[1:]
+	}
+
+	pidFile := ctx.String("pid-file")
+	detach := ctx.Bool("detach")
+
+	if detach && pidFile == "" {
+		log.Warn().Msg("detaching process but pid-file value is unset")
+	}
+
+	err := clxc.loadContainer()
+	if err != nil {
+		return err
+	}
+
+	procSpec, err := ReadSpecProcess(ctx.String("process"))
+	if err != nil {
+		return err
+	}
+
+	if detach {
+		pid, err := clxc.ExecDetached(args, procSpec)
+		if err != nil {
+			return err
+		}
+		if pidFile != "" {
+			return createPidFile(pidFile, pid)
+		}
+	} else {
+		status, err := clxc.Exec(args, procSpec)
+		if err != nil {
+			return err
+		}
+		if status != 0 {
+			return execError(status)
+		}
+	}
+	return nil
 }

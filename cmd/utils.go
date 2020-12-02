@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
 	"os"
@@ -87,4 +88,36 @@ func parseSignal(sig string) unix.Signal {
 		s = "SIG" + s
 	}
 	return unix.SignalNum(s)
+}
+
+func decodeFileJSON(obj interface{}, src string) error {
+	// #nosec
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	// #nosec
+	spec := &specs.Spec{}
+	err = json.NewDecoder(f).Decode(obj)
+	if err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
+func encodeFileJSON(dst string, obj interface{}, int flags, mode uint32) error {
+	f, err := os.OpenFile(dst, flags, mode)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create file %q", dst)
+	}
+	c.CreatedAt = time.Now()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	err = enc.Encode(c)
+	if err != nil {
+		f.Close()
+		return errors.Wrap(err, "failed to write JSON to file %q", dst)
+	}
+	return f.Close()
 }

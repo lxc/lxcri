@@ -86,9 +86,18 @@ type Runtime struct {
 
 // createContainer creates a new container.
 // It must only be called once during the lifecycle of a container.
-func (c *Runtime) createContainer(spec *specs.Spec) error {
+func (c *Runtime) createContainer() error {
 	if _, err := os.Stat(c.ConfigFilePath()); err == nil {
 		return errContainerExist
+	}
+
+	// load spec
+	if err := c.ReadSpec(); err != nil {
+	  return err
+	}
+	spec, err := 
+	if err != nil {
+		return err
 	}
 
 	if err := os.MkdirAll(c.RuntimePath(), 0700); err != nil {
@@ -121,8 +130,6 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 		return err
 	}
 
-	c.CreatedAt = time.Now()
-
 	if err := c.ContainerInfo.Create(); err != nil {
 		return err
 	}
@@ -138,7 +145,6 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 // loadContainer checks for the existence of the lxc config file.
 // It returns an error if the config file does not exist.
 func (c *Runtime) loadContainer() error {
-
 	if err := c.ContainerInfo.Load(); err != nil {
 		return err
 	}
@@ -213,38 +219,6 @@ func (c Runtime) release() error {
 	if c.LogFile != nil {
 		return c.LogFile.Close()
 	}
-	return nil
-}
-
-func supportsConfigItem(keys ...string) bool {
-	for _, key := range keys {
-		if !lxc.IsSupportedConfigItem(key) {
-			log.Info().Str("lxc.config", key).Msg("unsupported config item")
-			return false
-		}
-	}
-	return true
-}
-
-func (c *Runtime) getConfigItem(key string) string {
-	vals := c.Container.ConfigItem(key)
-	if len(vals) > 0 {
-		first := vals[0]
-		// some lxc config values are set to '(null)' if unset
-		// eg. lxc.cgroup.dir
-		if first != "(null)" {
-			return first
-		}
-	}
-	return ""
-}
-
-func (c *Runtime) setConfigItem(key, value string) error {
-	err := c.Container.SetConfigItem(key, value)
-	if err != nil {
-		return errors.Wrapf(err, "failed to set config item '%s=%s'", key, value)
-	}
-	log.Debug().Str("lxc.config", key).Str("val", value).Msg("set config item")
 	return nil
 }
 
@@ -662,17 +636,12 @@ func (c *Runtime) State() (*specs.State, error) {
 		return nil, errors.Wrapf(err, "failed to load pidfile")
 	}
 
-	spec, err := c.Spec()
-	if err != nil {
-		return nil, err
-	}
-
 	state := &specs.State{
 		Version:     specs.Version,
 		ID:          c.Container.Name(),
 		Bundle:      c.BundlePath,
 		Pid:         pid,
-		Annotations: spec.Annotations,
+		Annotations: c.Spec.Annotations,
 	}
 
 	s, err := c.getContainerState()
@@ -699,4 +668,108 @@ func (c *Runtime) Kill(signum unix.Signal) error {
 		return fmt.Errorf("can only kill container in state Created|Running but was %q", state)
 	}
 	return c.killContainer(signum)
+}
+
+func (c *Runtime) ExecDetached(args []string, proc *specs.Process) (pid int, err error) {
+	opts, err := attachOptions(c.Spec, proc)
+	if err != nil {
+		return err
+	}
+
+	log.Info().Strs("args", args).
+		Int("uid", opts.UID).Int("gid", opts.GID).
+		Ints("groups", opts.Groups).Msg("execute cmd")
+
+	return c.Container.RunCommandNoWait(args, opts)
+}
+
+func (c *Runtime) Exec(args []string, procSpec *specs.Process) (exitStatus int, err error) {
+	opts, err := attachOptions(c.Spec, proc)
+	if err != nil {
+		return err
+	}
+
+	return c.RunCommandStatus(args, attachOpts)
+}
+
+// -- LXC helper functions that should be static
+
+func (c *Runtime) getConfigItem(key string) string {
+	vals := c.Container.ConfigItem(key)
+	if len(vals) > 0 {
+		first := vals[0]
+		// some lxc config values are set to '(null)' if unset
+		// eg. lxc.cgroup.dir
+		if first != "(null)" {
+			return first
+		}
+	}
+	return ""
+}
+
+func (c *Runtime) setConfigItem(key, value string) error {
+	err := c.Container.SetConfigItem(key, value)
+	if err != nil {
+		return errors.Wrapf(err, "failed to set config item '%s=%s'", key, value)
+	}
+	log.Debug().Str("lxc.config", key).Str("val", value).Msg("set config item")
+	return nil
+}
+
+// -- LXC helper functions
+
+func supportsConfigItem(keys ...string) bool {
+	for _, key := range keys {
+		if !lxc.IsSupportedConfigItem(key) {
+			log.Info().Str("lxc.config", key).Msg("unsupported config item")
+			return false
+		}
+	}
+	return true
+}
+
+func attachOptions(spec *specs.Spec, procSpec *specs.Process) (*lxc.AttachOptions, error) {
+	opts := &lxc.AttachOptions{
+		StdinFd:  0,
+		StdoutFd: 1,
+		StderrFd: 2,
+	}
+
+	for _, ns := range spec.Linux.Namespaces {
+		n, supported := namespaceMap[ns.Type]
+		if !supported {
+			return nil, fmt.Errorf("can not attach to %s: unsupported namespace", ns.Type)
+		}
+		opts.Namespaces |= n.CloneFlag
+	}
+
+	if procSpec != nil {
+		opts.Cwd = procSpec.Cwd
+		// Use the environment defined by the process spec.
+		opts.ClearEnv = true
+		opts.Env = procSpec.Env
+
+		opts.UID = int(procSpec.User.UID)
+		opts.GID = int(procSpec.User.GID)
+		if n := len(procSpec.User.AdditionalGids); n > 0 {
+			opts.Groups = make([]int, n)
+			for i, g := range procSpec.User.AdditionalGids {
+				opts.Groups[i] = int(g)
+			}
+		}
+	}
+	return opts, nil
+}
+
+// --- OCI convenience helper functions
+
+func ReadSpec(specPath string) (spec *specs.Spec, err error) {
+	err = decodeFileJSON(spec, src)
+}
+
+func ReadSpecProcess(src string) (proc *specs.Process, err error) {
+	if src == "" {
+		return nil, nil
+	}
+	err = decodeFileJSON(proc, src)
 }
