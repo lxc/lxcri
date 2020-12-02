@@ -20,7 +20,7 @@ type ContainerInfo struct {
 	RuntimeRoot string
 
 	BundlePath    string
-	ConsoleSocket string `json;,omitempty`
+	ConsoleSocket string `json;",omitempty"`
 	// PidFile is the absolute path to the PID file of the container monitor process (crio-lxc-start)
 	PidFile          string
 	MonitorCgroupDir string
@@ -34,7 +34,11 @@ type ContainerInfo struct {
 	Apparmor      bool
 	CgroupDevices bool
 
-	*specs.Spec `json:"-"`
+	// values duplicated from bundle.json
+	// annotations are required for 'state'
+	Annotations map[string]string `json:",omitempty"`
+	// namespaces are required for 'exec'
+	Namespaces []specs.LinuxNamespace `json:",omitempty"`
 }
 
 // RuntimePath returns the absolute path witin the container root
@@ -62,11 +66,7 @@ func (c ContainerInfo) CreatePidFile(pid int) error {
 
 // RuntimeRoot and ContainerID must be set
 func (c *ContainerInfo) Load() error {
-	p := c.RuntimePath("container.json")
-	if err := decodeFileJSON(c, p); err != nil {
-		return err
-	}
-	return c.ReadSpec()
+	return decodeFileJSON(c, c.RuntimePath("container.json"))
 }
 
 func (c *ContainerInfo) Create() error {
@@ -79,7 +79,8 @@ func (c ContainerInfo) SpecPath() string {
 	return filepath.Join(c.BundlePath, "config.json")
 }
 
-func (c *ContainerInfo) ReadSpec() error {
-	c.Spec = &specs.Spec{}
-	return decodeFileJSON(c.Spec, c.SpecPath())
+func (c *ContainerInfo) ReadSpec() (*specs.Spec, error) {
+	spec := new(specs.Spec)
+	err := decodeFileJSON(spec, c.SpecPath())
+	return spec, err
 }

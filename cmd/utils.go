@@ -112,7 +112,7 @@ func encodeFileJSON(dst string, obj interface{}, flags int, mode uint32) error {
 		return fmt.Errorf("failed to open %s: %w", dst, err)
 	}
 	enc := json.NewEncoder(f)
-	enc.SetIndent("", "  ")
+	//enc.SetIndent("", "  ")
 	err = enc.Encode(obj)
 	if err != nil {
 		f.Close()
