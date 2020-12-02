@@ -630,3 +630,25 @@ func (c *Runtime) readFifo() error {
 	}
 	return nil
 }
+
+func (c *Runtime) Delete(force bool) error {
+	err := c.loadContainer()
+	if err == errContainerNotExist {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	log.Info().Bool("force", force).Msg("delete container")
+
+	if !c.isContainerStopped() {
+		if !force {
+			return fmt.Errorf("container is not not stopped (current state %s)", c.Container.State())
+		}
+		if err := c.killContainer(unix.SIGKILL); err != nil {
+			return errors.Wrap(err, "failed to kill container")
+		}
+	}
+	return c.destroy()
+}

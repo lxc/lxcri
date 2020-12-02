@@ -1,11 +1,7 @@
 package main
 
 import (
-	"fmt"
-
-	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
-	"golang.org/x/sys/unix"
 )
 
 var deleteCmd = cli.Command{
@@ -25,25 +21,5 @@ var deleteCmd = cli.Command{
 }
 
 func doDelete(ctx *cli.Context) error {
-
-	err := clxc.loadContainer()
-	if err == errContainerNotExist {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	force := ctx.Bool("force")
-	log.Info().Bool("force", force).Msg("delete container")
-
-	if !clxc.isContainerStopped() {
-		if !force {
-			return fmt.Errorf("container is not not stopped (current state %s)", clxc.Container.State())
-		}
-		if err := clxc.killContainer(unix.SIGKILL); err != nil {
-			return errors.Wrap(err, "failed to kill container")
-		}
-	}
-	return clxc.destroy()
+	return clxc.Delete(ctx.Bool("force"))
 }
