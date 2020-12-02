@@ -27,12 +27,12 @@ func doState(ctx *cli.Context) error {
 		return errors.Wrapf(err, "failed to load container")
 	}
 
-	pid, err := clxc.readPidFile()
+	pid, err := clxc.Pid()
 	if err != nil {
 		return errors.Wrapf(err, "failed to load pidfile")
 	}
 
-	spec, err := clxc.readSpec()
+	spec, err := clxc.Spec()
 	if err != nil {
 		return err
 	}

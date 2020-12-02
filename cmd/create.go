@@ -77,7 +77,7 @@ func doCreateInternal(ctx *cli.Context) error {
 		return fmt.Errorf("LXC runtime version >= 4.0.5 required, but was %s", lxc.Version())
 	}
 
-	spec, err := clxc.readSpec()
+	spec, err := clxc.Spec()
 	if err != nil {
 		return errors.Wrap(err, "couldn't load bundle spec")
 	}
@@ -92,7 +92,7 @@ func doCreateInternal(ctx *cli.Context) error {
 	}
 
 	// #nosec
-	startCmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.configFilePath())
+	startCmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.ConfigFilePath())
 	if err := runStartCmd(startCmd, spec); err != nil {
 		return errors.Wrap(err, "failed to start container process")
 	}
@@ -103,7 +103,7 @@ func doCreateInternal(ctx *cli.Context) error {
 		return err
 	}
 
-	return clxc.createPidFile(startCmd.Process.Pid)
+	return clxc.CreatePidFile(startCmd.Process.Pid)
 }
 
 func configureContainer(spec *specs.Spec) error {
@@ -369,7 +369,7 @@ func runStartCmd(cmd *exec.Cmd, spec *specs.Spec) error {
 		//cmd.SysProcAttr.Setsid = true
 	*/
 
-	cmd.Dir = clxc.runtimePath()
+	cmd.Dir = clxc.RuntimePath()
 
 	if clxc.ConsoleSocket != "" {
 		if err := clxc.saveConfig(); err != nil {
@@ -407,7 +407,7 @@ func writeDevices(spec *specs.Spec) error {
 	if spec.Linux.Devices == nil {
 		return nil
 	}
-	f, err := os.OpenFile(clxc.runtimePath("devices.txt"), os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	f, err := os.OpenFile(clxc.RuntimePath("devices.txt"), os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}
@@ -438,7 +438,7 @@ func writeMasked(spec *specs.Spec) error {
 	if spec.Linux.MaskedPaths == nil {
 		return nil
 	}
-	f, err := os.OpenFile(clxc.runtimePath("masked.txt"), os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	f, err := os.OpenFile(clxc.RuntimePath("masked.txt"), os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}

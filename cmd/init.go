@@ -17,7 +17,7 @@ const (
 )
 
 func syncFifoPath() string {
-	return clxc.runtimePath(initDir, "syncfifo")
+	return clxc.RuntimePath(initDir, "syncfifo")
 }
 
 func createFifo(dst string, uid int, gid int, mode uint32) error {
@@ -30,7 +30,7 @@ func createFifo(dst string, uid int, gid int, mode uint32) error {
 }
 
 func configureInit(spec *specs.Spec) error {
-	runtimeInitDir := clxc.runtimePath(initDir)
+	runtimeInitDir := clxc.RuntimePath(initDir)
 	rootfsInitDir := filepath.Join(spec.Root.Path, initDir)
 
 	err := os.MkdirAll(rootfsInitDir, 0)
