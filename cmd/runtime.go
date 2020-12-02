@@ -93,10 +93,6 @@ func (c *Runtime) createContainer() error {
 
 	// load spec
 	if err := c.ReadSpec(); err != nil {
-	  return err
-	}
-	spec, err := 
-	if err != nil {
 		return err
 	}
 
@@ -115,13 +111,13 @@ func (c *Runtime) createContainer() error {
 		return errors.Wrap(err, "failed to close empty config file")
 	}
 
-	if spec.Linux.CgroupsPath == "" {
+	if c.Spec.Linux.CgroupsPath == "" {
 		return fmt.Errorf("empty cgroups path in spec")
 	}
 	if c.SystemdCgroup {
-		c.CgroupDir = parseSystemdCgroupPath(spec.Linux.CgroupsPath)
+		c.CgroupDir = parseSystemdCgroupPath(c.Spec.Linux.CgroupsPath)
 	} else {
-		c.CgroupDir = spec.Linux.CgroupsPath
+		c.CgroupDir = c.Spec.Linux.CgroupsPath
 	}
 
 	c.MonitorCgroupDir = filepath.Join(c.MonitorCgroup, c.ContainerID+".scope")
@@ -159,7 +155,7 @@ func (c *Runtime) loadContainer() error {
 
 	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
 	if err != nil {
-		return errors.Wrap(err, "failed to load container")
+		return errors.Wrap(err, "failed to create new lxc container")
 	}
 	err = container.LoadConfigFile(c.ConfigFilePath())
 	if err != nil {
@@ -253,7 +249,6 @@ func (c *Runtime) configureLogging() error {
 	// NOTE Unfortunately it's not possible change the possition of the timestamp.
 	// The ttimestamp is appended to the to the log output because it is dynamically rendered
 	// see https://github.com/rs/zerolog/issues/109
-	//log = zerolog.New(c.LogFile).With().Timestamp().CallerWithSkipFrameCount(-1).
 	log = zerolog.New(c.LogFile).With().Timestamp().Caller().
 		Str("cmd", c.Command).Str("cid", c.ContainerID).Logger()
 
@@ -628,7 +623,7 @@ func (c *Runtime) Delete(force bool) error {
 func (c *Runtime) State() (*specs.State, error) {
 	err := c.loadContainer()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to load container")
+		return nil, err
 	}
 
 	pid, err := c.Pid()
@@ -657,7 +652,7 @@ func (c *Runtime) State() (*specs.State, error) {
 func (c *Runtime) Kill(signum unix.Signal) error {
 	err := c.loadContainer()
 	if err != nil {
-		return errors.Wrap(err, "failed to load container")
+		return err
 	}
 
 	state, err := c.getContainerState()
@@ -673,7 +668,7 @@ func (c *Runtime) Kill(signum unix.Signal) error {
 func (c *Runtime) ExecDetached(args []string, proc *specs.Process) (pid int, err error) {
 	opts, err := attachOptions(c.Spec, proc)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	log.Info().Strs("args", args).
@@ -683,13 +678,12 @@ func (c *Runtime) ExecDetached(args []string, proc *specs.Process) (pid int, err
 	return c.Container.RunCommandNoWait(args, opts)
 }
 
-func (c *Runtime) Exec(args []string, procSpec *specs.Process) (exitStatus int, err error) {
+func (c *Runtime) Exec(args []string, proc *specs.Process) (exitStatus int, err error) {
 	opts, err := attachOptions(c.Spec, proc)
 	if err != nil {
-		return err
+		return 0, err
 	}
-
-	return c.RunCommandStatus(args, attachOpts)
+	return c.Container.RunCommandStatus(args, opts)
 }
 
 // -- LXC helper functions that should be static
@@ -728,8 +722,8 @@ func supportsConfigItem(keys ...string) bool {
 	return true
 }
 
-func attachOptions(spec *specs.Spec, procSpec *specs.Process) (*lxc.AttachOptions, error) {
-	opts := &lxc.AttachOptions{
+func attachOptions(spec *specs.Spec, procSpec *specs.Process) (lxc.AttachOptions, error) {
+	opts := lxc.AttachOptions{
 		StdinFd:  0,
 		StdoutFd: 1,
 		StderrFd: 2,
@@ -738,7 +732,7 @@ func attachOptions(spec *specs.Spec, procSpec *specs.Process) (*lxc.AttachOption
 	for _, ns := range spec.Linux.Namespaces {
 		n, supported := namespaceMap[ns.Type]
 		if !supported {
-			return nil, fmt.Errorf("can not attach to %s: unsupported namespace", ns.Type)
+			return opts, fmt.Errorf("can not attach to %s: unsupported namespace", ns.Type)
 		}
 		opts.Namespaces |= n.CloneFlag
 	}
@@ -761,15 +755,16 @@ func attachOptions(spec *specs.Spec, procSpec *specs.Process) (*lxc.AttachOption
 	return opts, nil
 }
 
-// --- OCI convenience helper functions
-
-func ReadSpec(specPath string) (spec *specs.Spec, err error) {
+func ReadSpec(src string) (spec *specs.Spec, err error) {
 	err = decodeFileJSON(spec, src)
+	return
 }
 
-func ReadSpecProcess(src string) (proc *specs.Process, err error) {
+func ReadSpecProcess(src string) (*specs.Process, error) {
 	if src == "" {
 		return nil, nil
 	}
-	err = decodeFileJSON(proc, src)
+	proc := new(specs.Process)
+	err := decodeFileJSON(proc, src)
+	return proc, err
 }
