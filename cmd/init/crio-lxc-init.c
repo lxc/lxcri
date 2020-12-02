@@ -14,14 +14,16 @@ const char *syncfifo_path = "syncfifo";
 const char *cmdline_path = "cmdline";
 const char *environ_path = "environ";
 
-// A conformance test that will fail if SETENV_OVERWRITE is set to 0 
-// is "StatefulSet [k8s.io] Basic StatefulSet functionality [StatefulSetBasic] should have a working scale subresource [Conformance]"
-// In the spec two conflicting PATH environment variables are defined.
-// The container image 'httpd:2.4.38-alpine' only defines the second.
+// A conformance test that will fail if SETENV_OVERWRITE is set to 0
+// is "StatefulSet [k8s.io] Basic StatefulSet functionality [StatefulSetBasic]
+// should have a working scale subresource [Conformance]" In the spec two
+// conflicting PATH environment variables are defined. The container image
+// 'httpd:2.4.38-alpine' only defines the second.
 //
-// This value must be set to control the behaviour for conflicting environment variables:
-// SETENV_OVERWRITE=0  the variable that is defined first takes precedence
-// SETENV_OVERWRITE=1  the variable that is defined last overwrites all previous definitions 
+// This value must be set to control the behaviour for conflicting environment
+// variables: SETENV_OVERWRITE=0  the variable that is defined first takes
+// precedence SETENV_OVERWRITE=1  the variable that is defined last overwrites
+// all previous definitions
 #ifndef SETENV_OVERWRITE
 #define SETENV_OVERWRITE 1
 #endif
@@ -186,7 +188,7 @@ int main(int argc, char **argv)
 	}
 	cid = argv[1];
 
-  // clear environment
+	// clear environment
 	environ = NULL;
 
 	ret = load_environment(environ_path, buf, sizeof(buf));
@@ -204,7 +206,7 @@ int main(int argc, char **argv)
 				cmdline_path, strerror(errno));
 		exit(ret);
 	}
-	
+
 	ensure_HOME_exists();
 
 	if (writefifo(syncfifo_path, cid) == -1) {
@@ -216,9 +218,9 @@ int main(int argc, char **argv)
 		perror("failed to change working directory");
 		exit(221);
 	}
-	
-  if (execvp(args[0], args) == -1) {
+
+	if (execvp(args[0], args) == -1) {
 		fprintf(stderr, "failed to exec \"%s\": %s\n", args[0], strerror(errno));
-    exit(222);
-  }
+		exit(222);
+	}
 }
