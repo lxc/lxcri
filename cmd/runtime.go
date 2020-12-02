@@ -686,3 +686,20 @@ func (c *Runtime) State() (*specs.State, error) {
 	log.Info().Int("pid", state.Pid).Str("status", state.Status).Msg("container state")
 	return state, nil
 }
+
+func (c *Runtime) Kill(signum unix.Signal) error {
+	err := c.loadContainer()
+	if err != nil {
+		return errors.Wrap(err, "failed to load container")
+	}
+
+	state, err := c.getContainerState()
+	if err != nil {
+		return err
+	}
+	if !(state == StateCreated || state == StateRunning) {
+		return fmt.Errorf("can only kill container in state Created|Running but was %q", state)
+	}
+
+	return c.killContainer(signum)
+}

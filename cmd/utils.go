@@ -5,6 +5,8 @@ import (
 	"github.com/pkg/errors"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -68,4 +70,21 @@ func isFilesystem(dir string, fsName string) error {
 		return fmt.Errorf("%s is not on %q filesystem", dir, fsName)
 	}
 	return nil
+}
+
+func parseSignal(sig string) unix.Signal {
+	if sig == "" {
+		return unix.SIGTERM
+	}
+	// handle numerical signal value
+	if num, err := strconv.Atoi(sig); err == nil {
+		return unix.Signal(num)
+	}
+
+	// gracefully handle all string variants e.g 'sigkill|SIGKILL|kill|KILL'
+	s := strings.ToUpper(sig)
+	if !strings.HasPrefix(s, "SIG") {
+		s = "SIG" + s
+	}
+	return unix.SignalNum(s)
 }

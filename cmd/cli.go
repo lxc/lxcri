@@ -281,26 +281,6 @@ func loadEnvFile(envFile string) (map[string]string, error) {
 	return env, nil
 }
 
-var deleteCmd = cli.Command{
-	Name:   "delete",
-	Usage:  "deletes a container",
-	Action: doDelete,
-	ArgsUsage: `[containerID]
-
-<containerID> is the ID of the container to delete
-`,
-	Flags: []cli.Flag{
-		&cli.BoolFlag{
-			Name:  "force",
-			Usage: "force deletion",
-		},
-	},
-}
-
-func doDelete(ctx *cli.Context) error {
-	return clxc.Delete(ctx.Bool("force"))
-}
-
 var startCmd = cli.Command{
 	Name:   "start",
 	Usage:  "starts a container",
@@ -343,4 +323,44 @@ func doState(ctx *cli.Context) error {
 		return errors.Wrap(err, "failed to marshal json")
 	}
 	return err
+}
+
+var killCmd = cli.Command{
+	Name:   "kill",
+	Usage:  "sends a signal to a container",
+	Action: doKill,
+	ArgsUsage: `[containerID] [signal]
+
+<containerID> is the ID of the container to send a signal to
+[signal] signal name or numerical value (e.g [9|kill|KILL|sigkill|SIGKILL])
+`,
+}
+
+func doKill(ctx *cli.Context) error {
+	sig := ctx.Args().Get(1)
+	signum := parseSignal(sig)
+	if signum == 0 {
+		return fmt.Errorf("invalid signal param %q", sig)
+	}
+	return clxc.Kill(signum)
+}
+
+var deleteCmd = cli.Command{
+	Name:   "delete",
+	Usage:  "deletes a container",
+	Action: doDelete,
+	ArgsUsage: `[containerID]
+
+<containerID> is the ID of the container to delete
+`,
+	Flags: []cli.Flag{
+		&cli.BoolFlag{
+			Name:  "force",
+			Usage: "force deletion",
+		},
+	},
+}
+
+func doDelete(ctx *cli.Context) error {
+	return clxc.Delete(ctx.Bool("force"))
 }
