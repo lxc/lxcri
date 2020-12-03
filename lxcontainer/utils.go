@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 
 	"golang.org/x/sys/unix"
 )
 
 // createPidFile atomically creates a pid file for the given pid at the given path
-func createPidFile(path string, pid int) error {
+func CreatePidFile(path string, pid int) error {
 	tmpDir := filepath.Dir(path)
 	tmpName := filepath.Join(tmpDir, fmt.Sprintf(".%s", filepath.Base(path)))
 
@@ -69,23 +67,6 @@ func isFilesystem(dir string, fsName string) error {
 		return fmt.Errorf("%q is not on filesystem %s", dir, fsName)
 	}
 	return nil
-}
-
-func parseSignal(sig string) unix.Signal {
-	if sig == "" {
-		return unix.SIGTERM
-	}
-	// handle numerical signal value
-	if num, err := strconv.Atoi(sig); err == nil {
-		return unix.Signal(num)
-	}
-
-	// gracefully handle all string variants e.g 'sigkill|SIGKILL|kill|KILL'
-	s := strings.ToUpper(sig)
-	if !strings.HasPrefix(s, "SIG") {
-		s = "SIG" + s
-	}
-	return unix.SignalNum(s)
 }
 
 func decodeFileJSON(obj interface{}, src string) error {

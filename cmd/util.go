@@ -2,14 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"os"
+	"strconv"
 	"strings"
-	"time"
 
-	"github.com/lxc/crio-lxc/lxcontainer"
-	"github.com/urfave/cli/v2"
+	"golang.org/x/sys/unix"
 )
 
 func setEnv(key, val string, overwrite bool) error {
@@ -43,6 +41,23 @@ func loadEnvFile(envFile string) (map[string]string, error) {
 		env[key] = val
 	}
 	return env, nil
+}
+
+func parseSignal(sig string) unix.Signal {
+	if sig == "" {
+		return unix.SIGTERM
+	}
+	// handle numerical signal value
+	if num, err := strconv.Atoi(sig); err == nil {
+		return unix.Signal(num)
+	}
+
+	// gracefully handle all string variants e.g 'sigkill|SIGKILL|kill|KILL'
+	s := strings.ToUpper(sig)
+	if !strings.HasPrefix(s, "SIG") {
+		s = "SIG" + s
+	}
+	return unix.SignalNum(s)
 }
 
 /*

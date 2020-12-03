@@ -1,21 +1,22 @@
 package lxcontainer
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/creack/pty"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"golang.org/x/sys/unix"
-	lxc "gopkg.in/lxc/go-lxc.v2"
+	"gopkg.in/lxc/go-lxc.v2"
 )
 
-func doCreateInternal(clxc *Runtime) error {
+func (clxc *Runtime) Create(ctx context.Context) error {
 	err := canExecute(clxc.StartCommand, clxc.ContainerHook, clxc.InitCommand)
 	if err != nil {
 		return err
@@ -45,35 +46,64 @@ func doCreateInternal(clxc *Runtime) error {
 	if err := configureContainer(clxc, spec); err != nil {
 		return fmt.Errorf("failed to configure container: %w", err)
 	}
+	return clxc.runStartCmd(ctx, spec)
+}
 
+func (clxc *Runtime) runStartCmd(ctx context.Context, spec *specs.Spec) (err error) {
 	// #nosec
-	startCmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.ConfigFilePath())
-	if err := runStartCmd(clxc, startCmd, spec); err != nil {
-		return fmt.Errorf("failed to start container process: %w", err)
-	}
-	clxc.Log.Info().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
+	cmd := exec.CommandContext(ctx, clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.ConfigFilePath())
+	cmd.Env = []string{}
+	cmd.Dir = clxc.RuntimePath()
 
-	if err := clxc.waitCreated(time.Second * 10); err != nil {
-		clxc.Log.Error().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
+	if clxc.ConsoleSocket == "" && !spec.Process.Terminal {
+		// Inherit stdio from calling process (conmon).
+		// lxc.console.path must be set to 'none' or stdio of init process is replaced with a PTY by lxc
+		if err := clxc.setConfigItem("lxc.console.path", "none"); err != nil {
+			return err
+		}
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
+
+	if err := clxc.saveConfig(); err != nil {
 		return err
 	}
-	return createPidFile(clxc.PidFile, startCmd.Process.Pid)
+
+	if clxc.ConsoleSocket != "" {
+		err = runStartCmdConsole(ctx, cmd, clxc.ConsoleSocket)
+	} else {
+		err = cmd.Run()
+	}
+
+	if err != nil {
+		return fmt.Errorf("failed to execute container process: %w", err)
+	}
+
+	if err := clxc.waitCreated(ctx); err != nil {
+		return err
+	}
+
+	clxc.Log.Info().Int("pid", cmd.Process.Pid).Msg("container process is running")
+	return CreatePidFile(clxc.PidFile, cmd.Process.Pid)
 }
 
 func configureContainer(clxc *Runtime, spec *specs.Spec) error {
+
+	if spec.Hostname != "" {
+		if err := clxc.setConfigItem("lxc.uts.name", spec.Hostname); err != nil {
+			return err
+		}
+
+		uts := getNamespace(specs.UTSNamespace, spec.Linux.Namespaces)
+		if uts != nil && uts.Path != "" {
+			if err := setHostname(uts.Path, spec.Hostname); err != nil {
+				return fmt.Errorf("failed  to set hostname: %w", err)
+			}
+		}
+	}
+
 	if err := configureRootfs(clxc, spec); err != nil {
-		return err
-	}
-
-	// pass context information as environment variables to hook scripts
-	if err := clxc.setConfigItem("lxc.hook.version", "1"); err != nil {
-		return err
-	}
-	if err := clxc.setConfigItem("lxc.hook.mount", clxc.ContainerHook); err != nil {
-		return err
-	}
-
-	if err := configureInit(clxc, spec); err != nil {
 		return err
 	}
 
@@ -132,21 +162,24 @@ func configureContainer(clxc *Runtime, spec *specs.Spec) error {
 		clxc.Log.Warn().Msg("capabilities are disabled")
 	}
 
-	if spec.Hostname != "" {
-		if err := clxc.setConfigItem("lxc.uts.name", spec.Hostname); err != nil {
-			return err
-		}
-
-		uts := getNamespace(specs.UTSNamespace, spec.Linux.Namespaces)
-		if uts != nil && uts.Path != "" {
-			if err := setHostname(uts.Path, spec.Hostname); err != nil {
-				return fmt.Errorf("failed  to set hostname: %w", err)
-			}
-		}
-	}
-
 	if err := ensureDefaultDevices(clxc, spec); err != nil {
 		return fmt.Errorf("failed to add default devices: %w", err)
+	}
+
+	if err := writeDevices(clxc.RuntimePath("devices.txt"), spec); err != nil {
+		return fmt.Errorf("failed to create devices.txt: %w", err)
+	}
+
+	if err := writeMasked(clxc.RuntimePath("masked.txt"), spec); err != nil {
+		return fmt.Errorf("failed to create masked.txt: %w", err)
+	}
+
+	// pass context information as environment variables to hook scripts
+	if err := clxc.setConfigItem("lxc.hook.version", "1"); err != nil {
+		return err
+	}
+	if err := clxc.setConfigItem("lxc.hook.mount", clxc.ContainerHook); err != nil {
+		return err
 	}
 
 	if err := clxc.configureCgroupPath(); err != nil {
@@ -170,7 +203,8 @@ func configureContainer(clxc *Runtime, spec *specs.Spec) error {
 			return err
 		}
 	}
-	return nil
+
+	return configureInit(clxc, spec)
 }
 
 func configureRootfs(clxc *Runtime, spec *specs.Spec) error {
@@ -317,62 +351,6 @@ func setenv(env []string, key, val string, overwrite bool) []string {
 	return append(env, key+"="+val)
 }
 
-func runStartCmd(clxc *Runtime, cmd *exec.Cmd, spec *specs.Spec) error {
-	// Start container with a clean environment.
-	// LXC will export variables defined in the config lxc.environment.
-	// The environment variables defined by the container spec are exported within the init cmd CRIO_LXC_INIT_CMD.
-	// This is required because environment variables defined by containers contain newlines and other tokens
-	// that can not be handled properly within the lxc config file.
-	cmd.Env = []string{}
-	/*
-		if cmd.SysProcAttr == nil {
-			cmd.SysProcAttr = &unix.SysProcAttr{}
-		}
-
-		//cmd.SysProcAttr.Noctty = true
-		sig, err := getParentDeathSignal()
-		if err != nil {
-			return err
-		}
-		cmd.SysProcAttr.Pdeathsig = sig
-		//cmd.SysProcAttr.Foreground = false
-		//cmd.SysProcAttr.Setsid = true
-	*/
-
-	cmd.Dir = clxc.RuntimePath()
-
-	if clxc.ConsoleSocket != "" {
-		if err := clxc.saveConfig(); err != nil {
-			return err
-		}
-		return runStartCmdConsole(cmd, clxc.ConsoleSocket, clxc.ConsoleSocketTimeout)
-	}
-	if !spec.Process.Terminal {
-		// Inherit stdio from calling process (conmon).
-		// lxc.console.path must be set to 'none' or stdio of init process is replaced with a PTY by lxc
-		if err := clxc.setConfigItem("lxc.console.path", "none"); err != nil {
-			return fmt.Errorf("failed to disable PTY: %w", err)
-		}
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	}
-
-	if err := clxc.saveConfig(); err != nil {
-		return err
-	}
-
-	if err := writeDevices(clxc.RuntimePath("devices.txt"), spec); err != nil {
-		return fmt.Errorf("failed to create devices.txt: %w", err)
-	}
-
-	if err := writeMasked(clxc.RuntimePath("masked.txt"), spec); err != nil {
-		return fmt.Errorf("failed to create masked.txt: %w", err)
-	}
-
-	return cmd.Start()
-}
-
 func writeDevices(dst string, spec *specs.Spec) error {
 	if spec.Linux.Devices == nil {
 		return nil
@@ -382,11 +360,11 @@ func writeDevices(dst string, spec *specs.Spec) error {
 		return err
 	}
 	for _, d := range spec.Linux.Devices {
-		uid := spec.Process.User.UID // FIXME use 0 instead ?
+		uid := spec.Process.User.UID
 		if d.UID != nil {
 			uid = *d.UID
 		}
-		gid := spec.Process.User.GID // FIXME use 0 instead ?
+		gid := spec.Process.User.GID
 		if d.GID == nil {
 			gid = *d.GID
 		}
@@ -422,20 +400,24 @@ func writeMasked(dst string, spec *specs.Spec) error {
 	return f.Close()
 }
 
-func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string, timeout time.Duration) error {
-	addr, err := net.ResolveUnixAddr("unix", consoleSocket)
-	if err != nil {
-		return fmt.Errorf("failed to resolve console socket: %w", err)
-	}
-	conn, err := net.DialUnix("unix", nil, addr)
+func runStartCmdConsole(ctx context.Context, cmd *exec.Cmd, consoleSocket string) error {
+	dialer := net.Dialer{}
+	c, err := dialer.DialContext(ctx, "unix", consoleSocket)
 	if err != nil {
 		return fmt.Errorf("connecting to console socket failed: %w", err)
 	}
-	defer conn.Close()
-	deadline := time.Now().Add(timeout)
-	err = conn.SetDeadline(deadline)
-	if err != nil {
-		return fmt.Errorf("failed to set connection deadline: %w", err)
+	defer c.Close()
+
+	conn, ok := c.(*net.UnixConn)
+	if !ok {
+		return fmt.Errorf("expected a unix connection but was %T", conn)
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		err = conn.SetDeadline(deadline)
+		if err != nil {
+			return fmt.Errorf("failed to set connection deadline: %w", err)
+		}
 	}
 
 	sockFile, err := conn.File()

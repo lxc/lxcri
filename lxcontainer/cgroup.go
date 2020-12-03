@@ -2,6 +2,7 @@ package lxcontainer
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -10,8 +11,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sys/unix"
+
+	"github.com/opencontainers/runtime-spec/specs-go"
+)
+
+const (
+	allControllers = "+cpuset +cpu +io +memory +hugetlb +pids +rdma"
+	cgroupRoot     = "/sys/fs/cgroup"
 )
 
 // https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md
@@ -192,7 +199,7 @@ type cgroupInfo struct {
 }
 
 func (cg *cgroupInfo) loadProcs() error {
-	cgroupProcsPath := filepath.Join("/sys/fs/cgroup", cg.Name, "cgroup.procs")
+	cgroupProcsPath := filepath.Join(cgroupRoot, cg.Name, "cgroup.procs")
 	// #nosec
 	procsData, err := ioutil.ReadFile(cgroupProcsPath)
 	if err != nil {
@@ -225,7 +232,7 @@ func loadCgroup(cgName string) (*cgroupInfo, error) {
 }
 
 func killCgroupProcs(cgroupName string, sig unix.Signal) error {
-	dirName := filepath.Join("/sys/fs/cgroup", cgroupName)
+	dirName := filepath.Join(cgroupRoot, cgroupName)
 	// #nosec
 	dir, err := os.Open(dirName)
 	if os.IsNotExist(err) {
@@ -243,7 +250,6 @@ func killCgroupProcs(cgroupName string, sig unix.Signal) error {
 	}
 	for _, i := range entries {
 		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
-			fullPath := filepath.Join(dirName, i.Name())
 			cg, err := loadCgroup(filepath.Join(cgroupName, i.Name()))
 			if err != nil {
 				return fmt.Errorf("failed to load cgroup %s: %w", i.Name(), err)
@@ -262,8 +268,8 @@ func killCgroupProcs(cgroupName string, sig unix.Signal) error {
 // TODO maybe use polling instead
 // fds := []unix.PollFd{{Fd: int32(f.Fd()), Events: unix.POLLIN}}
 // n, err := unix.Poll(fds, timeout)
-func drainCgroup(cgroupName string, sig unix.Signal, timeout time.Duration) error {
-	p := filepath.Join("/sys/fs/cgroup", cgroupName, "cgroup.events")
+func drainCgroup(ctx context.Context, cgroupName string, sig unix.Signal) error {
+	p := filepath.Join(cgroupRoot, cgroupName, "cgroup.events")
 	f, err := os.OpenFile(p, os.O_RDONLY, 0)
 	if err != nil {
 		return err
@@ -271,34 +277,38 @@ func drainCgroup(cgroupName string, sig unix.Signal, timeout time.Duration) erro
 
 	var buf bytes.Buffer
 	buf.Grow(64)
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		buf.Reset()
-		_, err = f.Seek(0, os.SEEK_SET)
-		if err != nil {
-			return err
-		}
-		_, err := buf.ReadFrom(f)
-		if err != nil {
-			return err
-		}
 
-		for _, line := range strings.Split(buf.String(), "\n") {
-			if line == "populated 0" {
-				return nil
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("drain group aborted: %w", ctx.Err())
+		default:
+			buf.Reset()
+			_, err = f.Seek(0, os.SEEK_SET)
+			if err != nil {
+				return err
 			}
+			_, err := buf.ReadFrom(f)
+			if err != nil {
+				return err
+			}
+
+			for _, line := range strings.Split(buf.String(), "\n") {
+				if line == "populated 0" {
+					return nil
+				}
+			}
+			err = killCgroupProcs(cgroupName, sig)
+			if err != nil {
+				return fmt.Errorf("failed to kill cgroup procs: %w", err)
+			}
+			time.Sleep(time.Millisecond * 50)
 		}
-		err = killCgroupProcs(cgroupName, sig)
-		if err != nil {
-			return fmt.Errorf("failed to kill cgroup procs: %w", err)
-		}
-		time.Sleep(time.Millisecond * 50)
 	}
-	return fmt.Errorf("timeout")
 }
 
 func deleteCgroup(cgroupName string) error {
-	dirName := filepath.Join("/sys/fs/cgroup", cgroupName)
+	dirName := filepath.Join(cgroupRoot, cgroupName)
 	// #nosec
 	dir, err := os.Open(dirName)
 	if os.IsNotExist(err) {
@@ -324,4 +334,42 @@ func deleteCgroup(cgroupName string) error {
 		}
 	}
 	return unix.Rmdir(dirName)
+}
+
+func createCgroup(cg string, controllers string) error {
+	// #nosec
+	cgPath := filepath.Join(cgroupRoot, cg)
+	if err := os.MkdirAll(cgPath, 755); err != nil {
+		return err
+	}
+
+	base := cgroupRoot
+	for _, elem := range strings.Split(cg, "/") {
+		base = filepath.Join(base, elem)
+		c := filepath.Join(base, "cgroup.subtree_control")
+		err := ioutil.WriteFile(c, []byte(strings.TrimSpace(controllers)+"\n"), 0)
+		if err != nil {
+			return fmt.Errorf("failed to enable cgroup controllers: %w", err)
+		}
+	}
+	return nil
+}
+
+func getControllers(cg string) (string, error) {
+	// enable all available controllers in the scope
+	data, err := ioutil.ReadFile(filepath.Join(cgroupRoot, cg, "group.controllers"))
+	if err != nil {
+		return "", fmt.Errorf("failed to read cgroup.controllers: %w", err)
+	}
+	controllers := strings.Split(strings.TrimSpace(string(data)), " ")
+
+	var b strings.Builder
+	for i, c := range controllers {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteByte('+')
+		b.WriteString(c)
+	}
+	return b.String(), nil
 }

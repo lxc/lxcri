@@ -61,7 +61,7 @@ func (c ContainerInfo) Pid() (int, error) {
 }
 
 func (c ContainerInfo) CreatePidFile(pid int) error {
-	return createPidFile(c.PidFile, pid)
+	return CreatePidFile(c.PidFile, pid)
 }
 
 // RuntimeRoot and ContainerID must be set
