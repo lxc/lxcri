@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -26,7 +25,7 @@ func configureCgroup(clxc *Runtime, spec *specs.Spec) error {
 	}
 
 	if mem := spec.Linux.Resources.Memory; mem != nil {
-		log.Debug().Msg("TODO cgroup memory controller not implemented")
+		clxc.Log.Debug().Msg("TODO cgroup memory controller not implemented")
 	}
 
 	if cpu := spec.Linux.Resources.CPU; cpu != nil {
@@ -41,15 +40,15 @@ func configureCgroup(clxc *Runtime, spec *specs.Spec) error {
 		}
 	}
 	if blockio := spec.Linux.Resources.BlockIO; blockio != nil {
-		log.Debug().Msg("TODO cgroup blockio controller not implemented")
+		clxc.Log.Debug().Msg("TODO cgroup blockio controller not implemented")
 	}
 
 	if hugetlb := spec.Linux.Resources.HugepageLimits; hugetlb != nil {
 		// set Hugetlb limit (in bytes)
-		log.Debug().Msg("TODO cgroup hugetlb controller not implemented")
+		clxc.Log.Debug().Msg("TODO cgroup hugetlb controller not implemented")
 	}
 	if net := spec.Linux.Resources.Network; net != nil {
-		log.Debug().Msg("TODO cgroup network controller not implemented")
+		clxc.Log.Debug().Msg("TODO cgroup network controller not implemented")
 	}
 	return nil
 }
@@ -59,7 +58,7 @@ func configureDeviceController(clxc *Runtime, spec *specs.Spec) error {
 	devicesDeny := "lxc.cgroup2.devices.deny"
 
 	if !clxc.CgroupDevices {
-		log.Warn().Msg("cgroup device controller is disabled (access to all devices is granted)")
+		clxc.Log.Warn().Msg("cgroup device controller is disabled (access to all devices is granted)")
 		// allow read-write-mknod access to all char and block devices
 		if err := clxc.setConfigItem(devicesAllow, "b *:* rwm"); err != nil {
 			return err
@@ -126,7 +125,7 @@ func configureDeviceController(clxc *Runtime, spec *specs.Spec) error {
 func configureCPUController(clxc *Runtime, slinux *specs.LinuxCPU) error {
 	// CPU resource restriction configuration
 	// use strconv.FormatUint(n, 10) instead of fmt.Sprintf ?
-	log.Debug().Msg("TODO configure cgroup cpu controller")
+	clxc.Log.Debug().Msg("TODO configure cgroup cpu controller")
 	/*
 		if cpu.Shares != nil && *cpu.Shares > 0 {
 				if err := clxc.setConfigItem("lxc.cgroup2.cpu.shares", fmt.Sprintf("%d", *cpu.Shares)); err != nil {
@@ -197,7 +196,7 @@ func (cg *cgroupInfo) loadProcs() error {
 	// #nosec
 	procsData, err := ioutil.ReadFile(cgroupProcsPath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to read control group process list %s", cgroupProcsPath)
+		return fmt.Errorf("failed to read cgroup.procs: %w", err)
 	}
 	// cgroup.procs contains one PID per line and is newline separated.
 	// A trailing newline is always present.
@@ -210,7 +209,7 @@ func (cg *cgroupInfo) loadProcs() error {
 	for _, s := range pidStrings {
 		pid, err := strconv.Atoi(s)
 		if err != nil {
-			return errors.Wrapf(err, "failed to convert PID %q to number", s)
+			return fmt.Errorf("failed to convert PID %q to number: %w", s, err)
 		}
 		cg.Procs = append(cg.Procs, pid)
 	}
@@ -247,14 +246,12 @@ func killCgroupProcs(cgroupName string, sig unix.Signal) error {
 			fullPath := filepath.Join(dirName, i.Name())
 			cg, err := loadCgroup(filepath.Join(cgroupName, i.Name()))
 			if err != nil {
-				log.Warn().Err(err).Str("file", fullPath).Msg("failed to read cgroup proces")
-				return err
+				return fmt.Errorf("failed to load cgroup %s: %w", i.Name(), err)
 			}
 			for _, pid := range cg.Procs {
-				log.Warn().Int("pid", pid).Msg("killing left-over process")
 				err := unix.Kill(pid, sig)
 				if err != nil && err != unix.ESRCH {
-					return errors.Wrapf(err, "failed to kill %d", pid)
+					return fmt.Errorf("failed to kill %d: %w", pid, err)
 				}
 			}
 		}
@@ -293,9 +290,8 @@ func drainCgroup(cgroupName string, sig unix.Signal, timeout time.Duration) erro
 		}
 		err = killCgroupProcs(cgroupName, sig)
 		if err != nil {
-			return errors.Wrapf(err, "failed to kill cgroup procs %s", cgroupName)
+			return fmt.Errorf("failed to kill cgroup procs: %w", err)
 		}
-		log.Trace().Str("cgroup", cgroupName).Msg("waiting for cgroup to drain")
 		time.Sleep(time.Millisecond * 50)
 	}
 	return fmt.Errorf("timeout")
@@ -323,8 +319,7 @@ func deleteCgroup(cgroupName string) error {
 			p := filepath.Join(dirName, i.Name())
 			err := unix.Rmdir(p)
 			if err != nil && !os.IsNotExist(err) {
-				log.Warn().Err(err).Str("file", p).Msg("failed to remove cgroup dir")
-				return err
+				return fmt.Errorf("failed to dir %s: %w", p, err)
 			}
 		}
 	}

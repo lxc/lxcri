@@ -9,12 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/creack/pty"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"github.com/pkg/errors"
-
+	"golang.org/x/sys/unix"
 	lxc "gopkg.in/lxc/go-lxc.v2"
 )
 
@@ -42,22 +39,22 @@ func doCreateInternal(clxc *Runtime) error {
 
 	err = clxc.createContainer(spec)
 	if err != nil {
-		return errors.Wrap(err, "failed to create container")
+		return fmt.Errorf("failed to create container: %w", err)
 	}
 
 	if err := configureContainer(clxc, spec); err != nil {
-		return errors.Wrap(err, "failed to configure container")
+		return fmt.Errorf("failed to configure container: %w", err)
 	}
 
 	// #nosec
 	startCmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.ConfigFilePath())
 	if err := runStartCmd(clxc, startCmd, spec); err != nil {
-		return errors.Wrap(err, "failed to start container process")
+		return fmt.Errorf("failed to start container process: %w", err)
 	}
-	log.Info().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
+	clxc.Log.Info().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
 
 	if err := clxc.waitCreated(time.Second * 10); err != nil {
-		log.Error().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
+		clxc.Log.Error().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
 		return err
 	}
 	return createPidFile(clxc.PidFile, startCmd.Process.Pid)
@@ -89,7 +86,7 @@ func configureContainer(clxc *Runtime, spec *specs.Spec) error {
 	}
 
 	if err := configureNamespaces(clxc, spec.Linux.Namespaces); err != nil {
-		return errors.Wrap(err, "failed to configure namespaces")
+		return fmt.Errorf("failed to configure namespaces: %w", err)
 	}
 
 	if spec.Process.OOMScoreAdj != nil {
@@ -106,10 +103,10 @@ func configureContainer(clxc *Runtime, spec *specs.Spec) error {
 
 	if clxc.Apparmor {
 		if err := configureApparmor(clxc, spec); err != nil {
-			return errors.Wrap(err, "failed to configure apparmor")
+			return fmt.Errorf("failed to configure apparmor: %w", err)
 		}
 	} else {
-		log.Warn().Msg("apparmor is disabled (unconfined)")
+		clxc.Log.Warn().Msg("apparmor is disabled (unconfined)")
 	}
 
 	if clxc.Seccomp {
@@ -124,15 +121,15 @@ func configureContainer(clxc *Runtime, spec *specs.Spec) error {
 			}
 		}
 	} else {
-		log.Warn().Msg("seccomp is disabled")
+		clxc.Log.Warn().Msg("seccomp is disabled")
 	}
 
 	if clxc.Capabilities {
 		if err := configureCapabilities(clxc, spec); err != nil {
-			return errors.Wrap(err, "failed to configure capabilities")
+			return fmt.Errorf("failed to configure capabilities: %w", err)
 		}
 	} else {
-		log.Warn().Msg("capabilities are disabled")
+		clxc.Log.Warn().Msg("capabilities are disabled")
 	}
 
 	if spec.Hostname != "" {
@@ -143,21 +140,21 @@ func configureContainer(clxc *Runtime, spec *specs.Spec) error {
 		uts := getNamespace(specs.UTSNamespace, spec.Linux.Namespaces)
 		if uts != nil && uts.Path != "" {
 			if err := setHostname(uts.Path, spec.Hostname); err != nil {
-				return errors.Wrap(err, "set hostname")
+				return fmt.Errorf("failed  to set hostname: %w", err)
 			}
 		}
 	}
 
 	if err := ensureDefaultDevices(clxc, spec); err != nil {
-		return errors.Wrap(err, "failed to add default devices")
+		return fmt.Errorf("failed to add default devices: %w", err)
 	}
 
 	if err := clxc.configureCgroupPath(); err != nil {
-		return errors.Wrap(err, "failed to configure cgroups path")
+		return fmt.Errorf("failed to configure cgroups path: %w", err)
 	}
 
 	if err := configureCgroup(clxc, spec); err != nil {
-		return errors.Wrap(err, "failed to configure cgroups")
+		return fmt.Errorf("failed to configure cgroups: %w", err)
 	}
 
 	for key, val := range spec.Linux.Sysctl {
@@ -205,12 +202,12 @@ func configureRootfs(clxc *Runtime, spec *specs.Spec) error {
 func configureReadonlyPaths(clxc *Runtime, spec *specs.Spec) error {
 	rootmnt := clxc.getConfigItem("lxc.rootfs.mount")
 	if rootmnt == "" {
-		return errors.New("lxc.rootfs.mount unavailable")
+		return fmt.Errorf("lxc.rootfs.mount unavailable")
 	}
 	for _, p := range spec.Linux.ReadonlyPaths {
 		mnt := fmt.Sprintf("%s %s %s %s", filepath.Join(rootmnt, p), strings.TrimPrefix(p, "/"), "bind", "bind,ro,optional")
 		if err := clxc.setConfigItem("lxc.mount.entry", mnt); err != nil {
-			return errors.Wrap(err, "failed to make path readonly")
+			return fmt.Errorf("failed to make path readonly: %w", err)
 		}
 	}
 	return nil
@@ -354,7 +351,7 @@ func runStartCmd(clxc *Runtime, cmd *exec.Cmd, spec *specs.Spec) error {
 		// Inherit stdio from calling process (conmon).
 		// lxc.console.path must be set to 'none' or stdio of init process is replaced with a PTY by lxc
 		if err := clxc.setConfigItem("lxc.console.path", "none"); err != nil {
-			return errors.Wrap(err, "failed to disable PTY")
+			return fmt.Errorf("failed to disable PTY: %w", err)
 		}
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
@@ -366,11 +363,11 @@ func runStartCmd(clxc *Runtime, cmd *exec.Cmd, spec *specs.Spec) error {
 	}
 
 	if err := writeDevices(clxc.RuntimePath("devices.txt"), spec); err != nil {
-		return errors.Wrap(err, "failed to create devices.txt")
+		return fmt.Errorf("failed to create devices.txt: %w", err)
 	}
 
 	if err := writeMasked(clxc.RuntimePath("masked.txt"), spec); err != nil {
-		return errors.Wrap(err, "failed to create masked.txt file")
+		return fmt.Errorf("failed to create masked.txt: %w", err)
 	}
 
 	return cmd.Start()
@@ -428,26 +425,26 @@ func writeMasked(dst string, spec *specs.Spec) error {
 func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string, timeout time.Duration) error {
 	addr, err := net.ResolveUnixAddr("unix", consoleSocket)
 	if err != nil {
-		return errors.Wrap(err, "failed to resolve console socket")
+		return fmt.Errorf("failed to resolve console socket: %w", err)
 	}
 	conn, err := net.DialUnix("unix", nil, addr)
 	if err != nil {
-		return errors.Wrap(err, "connecting to console socket failed")
+		return fmt.Errorf("connecting to console socket failed: %w", err)
 	}
 	defer conn.Close()
 	deadline := time.Now().Add(timeout)
 	err = conn.SetDeadline(deadline)
 	if err != nil {
-		return errors.Wrap(err, "failed to set connection deadline")
+		return fmt.Errorf("failed to set connection deadline: %w", err)
 	}
 
 	sockFile, err := conn.File()
 	if err != nil {
-		return errors.Wrap(err, "failed to get file from unix connection")
+		return fmt.Errorf("failed to get file from unix connection: %w", err)
 	}
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
-		return errors.Wrap(err, "failed to start with pty")
+		return fmt.Errorf("failed to start with pty: %w", err)
 	}
 
 	// Send the pty file descriptor over the console socket (to the 'conmon' process)
@@ -458,7 +455,7 @@ func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string, timeout time.Durati
 	// Don't know whether 'terminal' is the right data to send, but conmon doesn't care anyway.
 	err = unix.Sendmsg(int(sockFile.Fd()), []byte("terminal"), oob, nil, 0)
 	if err != nil {
-		return errors.Wrap(err, "failed to send console fd")
+		return fmt.Errorf("failed to send console fd: %w", err)
 	}
 	return ptmx.Close()
 }
