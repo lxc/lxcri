@@ -29,11 +29,14 @@ var clxc struct {
 	DeleteTimeout time.Duration
 }
 
+var version string
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "crio-lxc"
 	app.Usage = "crio-lxc is a CRI compliant runtime wrapper for lxc"
-	app.Version = lxcontainer.Version()
+	app.Version = version
+
 	// Disable the default ExitErrHandler.
 	// It will call os.Exit if a command returns an error that implements
 	// the cli.ExitCoder interface. E.g an unwrapped error from os.Exec.
