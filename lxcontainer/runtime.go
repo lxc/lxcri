@@ -291,8 +291,10 @@ func (c *Runtime) waitCreated(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			c.Log.Debug().Msg("wait lxc.RUNNING")
-			if !c.Container.Wait(lxc.RUNNING, time.Second*2) {
+			state := c.Container.State()
+			if !(state == lxc.RUNNING) {
+				c.Log.Debug().Stringer("state", state).Msg("wait for state lxc.RUNNING")
+				time.Sleep(time.Millisecond * 100)
 				continue
 			}
 			initState, err := c.getContainerInitState()
@@ -307,33 +309,38 @@ func (c *Runtime) waitCreated(ctx context.Context) error {
 	}
 }
 
-func (c *Runtime) waitRunning(ctx context.Context) error {
+func (c *Runtime) waitStarted(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			initState, err := c.getContainerInitState()
-			if err != nil {
-				return err
+			state := c.Container.State()
+			if !(state == lxc.RUNNING) {
+				return fmt.Errorf("container state must be lxc.RUNNING (was %q)", state)
 			}
+			initState, _ := c.getContainerInitState()
 			if initState == StateRunning {
 				return nil
-			}
-			if initState != StateCreated {
-				return fmt.Errorf("unexpected init state %q", initState)
 			}
 			time.Sleep(time.Millisecond * 10)
 		}
 	}
 }
 
-// getContainerInitState returns the runtime state of the container.
-// It is used to determine whether the container state is 'created' or 'running'.
-// The init process environment contains #envStateCreated if the the container
-// is created, but not yet running/started.
-// This requires the proc filesystem to be mounted on the host.
-func (c *Runtime) getContainerState() (ContainerState, error) {
+func (c *Runtime) getContainerState() (state ContainerState, err error) {
+	for i := 0; i < 5; i++ {
+		state, err = c.getContainerStateOnce()
+		if err == nil {
+			return state, nil
+		}
+		c.Log.Trace().Err(err).Msg("transient container state - retry")
+		time.Sleep(time.Millisecond * 5)
+	}
+	return state, err
+}
+
+func (c *Runtime) getContainerStateOnce() (ContainerState, error) {
 	state := c.Container.State()
 	switch state {
 	case lxc.STOPPED:
@@ -348,16 +355,17 @@ func (c *Runtime) getContainerState() (ContainerState, error) {
 }
 
 // getContainerInitState returns the detailed state of the container init process.
-// If the init process is not running StateStopped is returned along with an error.
+// This should be called if the container is in state lxc.RUNNING.
+// On error the caller should call getContainerState() again
 func (c *Runtime) getContainerInitState() (ContainerState, error) {
 	initPid := c.Container.InitPid()
 	if initPid < 1 {
-		return StateStopped, fmt.Errorf("init cmd is not running")
+		return StateStopped, fmt.Errorf("failed to retrieve init pid")
 	}
-	commPath := fmt.Sprintf("/proc/%d/cmdline", initPid)
-	cmdline, err := ioutil.ReadFile(commPath)
+	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", initPid)
+	cmdline, err := ioutil.ReadFile(cmdlinePath)
 	if err != nil {
-		// can not determine state, caller may try again
+		// either init process died or proc filesystem was unmounted (very unlikely)
 		return StateStopped, err
 	}
 
@@ -488,7 +496,7 @@ func (c *Runtime) Start(ctx context.Context) error {
 			return errorf("failed to read from syncfifo: %w", err)
 		}
 	}
-	if err := c.waitRunning(ctx); err != nil {
+	if err := c.waitStarted(ctx); err != nil {
 		return errorf("container is not running: %w", err)
 	}
 	return nil
@@ -575,12 +583,9 @@ func (c *Runtime) Kill(ctx context.Context, signum unix.Signal) error {
 	if err != nil {
 		return errorf("failed to load container: %w", err)
 	}
-	state, err := c.getContainerState()
-	if err != nil {
-		return errorf("failed to get container state: %w", err)
-	}
-	if !(state == StateCreated || state == StateRunning) {
-		return errorf("can only kill container in state Created|Running but was %q", state)
+	state := c.Container.State()
+	if state != lxc.RUNNING {
+		return errorf("can only kill container in state lxc.RUNNING but was %q", state)
 	}
 	if err := c.killContainer(ctx, signum); err != nil {
 		return errorf("failed to kill container: %w", err)
