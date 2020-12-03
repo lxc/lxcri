@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -44,12 +43,6 @@ const (
 
 var errContainerNotExist = fmt.Errorf("container does not exist")
 var errContainerExist = fmt.Errorf("container already exists")
-
-var version string
-
-func Version() string {
-	return fmt.Sprintf("%s (%s) (lxc:%s)", version, runtime.Version(), lxc.Version())
-}
 
 type Runtime struct {
 	Container *lxc.Container
