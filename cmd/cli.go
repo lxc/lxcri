@@ -166,6 +166,18 @@ func main() {
 		}
 	}
 
+	app.CommandNotFound = func(ctx *cli.Context, cmd string) {
+		fmt.Fprintf(os.Stderr, "undefined subcommand %q cmdline%s\n", cmd, os.Args)
+	}
+	// Disable the default error messages for cmdline errors.
+	// By default the app/cmd help is printed to stdout, which produces garbage in cri-o log output.
+	// Instead the cmdline is printed to stderr to identify cmdline interface errors.
+	errUsage := func(context *cli.Context, err error, isSubcommand bool) error {
+		fmt.Fprintf(os.Stderr, "usage error %s: %s\n", err, os.Args)
+		return err
+	}
+	app.OnUsageError = errUsage
+
 	app.Before = func(ctx *cli.Context) error {
 		clxc.Command = ctx.Args().Get(0)
 		return nil
@@ -177,49 +189,35 @@ func main() {
 			return fmt.Errorf("missing container ID")
 		}
 		clxc.ContainerID = containerID
-
 		return clxc.ConfigureLogging(ctx.Command.Name)
 	}
-
-	// Disable the default error messages for cmdline errors.
-	// By default the app/cmd help is printed to stdout, which produces garbage in cri-o log output.
-	// Instead the cmdline is printed to stderr to identify cmdline interface errors.
-	errUsage := func(context *cli.Context, err error, isSubcommand bool) error {
-		fmt.Fprintf(os.Stderr, "usage error %s: %s\n", err, os.Args)
-		return err
-	}
-	app.OnUsageError = errUsage
 
 	for _, cmd := range app.Commands {
 		cmd.Before = setupCmd
 		cmd.OnUsageError = errUsage
 	}
 
-	app.CommandNotFound = func(ctx *cli.Context, cmd string) {
-		fmt.Fprintf(os.Stderr, "undefined subcommand %q cmdline%s\n", cmd, os.Args)
-	}
-
 	err = app.Run(os.Args)
-
-	if err := clxc.Release(); err != nil {
-		clxc.Log.Error().Err(err).Msg("failed to release container")
-	}
 
 	cmdDuration := time.Since(startTime)
 
-	if err == nil {
-		clxc.Log.Debug().Dur("duration", cmdDuration).Msg("cmd completed")
-		return
+	if err != nil {
+		clxc.Log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
+		clxc.Release()
+		// exit with exit status of executed command
+		if err, yes := err.(execError); yes {
+			os.Exit(err.ExitStatus())
+		}
+		// write diagnostics message to stderr for crio/kubelet
+		println(err.Error())
+		os.Exit(1)
 	}
 
-	clxc.Log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
-	// exit with exit status of executed command
-	if err, yes := err.(execError); yes {
-		os.Exit(err.ExitStatus())
+	clxc.Log.Debug().Dur("duration", cmdDuration).Msg("cmd completed")
+	if clxc.Release(); err != nil {
+		println(err.Error())
+		os.Exit(1)
 	}
-	// write diagnostics message to stderr for crio/kubelet
-	println(err.Error())
-	os.Exit(1)
 }
 
 var createCmd = cli.Command{
