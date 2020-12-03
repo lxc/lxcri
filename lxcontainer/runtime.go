@@ -41,8 +41,8 @@ const (
 	StateStopped ContainerState = "stopped"
 )
 
-var errContainerNotExist = fmt.Errorf("container does not exist")
-var errContainerExist = fmt.Errorf("container already exists")
+var ErrNotExist = fmt.Errorf("container does not exist")
+var ErrExist = fmt.Errorf("container already exists")
 
 type Runtime struct {
 	Container *lxc.Container
@@ -66,8 +66,8 @@ type Runtime struct {
 // createContainer creates a new container.
 // It must only be called once during the lifecycle of a container.
 func (c *Runtime) createContainer(spec *specs.Spec) error {
-	if _, err := os.Stat(c.ConfigFilePath()); err == nil {
-		return errContainerExist
+	if c.runtimePathExists() {
+		return ErrExist
 	}
 
 	if err := os.MkdirAll(c.RuntimePath(), 0700); err != nil {
@@ -118,6 +118,10 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 // loadContainer checks for the existence of the lxc config file.
 // It returns an error if the config file does not exist.
 func (c *Runtime) loadContainer() error {
+	if !c.runtimePathExists() {
+		return ErrNotExist
+	}
+
 	if err := c.ContainerInfo.Load(); err != nil {
 		return fmt.Errorf("failed to load container config: %w", err)
 	}
@@ -287,16 +291,18 @@ func (c *Runtime) waitCreated(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			if !c.Container.Wait(lxc.RUNNING, time.Second) {
+			c.Log.Debug().Msg("wait lxc.RUNNING")
+			if !c.Container.Wait(lxc.RUNNING, time.Second*2) {
 				continue
 			}
 			initState, err := c.getContainerInitState()
 			if err != nil {
 				return err
 			}
-			if initState != StateCreated {
-				return fmt.Errorf("unexpected init state %q", initState)
+			if initState == StateCreated {
+				return nil
 			}
+			return fmt.Errorf("unexpected init state %q", initState)
 		}
 	}
 }
@@ -515,9 +521,6 @@ func (c *Runtime) readFifo() error {
 
 func (c *Runtime) Delete(ctx context.Context, force bool) error {
 	err := c.loadContainer()
-	if err == errContainerNotExist {
-		return nil
-	}
 	if err != nil {
 		return errorf("failed to load container: %w", err)
 	}
@@ -616,14 +619,12 @@ func (c *Runtime) Exec(args []string, proc *specs.Process) (exitStatus int, err 
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}
-	exitStatus, err = c.Container.RunCommandNoWait(args, opts)
+	exitStatus, err = c.Container.RunCommandStatus(args, opts)
 	if err != nil {
 		return exitStatus, errorf("failed to run exec cmd: %w", err)
 	}
 	return exitStatus, nil
 }
-
-// -- LXC helper functions that should be static
 
 func (c *Runtime) getConfigItem(key string) string {
 	vals := c.Container.ConfigItem(key)

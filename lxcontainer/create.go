@@ -17,6 +17,10 @@ import (
 )
 
 func (clxc *Runtime) Create(ctx context.Context) error {
+	if clxc.runtimePathExists() {
+		return ErrExist
+	}
+
 	err := canExecute(clxc.StartCommand, clxc.ContainerHook, clxc.InitCommand)
 	if err != nil {
 		return errorf("access check failed: %w", err)
@@ -55,7 +59,7 @@ func (clxc *Runtime) Create(ctx context.Context) error {
 
 func (clxc *Runtime) runStartCmd(ctx context.Context, spec *specs.Spec) (err error) {
 	// #nosec
-	cmd := exec.CommandContext(ctx, clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.ConfigFilePath())
+	cmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.ConfigFilePath())
 	cmd.Env = []string{}
 	cmd.Dir = clxc.RuntimePath()
 
@@ -74,16 +78,18 @@ func (clxc *Runtime) runStartCmd(ctx context.Context, spec *specs.Spec) (err err
 		return err
 	}
 
+	clxc.Log.Debug().Msg("starting lxc monitor process")
 	if clxc.ConsoleSocket != "" {
 		err = runStartCmdConsole(ctx, cmd, clxc.ConsoleSocket)
 	} else {
-		err = cmd.Run()
+		err = cmd.Start()
 	}
 
 	if err != nil {
 		return err
 	}
 
+	clxc.Log.Debug().Msg("waiting for init")
 	if err := clxc.waitCreated(ctx); err != nil {
 		return err
 	}
@@ -108,6 +114,10 @@ func configureContainer(clxc *Runtime, spec *specs.Spec) error {
 	}
 
 	if err := configureRootfs(clxc, spec); err != nil {
+		return err
+	}
+
+	if err := configureInit(clxc, spec); err != nil {
 		return err
 	}
 
@@ -207,8 +217,7 @@ func configureContainer(clxc *Runtime, spec *specs.Spec) error {
 			return err
 		}
 	}
-
-	return configureInit(clxc, spec)
+	return nil
 }
 
 func configureRootfs(clxc *Runtime, spec *specs.Spec) error {
