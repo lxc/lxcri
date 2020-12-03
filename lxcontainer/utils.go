@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 
 	"golang.org/x/sys/unix"
 )
@@ -109,4 +111,12 @@ func encodeFileJSON(dst string, obj interface{}, flags int, mode uint32) error {
 func nullTerminatedString(data []byte) string {
 	i := bytes.Index(data, []byte{0})
 	return string(data[:i])
+}
+
+func errorf(sfmt string, args ...interface{}) error {
+	_, file, line, ok := runtime.Caller(1)
+	if ok {
+		return fmt.Errorf(filepath.Base(file)+":"+strconv.Itoa(line)+" "+sfmt, args...)
+	}
+	return fmt.Errorf(sfmt, args...)
 }

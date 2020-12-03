@@ -19,34 +19,38 @@ import (
 func (clxc *Runtime) Create(ctx context.Context) error {
 	err := canExecute(clxc.StartCommand, clxc.ContainerHook, clxc.InitCommand)
 	if err != nil {
-		return err
+		return errorf("access check failed: %w", err)
 	}
 
 	if err := isFilesystem("/proc", "proc"); err != nil {
-		return err
+		return errorf("procfs not mounted on /proc: %w", err)
 	}
-	if err := isFilesystem("/sys/fs/cgroup", "cgroup2"); err != nil {
-		return err
+	if err := isFilesystem(cgroupRoot, "cgroup2"); err != nil {
+		return errorf("ccgroup2 not mounted on %s: %w", cgroupRoot, err)
 	}
 	// TODO test this version
 	if !lxc.VersionAtLeast(4, 0, 5) {
-		return fmt.Errorf("LXC runtime version >= 4.0.5 required, but was %s", lxc.Version())
+		return errorf("liblxc runtime version is %s, but >= 4.0.5 is required", lxc.Version())
 	}
 
 	spec, err := clxc.ReadSpec()
 	if err != nil {
-		return err
+		return errorf("failed to load container spec from bundle: %w", err)
 	}
 
 	err = clxc.createContainer(spec)
 	if err != nil {
-		return fmt.Errorf("failed to create container: %w", err)
+		return errorf("failed to create container: %w", err)
 	}
 
 	if err := configureContainer(clxc, spec); err != nil {
-		return fmt.Errorf("failed to configure container: %w", err)
+		return errorf("failed to configure container: %w", err)
 	}
-	return clxc.runStartCmd(ctx, spec)
+
+	if err := clxc.runStartCmd(ctx, spec); err != nil {
+		return errorf("failed to run container process: %w", err)
+	}
+	return nil
 }
 
 func (clxc *Runtime) runStartCmd(ctx context.Context, spec *specs.Spec) (err error) {
@@ -77,7 +81,7 @@ func (clxc *Runtime) runStartCmd(ctx context.Context, spec *specs.Spec) (err err
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to execute container process: %w", err)
+		return err
 	}
 
 	if err := clxc.waitCreated(ctx); err != nil {

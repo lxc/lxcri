@@ -119,23 +119,17 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 // It returns an error if the config file does not exist.
 func (c *Runtime) loadContainer() error {
 	if err := c.ContainerInfo.Load(); err != nil {
-		return err
+		return fmt.Errorf("failed to load container config: %w", err)
 	}
 
-	_, err := os.Stat(c.ConfigFilePath())
-	if os.IsNotExist(err) {
-		return errContainerNotExist
+	if _, err := os.Stat(c.ConfigFilePath()); err != nil {
+		return fmt.Errorf("failed to load lxc config file: %w", err)
 	}
-	if err != nil {
-		return fmt.Errorf("failed to access config file: %w", err)
-	}
-
 	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
 	if err != nil {
 		return fmt.Errorf("failed to create new lxc container: %w", err)
 	}
 	c.Container = container
-
 	err = container.LoadConfigFile(c.ConfigFilePath())
 	if err != nil {
 		return fmt.Errorf("failed to load config file: %w", err)
@@ -464,12 +458,12 @@ func (c *Runtime) Start(ctx context.Context) error {
 
 	err := c.loadContainer()
 	if err != nil {
-		return err
+		return errorf("failed to load container: %w", err)
 	}
 
 	state, err := c.getContainerState()
 	if err != nil {
-		return err
+		return errorf("failed to get container state: %w", err)
 	}
 	if state != StateCreated {
 		return fmt.Errorf("invalid container state. expected %q, but was %q", StateCreated, state)
@@ -482,13 +476,16 @@ func (c *Runtime) Start(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		return fmt.Errorf("syncfifo timeout: %w", ctx.Err())
+		return errorf("syncfifo timeout: %w", ctx.Err())
 	case err := <-done:
 		if err != nil {
-			return err
+			return errorf("failed to read from syncfifo: %w", err)
 		}
 	}
-	return c.waitRunning(ctx)
+	if err := c.waitRunning(ctx); err != nil {
+		return errorf("container is not running: %w", err)
+	}
+	return nil
 }
 
 func (c *Runtime) syncFifoPath() string {
@@ -522,31 +519,34 @@ func (c *Runtime) Delete(ctx context.Context, force bool) error {
 		return nil
 	}
 	if err != nil {
-		return err
+		return errorf("failed to load container: %w", err)
 	}
 
 	c.Log.Info().Bool("force", force).Msg("delete container")
 
 	if !c.isContainerStopped() {
 		if !force {
-			return fmt.Errorf("container is not not stopped (current state %s)", c.Container.State())
+			return errorf("container is not not stopped (current state %s)", c.Container.State())
 		}
 		if err := c.killContainer(ctx, unix.SIGKILL); err != nil {
-			return fmt.Errorf("failed to kill container: %w", err)
+			return errorf("failed to kill container: %w", err)
 		}
 	}
-	return c.destroy()
+	if err := c.destroy(); err != nil {
+		return errorf("failed to destroy container: %w", err)
+	}
+	return nil
 }
 
 func (c *Runtime) State() (*specs.State, error) {
 	err := c.loadContainer()
 	if err != nil {
-		return nil, err
+		return nil, errorf("failed to load container: %w", err)
 	}
 
 	pid, err := c.Pid()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load pidfile: %w", err)
+		return nil, errorf("failed to load pidfile: %w", err)
 	}
 
 	state := &specs.State{
@@ -560,7 +560,7 @@ func (c *Runtime) State() (*specs.State, error) {
 	s, err := c.getContainerState()
 	state.Status = string(s)
 	if err != nil {
-		return nil, err
+		return nil, errorf("failed to get container state: %w", err)
 	}
 
 	c.Log.Info().Int("pid", state.Pid).Str("status", state.Status).Msg("container state")
@@ -570,47 +570,57 @@ func (c *Runtime) State() (*specs.State, error) {
 func (c *Runtime) Kill(ctx context.Context, signum unix.Signal) error {
 	err := c.loadContainer()
 	if err != nil {
-		return err
+		return errorf("failed to load container: %w", err)
 	}
-
 	state, err := c.getContainerState()
 	if err != nil {
-		return err
+		return errorf("failed to get container state: %w", err)
 	}
 	if !(state == StateCreated || state == StateRunning) {
-		return fmt.Errorf("can only kill container in state Created|Running but was %q", state)
+		return errorf("can only kill container in state Created|Running but was %q", state)
 	}
-	return c.killContainer(ctx, signum)
+	if err := c.killContainer(ctx, signum); err != nil {
+		return errorf("failed to kill container: %w", err)
+	}
+	return nil
 }
 
 func (c *Runtime) ExecDetached(args []string, proc *specs.Process) (pid int, err error) {
 	err = c.loadContainer()
 	if err != nil {
-		return 0, err
+		return 0, errorf("failed to load container: %w", err)
 	}
 
 	opts, err := attachOptions(proc, c.Namespaces)
 	if err != nil {
-		return 0, err
+		return 0, errorf("failed to create attach options: %w", err)
 	}
 
 	c.Log.Info().Strs("args", args).
 		Int("uid", opts.UID).Int("gid", opts.GID).
 		Ints("groups", opts.Groups).Msg("execute cmd")
 
-	return c.Container.RunCommandNoWait(args, opts)
+	pid, err = c.Container.RunCommandNoWait(args, opts)
+	if err != nil {
+		return pid, errorf("failed to run exec cmd detached: %w", err)
+	}
+	return pid, nil
 }
 
 func (c *Runtime) Exec(args []string, proc *specs.Process) (exitStatus int, err error) {
 	err = c.loadContainer()
 	if err != nil {
-		return 0, err
+		return 0, errorf("failed to load container: %w", err)
 	}
 	opts, err := attachOptions(proc, c.Namespaces)
 	if err != nil {
-		return 0, err
+		return 0, errorf("failed to create attach options: %w", err)
 	}
-	return c.Container.RunCommandStatus(args, opts)
+	exitStatus, err = c.Container.RunCommandNoWait(args, opts)
+	if err != nil {
+		return exitStatus, errorf("failed to run exec cmd: %w", err)
+	}
+	return exitStatus, nil
 }
 
 // -- LXC helper functions that should be static
