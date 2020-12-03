@@ -82,7 +82,7 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 		return err
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("failed to close empty config file: %w", err)
+		return fmt.Errorf("failed to close empty config tmpfile: %w", err)
 	}
 
 	if spec.Linux.CgroupsPath == "" {
@@ -448,9 +448,11 @@ func (c *Runtime) destroy() error {
 		}
 	}
 
-	err := deleteCgroup(c.CgroupDir)
-	if err != nil && !os.IsNotExist(err) {
-		c.Log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to remove cgroup dir")
+	if c.ContainerInfo.CgroupDir != "" {
+		err := deleteCgroup(c.CgroupDir)
+		if err != nil && !os.IsNotExist(err) {
+			c.Log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to remove cgroup dir")
+		}
 	}
 
 	return os.RemoveAll(c.RuntimePath())
@@ -543,13 +545,12 @@ func (c *Runtime) readFifo() error {
 
 func (c *Runtime) Delete(ctx context.Context, force bool) error {
 	err := c.loadContainer()
-	if err != nil {
-		return errorf("failed to load container: %w", err)
+	if err == ErrNotExist {
+		c.Log.Info().Msg("container does not exist")
+		return nil
 	}
-
 	c.Log.Info().Bool("force", force).Msg("delete container")
-
-	if !c.isContainerStopped() {
+	if err == nil && !c.isContainerStopped() {
 		if !force {
 			return errorf("container is not not stopped (current state %s)", c.Container.State())
 		}
