@@ -99,7 +99,7 @@ func createList(dst string, entries []string, uid int, gid int, mode uint32) err
 	// #nosec
 	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
-		return fmt.Errorf("failed to create init list %s: %w", dst, err)
+		return err
 	}
 
 	for _, arg := range entries {

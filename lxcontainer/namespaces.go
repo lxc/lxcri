@@ -100,14 +100,14 @@ func setHostname(nsPath string, hostname string) error {
 
 	f, err := os.Open(nsPath)
 	if err != nil {
-		return fmt.Errorf("failed to open uts namespace %s: %w", nsPath, err)
+		return fmt.Errorf("failed to open container uts namespace: %w", nsPath, err)
 	}
 	// #nosec
 	defer f.Close()
 
 	self, err := os.Open("/proc/self/ns/uts")
 	if err != nil {
-		return fmt.Errorf("failed to open /proc/self/ns/uts: %w", err)
+		return fmt.Errorf("failed to open uts namespace : %w", err)
 	}
 	// #nosec
 	defer func() {
