@@ -68,7 +68,7 @@ func createMountDestination(spec *specs.Spec, ms *specs.Mount) error {
 	info, err := os.Stat(ms.Source)
 	if err != nil && ms.Type == "bind" {
 		// check if mountpoint is optional ?
-		return fmt.Errorf("failed to access source %s for bind mount: %w", ms.Source, err)
+		return fmt.Errorf("failed to access source for bind mount: %w", err)
 	}
 
 	if err == nil && !info.IsDir() {

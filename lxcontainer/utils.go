@@ -73,7 +73,7 @@ func decodeFileJSON(obj interface{}, src string) error {
 	// #nosec
 	f, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("failed to open %s: %w", src, err)
+		return err
 	}
 	// #nosec
 	err = json.NewDecoder(f).Decode(obj)
@@ -91,7 +91,7 @@ func decodeFileJSON(obj interface{}, src string) error {
 func encodeFileJSON(dst string, obj interface{}, flags int, mode uint32) error {
 	f, err := os.OpenFile(dst, flags, os.FileMode(mode))
 	if err != nil {
-		return fmt.Errorf("failed to open %s: %w", dst, err)
+		return err
 	}
 	enc := json.NewEncoder(f)
 	//enc.SetIndent("", "  ")

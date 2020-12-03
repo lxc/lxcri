@@ -205,7 +205,7 @@ func (c *Runtime) ConfigureLogging(cmdName string) error {
 
 	c.LogFile, err = os.OpenFile(c.LogFilePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
-		return fmt.Errorf("failed to open log file %s: %w", c.LogFilePath, err)
+		return err
 	}
 
 	zerolog.LevelFieldName = "l"
@@ -499,7 +499,7 @@ func (c *Runtime) readFifo() error {
 	// #nosec
 	f, err := os.OpenFile(c.syncFifoPath(), os.O_RDONLY, 0)
 	if err != nil {
-		return fmt.Errorf("failed to open sync fifo: %w", err)
+		return err
 	}
 	// can not set deadline on fifo
 	// #nosec
