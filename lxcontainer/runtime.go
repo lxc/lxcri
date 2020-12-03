@@ -323,7 +323,23 @@ func (c *Runtime) waitStarted(ctx context.Context) error {
 			if initState == StateRunning {
 				return nil
 			}
+			// use a short interval here because we wait for the
+			// the time it may take for crio-lxc-init to exec the container process
 			time.Sleep(time.Millisecond * 10)
+		}
+	}
+}
+
+func (c *Runtime) wait(ctx context.Context, state lxc.State) bool {
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+			if c.Container.State() == state {
+				return true
+			}
+			time.Sleep(time.Millisecond * 100)
 		}
 	}
 }
@@ -379,6 +395,7 @@ func (c *Runtime) getContainerInitState() (ContainerState, error) {
 }
 
 func (c *Runtime) killContainer(ctx context.Context, signum unix.Signal) error {
+	c.Log.Info().Int("signum", int(signum)).Msg("killing container process")
 	if signum == unix.SIGKILL || signum == unix.SIGTERM {
 		if err := c.setConfigItem("lxc.signal.stop", strconv.Itoa(int(signum))); err != nil {
 			return err
@@ -386,11 +403,8 @@ func (c *Runtime) killContainer(ctx context.Context, signum unix.Signal) error {
 		if err := c.Container.Stop(); err != nil {
 			return err
 		}
-		timeout := time.Second
-		if deadline, ok := ctx.Deadline(); ok {
-			timeout = deadline.Sub(time.Now())
-		}
-		if !c.Container.Wait(lxc.STOPPED, timeout) {
+
+		if !c.wait(ctx, lxc.STOPPED) {
 			c.Log.Warn().Msg("failed to stop lxc container")
 		}
 
