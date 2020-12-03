@@ -46,6 +46,13 @@ func (c ContainerInfo) RuntimePath(subPath ...string) string {
 	return filepath.Join(c.RuntimeRoot, c.ContainerID, filepath.Join(subPath...))
 }
 
+func (c ContainerInfo) runtimePathExists() bool {
+	if _, err := os.Stat(c.RuntimePath()); err == nil {
+		return true
+	}
+	return false
+}
+
 func (c ContainerInfo) ConfigFilePath() string {
 	return c.RuntimePath("config")
 }

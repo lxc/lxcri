@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -20,8 +21,9 @@ var envFile = "/etc/default/crio-lxc"
 var clxc struct {
 	lxcontainer.Runtime
 
-	Command    string
-	CreateHook string
+	Command           string
+	CreateHook        string
+	CreateHookTimeout time.Duration
 
 	CreateTimeout time.Duration
 	StartTimeout  time.Duration
@@ -255,6 +257,13 @@ var createCmd = cli.Command{
 			EnvVars:     []string{"CRIO_LXC_CREATE_HOOK"},
 			Destination: &clxc.CreateHook,
 		},
+		&cli.DurationFlag{
+			Name:        "hook-timeout",
+			Usage:       "maximum duration for hook to complete",
+			EnvVars:     []string{"CRIO_LXC_CREATE_HOOK_TIMEOUT"},
+			Value:       time.Second * 5,
+			Destination: &clxc.CreateHookTimeout,
+		},
 	},
 }
 
@@ -263,31 +272,34 @@ func doCreate(unused *cli.Context) error {
 	defer cancel()
 
 	err := clxc.Create(ctx)
-
 	if clxc.CreateHook != "" {
-		env := []string{
-			"CONTAINER_ID=" + clxc.ContainerID,
-			"LXC_CONFIG=" + clxc.ConfigFilePath(),
-			"RUNTIME_CMD=" + clxc.Command,
-			"RUNTIME_PATH=" + clxc.RuntimePath(),
-			"BUNDLE_PATH=" + clxc.BundlePath,
-			"SPEC_PATH=" + clxc.SpecPath(),
-			"LOG_FILE=" + clxc.LogFilePath,
-		}
-		if err != nil {
-			env = append(env, "RUNTIME_ERROR="+err.Error())
-		}
-		cmd := exec.CommandContext(ctx, clxc.CreateHook)
-		cmd.Env = env
-
-		clxc.Log.Debug().Str("file", clxc.CreateHook).Msg("execute create hook")
-		if err := cmd.Run(); err != nil {
-			clxc.Log.Error().Err(err).Str("file", clxc.CreateHook).Msg("failed to execute create hook")
-		} else {
-			clxc.Log.Debug().Str("file", clxc.CreateHook).Msg("failed to execute runtime hook")
-		}
+		runCreateHook(err)
 	}
 	return err
+}
+
+func runCreateHook(err error) {
+	env := []string{
+		"CONTAINER_ID=" + clxc.ContainerID,
+		"LXC_CONFIG=" + clxc.ConfigFilePath(),
+		"RUNTIME_CMD=" + clxc.Command,
+		"RUNTIME_PATH=" + clxc.RuntimePath(),
+		"BUNDLE_PATH=" + clxc.BundlePath,
+		"SPEC_PATH=" + clxc.SpecPath(),
+		"LOG_FILE=" + clxc.LogFilePath,
+	}
+	if err != nil {
+		env = append(env, "RUNTIME_ERROR="+err.Error())
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), clxc.CreateHookTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, clxc.CreateHook)
+	cmd.Env = env
+
+	clxc.Log.Debug().Str("file", clxc.CreateHook).Msg("execute create hook")
+	if err := cmd.Run(); err != nil {
+		clxc.Log.Error().Err(err).Str("file", clxc.CreateHook).Msg("failed to execute create hook")
+	}
 }
 
 var startCmd = cli.Command{
@@ -301,7 +313,7 @@ starts <containerID>
 	Flags: []cli.Flag{
 		&cli.DurationFlag{
 			Name:        "timeout",
-			Usage:       "timeout for reading from syncfifo",
+			Usage:       "start timeout",
 			EnvVars:     []string{"CRIO_LXC_START_TIMEOUT"},
 			Value:       time.Second * 30,
 			Destination: &clxc.StartTimeout,
@@ -397,7 +409,12 @@ var deleteCmd = cli.Command{
 func doDelete(ctx *cli.Context) error {
 	c, cancel := context.WithTimeout(context.Background(), clxc.DeleteTimeout)
 	defer cancel()
-	return clxc.Delete(c, ctx.Bool("force"))
+	err := clxc.Delete(c, ctx.Bool("force"))
+	if errors.Is(err, lxcontainer.ErrNotExist) {
+		clxc.Log.Warn().Msg("container does not exist")
+		return nil
+	}
+	return err
 }
 
 var execCmd = cli.Command{
