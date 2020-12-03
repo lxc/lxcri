@@ -1,10 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/lxc/crio-lxc/lxcontainer"
@@ -16,7 +17,17 @@ import (
 var envFile = "/etc/default/crio-lxc"
 
 // The singelton that wraps the lxc.Container
-var clxc lxcontainer.Runtime
+var clxc struct {
+	lxcontainer.Runtime
+
+	Command    string
+	CreateHook string
+
+	CreateTimeout time.Duration
+	StartTimeout  time.Duration
+	KillTimeout   time.Duration
+	DeleteTimeout time.Duration
+}
 
 func main() {
 	app := cli.NewApp()
@@ -100,26 +111,6 @@ func main() {
 			Value:       "/usr/local/bin/crio-lxc-container-hook",
 			Destination: &clxc.ContainerHook,
 		},
-		&cli.StringFlag{
-			Name:        "runtime-hook",
-			Usage:       "absolute path to runtime hook executable",
-			EnvVars:     []string{"CRIO_LXC_RUNTIME_HOOK"},
-			Destination: &clxc.RuntimeHook,
-		},
-		&cli.DurationFlag{
-			Name:        "runtime-hook-timeout",
-			Usage:       "duration after which the runtime hook is killed",
-			EnvVars:     []string{"CRIO_LXC_RUNTIME_HOOK_TIMEOUT"},
-			Value:       time.Second * 5,
-			Destination: &clxc.RuntimeHookTimeout,
-		},
-		&cli.BoolFlag{
-			Name:        "runtime-hook-always",
-			Usage:       "if true runtime hook will run on every create - not only on error",
-			EnvVars:     []string{"CRIO_LXC_RUNTIME_HOOK_RUN_ALWAYS"},
-			Value:       false,
-			Destination: &clxc.RuntimeHookRunAlways,
-		},
 		&cli.BoolFlag{
 			Name:        "apparmor",
 			Usage:       "set apparmor profile defined in container spec",
@@ -157,12 +148,17 @@ func main() {
 	// FIXME when calling '--help' defaults are overwritten with environment variables.
 	// So you will never see the real default value if either an environment file is present
 	// or an environment variable is set.
-	env, envErr := loadEnvFile(envFile)
+	env, err := loadEnvFile(envFile)
+	if err != nil {
+		println(err.Error())
+		os.Exit(1)
+	}
 	if env != nil {
 		for key, val := range env {
 			if err := setEnv(key, val, false); err != nil {
-				envErr = err
-				break
+				err = fmt.Errorf("failed to set environment variable \"%s=%s\": %w", err)
+				println(err.Error())
+				os.Exit(1)
 			}
 		}
 	}
@@ -175,15 +171,11 @@ func main() {
 	setupCmd := func(ctx *cli.Context) error {
 		containerID := ctx.Args().Get(0)
 		if len(containerID) == 0 {
-			return errors.New("missing container ID")
+			return fmt.Errorf("missing container ID")
 		}
 		clxc.ContainerID = containerID
 
-		if err := clxc.ConfigureLogging(ctx.Command.Name); err != nil {
-			return err
-		}
-		//	log.Debug().Strs("args", os.Args).Msg("run cmd")
-		return nil
+		return clxc.ConfigureLogging(ctx.Command.Name)
 	}
 
 	// Disable the default error messages for cmdline errors.
@@ -204,7 +196,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "undefined subcommand %q cmdline%s\n", cmd, os.Args)
 	}
 
-	err := app.Run(os.Args)
+	err = app.Run(os.Args)
 
 	if err := clxc.Release(); err != nil {
 		clxc.Log.Error().Err(err).Msg("failed to release container")
@@ -213,7 +205,7 @@ func main() {
 	cmdDuration := time.Since(startTime)
 
 	if err == nil {
-		clxc.Debug().Dur("duration", cmdDuration).Msg("cmd completed")
+		clxc.Log.Debug().Dur("duration", cmdDuration).Msg("cmd completed")
 		return
 	}
 
@@ -250,19 +242,49 @@ var createCmd = cli.Command{
 			Destination: &clxc.PidFile,
 		},
 		&cli.DurationFlag{
-			Name:        "socket-timeout",
-			Usage:       "timeout for sending pty master to socket",
-			EnvVars:     []string{"CRIO_LXC_CREATE_SOCKET_TIMEOUT"},
+			Name:        "timeout",
+			Usage:       "maximum duration for create to complete",
+			EnvVars:     []string{"CRIO_LXC_CREATE_TIMEOUT"},
 			Value:       time.Second * 60,
-			Destination: &clxc.ConsoleSocketTimeout,
+			Destination: &clxc.CreateTimeout,
+		},
+		&cli.StringFlag{
+			Name:        "create-hook",
+			Usage:       "absolute path to executable to run after create",
+			EnvVars:     []string{"CRIO_LXC_CREATE_HOOK"},
+			Destination: &clxc.CreateHook,
 		},
 	},
 }
 
-func doCreate(ctx *cli.Context) error {
-	err := doCreateInternal()
-	if err != nil || clxc.RuntimeHookRunAlways {
-		clxc.executeRuntimeHook(err)
+func doCreate(unused *cli.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), clxc.CreateTimeout)
+	defer cancel()
+
+	err := clxc.Create(ctx)
+
+	if clxc.CreateHook != "" {
+		env := []string{
+			"CONTAINER_ID=" + clxc.ContainerID,
+			"LXC_CONFIG=" + clxc.ConfigFilePath(),
+			"RUNTIME_CMD=" + clxc.Command,
+			"RUNTIME_PATH=" + clxc.RuntimePath(),
+			"BUNDLE_PATH=" + clxc.BundlePath,
+			"SPEC_PATH=" + clxc.SpecPath(),
+			"LOG_FILE=" + clxc.LogFilePath,
+		}
+		if err != nil {
+			env = append(env, "RUNTIME_ERROR="+err.Error())
+		}
+		cmd := exec.CommandContext(ctx, clxc.CreateHook)
+		cmd.Env = env
+
+		clxc.Log.Debug().Str("file", clxc.CreateHook).Msg("execute create hook")
+		if err := cmd.Run(); err != nil {
+			clxc.Log.Error().Err(err).Str("file", clxc.CreateHook).Msg("failed to execute create hook")
+		} else {
+			clxc.Log.Debug().Str("file", clxc.CreateHook).Msg("failed to execute runtime hook")
+		}
 	}
 	return err
 }
@@ -277,16 +299,19 @@ starts <containerID>
 `,
 	Flags: []cli.Flag{
 		&cli.DurationFlag{
-			Name:    "timeout",
-			Usage:   "timeout for reading from syncfifo",
-			EnvVars: []string{"CRIO_LXC_START_TIMEOUT"},
-			Value:   time.Second * 5,
+			Name:        "timeout",
+			Usage:       "timeout for reading from syncfifo",
+			EnvVars:     []string{"CRIO_LXC_START_TIMEOUT"},
+			Value:       time.Second * 30,
+			Destination: &clxc.StartTimeout,
 		},
 	},
 }
 
-func doStart(ctx *cli.Context) error {
-	return clxc.Start(ctx.Duration("timeout"))
+func doStart(unused *cli.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), clxc.StartTimeout)
+	defer cancel()
+	return clxc.Start(ctx)
 }
 
 var stateCmd = cli.Command{
@@ -300,14 +325,17 @@ var stateCmd = cli.Command{
 	Flags: []cli.Flag{},
 }
 
-func doState(ctx *cli.Context) error {
+func doState(unused *cli.Context) error {
 	state, err := clxc.State()
-	if j, err := json.Marshal(state); err == nil {
-		fmt.Fprint(os.Stdout, string(j))
-		log.Trace().RawJSON("state", j).Msg("container state")
-	} else {
-		return errors.Wrap(err, "failed to marshal json")
+	if err != nil {
+		return err
 	}
+	j, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
+	clxc.Log.Trace().RawJSON("state", j).Msg("container state")
+	_, err = fmt.Fprint(os.Stdout, string(j))
 	return err
 }
 
@@ -320,6 +348,15 @@ var killCmd = cli.Command{
 <containerID> is the ID of the container to send a signal to
 [signal] signal name or numerical value (e.g [9|kill|KILL|sigkill|SIGKILL])
 `,
+	Flags: []cli.Flag{
+		&cli.DurationFlag{
+			Name:        "timeout",
+			Usage:       "timeout for killing all processes in container cgroup",
+			EnvVars:     []string{"CRIO_LXC_KILL_TIMEOUT"},
+			Value:       time.Second * 10,
+			Destination: &clxc.KillTimeout,
+		},
+	},
 }
 
 func doKill(ctx *cli.Context) error {
@@ -328,7 +365,9 @@ func doKill(ctx *cli.Context) error {
 	if signum == 0 {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
-	return clxc.Kill(signum)
+	c, cancel := context.WithTimeout(context.Background(), clxc.KillTimeout)
+	defer cancel()
+	return clxc.Kill(c, signum)
 }
 
 var deleteCmd = cli.Command{
@@ -344,11 +383,20 @@ var deleteCmd = cli.Command{
 			Name:  "force",
 			Usage: "force deletion",
 		},
+		&cli.DurationFlag{
+			Name:        "timeout",
+			Usage:       "timeout for deleting container",
+			EnvVars:     []string{"CRIO_LXC_DELETE_TIMEOUT"},
+			Value:       time.Second * 10,
+			Destination: &clxc.DeleteTimeout,
+		},
 	},
 }
 
 func doDelete(ctx *cli.Context) error {
-	return clxc.Delete(ctx.Bool("force"))
+	c, cancel := context.WithTimeout(context.Background(), clxc.DeleteTimeout)
+	defer cancel()
+	return clxc.Delete(c, ctx.Bool("force"))
 }
 
 var execCmd = cli.Command{
@@ -396,15 +444,10 @@ func doExec(ctx *cli.Context) error {
 	detach := ctx.Bool("detach")
 
 	if detach && pidFile == "" {
-		log.Warn().Msg("detaching process but pid-file value is unset")
+		clxc.Log.Warn().Msg("detaching process but pid-file value is unset")
 	}
 
-	err := clxc.loadContainer()
-	if err != nil {
-		return err
-	}
-
-	procSpec, err := ReadSpecProcess(ctx.String("process"))
+	procSpec, err := lxcontainer.ReadSpecProcess(ctx.String("process"))
 	if err != nil {
 		return err
 	}
@@ -418,7 +461,7 @@ func doExec(ctx *cli.Context) error {
 			return err
 		}
 		if pidFile != "" {
-			return createPidFile(pidFile, pid)
+			return lxcontainer.CreatePidFile(pidFile, pid)
 		}
 	} else {
 		status, err := clxc.Exec(args, procSpec)

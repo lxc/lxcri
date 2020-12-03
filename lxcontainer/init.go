@@ -2,11 +2,11 @@ package lxcontainer
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
@@ -29,12 +29,12 @@ func configureInit(clxc *Runtime, spec *specs.Spec) error {
 
 	err := os.MkdirAll(rootfsInitDir, 0)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create init dir in rootfs %q", rootfsInitDir)
+		return fmt.Errorf("failed to create init dir in rootfs %q: %w", rootfsInitDir, err)
 	}
 	// #nosec
 	err = os.MkdirAll(runtimeInitDir, 0755)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create runtime init dir %q", runtimeInitDir)
+		return fmt.Errorf("failed to create runtime init dir %q: %w", runtimeInitDir, err)
 	}
 
 	spec.Mounts = append(spec.Mounts, specs.Mount{
@@ -53,7 +53,7 @@ func configureInit(clxc *Runtime, spec *specs.Spec) error {
 
 	// create files required for crio-lxc-init
 	if err := createFifo(clxc.syncFifoPath(), uid, gid, 0600); err != nil {
-		return errors.Wrapf(err, "failed to create sync fifo")
+		return fmt.Errorf("failed to create sync fifo: %w", err)
 	}
 
 	if err := createList(filepath.Join(runtimeInitDir, "cmdline"), spec.Process.Args, uid, gid, 0400); err != nil {
@@ -74,7 +74,7 @@ func configureInit(clxc *Runtime, spec *specs.Spec) error {
 	initCmdPath := filepath.Join(runtimeInitDir, "init")
 	err = touchFile(initCmdPath, 0)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create %s", initCmdPath)
+		return fmt.Errorf("failed to create %s: %w", initCmdPath, err)
 	}
 	initCmd := filepath.Join(initDir, "init")
 	spec.Mounts = append(spec.Mounts, specs.Mount{
@@ -99,7 +99,7 @@ func createList(dst string, entries []string, uid int, gid int, mode uint32) err
 	// #nosec
 	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create init list %s", dst)
+		return fmt.Errorf("failed to create init list %s: %w", dst, err)
 	}
 
 	for _, arg := range entries {
@@ -145,7 +145,7 @@ func configureInitUser(clxc *Runtime, spec *specs.Spec) error {
 		return err
 	}
 
-	if len(spec.Process.User.AdditionalGids) > 0 && supportsConfigItem("lxc.init.groups") {
+	if len(spec.Process.User.AdditionalGids) > 0 && clxc.supportsConfigItem("lxc.init.groups") {
 		var b strings.Builder
 		for i, gid := range spec.Process.User.AdditionalGids {
 			if i > 0 {

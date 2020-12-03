@@ -6,8 +6,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sys/unix"
+
+	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 type namespace struct {

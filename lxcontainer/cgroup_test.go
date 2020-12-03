@@ -1,9 +1,11 @@
 package lxcontainer
 
 import (
-	"github.com/stretchr/testify/require"
-	"golang.org/x/sys/unix"
 	"testing"
+
+	"golang.org/x/sys/unix"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseSystemCgroupPath(t *testing.T) {

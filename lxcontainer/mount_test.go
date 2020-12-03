@@ -1,11 +1,12 @@
 package lxcontainer
 
 import (
-	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveMountDestination_absolute(t *testing.T) {

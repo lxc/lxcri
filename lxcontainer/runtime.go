@@ -3,16 +3,15 @@ package lxcontainer
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
-	"golang.org/x/sys/unix"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
@@ -43,8 +42,8 @@ const (
 	StateStopped ContainerState = "stopped"
 )
 
-var errContainerNotExist = errors.New("container does not exist")
-var errContainerExist = errors.New("container already exists")
+var errContainerNotExist = fmt.Errorf("container does not exist")
+var errContainerExist = fmt.Errorf("container already exists")
 
 var version string
 
@@ -56,8 +55,6 @@ type Runtime struct {
 	Container *lxc.Container
 	ContainerInfo
 
-	Command string
-
 	// [ global settings ]
 	LogFile           *os.File
 	LogFilePath       string
@@ -66,18 +63,9 @@ type Runtime struct {
 	SystemdCgroup     bool
 	MonitorCgroup     string
 
-	StartCommand         string
-	InitCommand          string
-	ContainerHook        string
-	RuntimeHook          string
-	RuntimeHookTimeout   time.Duration
-	RuntimeHookRunAlways bool
-
-	// create flags
-	ConsoleSocketTimeout time.Duration
-
-	// start flags
-	StartTimeout time.Duration
+	StartCommand  string
+	InitCommand   string
+	ContainerHook string
 
 	Log zerolog.Logger
 }
@@ -90,7 +78,7 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 	}
 
 	if err := os.MkdirAll(c.RuntimePath(), 0700); err != nil {
-		return errors.Wrap(err, "failed to create container dir")
+		return fmt.Errorf("failed to create container dir: %w", err)
 	}
 
 	// An empty tmpfile is created to ensure that createContainer can only succeed once.
@@ -101,7 +89,7 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 		return err
 	}
 	if err := f.Close(); err != nil {
-		return errors.Wrap(err, "failed to close empty config file")
+		return fmt.Errorf("failed to close empty config file: %w", err)
 	}
 
 	if spec.Linux.CgroupsPath == "" {
@@ -115,7 +103,7 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 
 	c.MonitorCgroupDir = filepath.Join(c.MonitorCgroup, c.ContainerID+".scope")
 
-	if err := enableCgroupControllers(filepath.Dir(c.CgroupDir)); err != nil {
+	if err := createCgroup(filepath.Dir(c.CgroupDir), allControllers); err != nil {
 		return err
 	}
 
@@ -146,18 +134,18 @@ func (c *Runtime) loadContainer() error {
 		return errContainerNotExist
 	}
 	if err != nil {
-		return errors.Wrap(err, "failed to access config file")
+		return fmt.Errorf("failed to access config file: %w", err)
 	}
 
 	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
 	if err != nil {
-		return errors.Wrap(err, "failed to create new lxc container")
+		return fmt.Errorf("failed to create new lxc container: %w", err)
 	}
 	c.Container = container
 
 	err = container.LoadConfigFile(c.ConfigFilePath())
 	if err != nil {
-		return errors.Wrap(err, "failed to load config file")
+		return fmt.Errorf("failed to load config file: %w", err)
 	}
 
 	return c.setContainerLogLevel()
@@ -172,7 +160,7 @@ func (c *Runtime) configureCgroupPath() error {
 		return err
 	}
 
-	if supportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
+	if c.supportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
 		if err := c.setConfigItem("lxc.cgroup.dir.monitor.pivot", c.MonitorCgroup); err != nil {
 			return err
 		}
@@ -206,7 +194,7 @@ func (c *Runtime) configureCgroupPath() error {
 func (c Runtime) Release() error {
 	if c.Container != nil {
 		if err := c.Container.Release(); err != nil {
-			log.Error().Err(err).Msg("failed to release container")
+			c.Log.Error().Err(err).Msg("failed to release container")
 		}
 	}
 	if c.LogFile != nil {
@@ -219,12 +207,12 @@ func (c *Runtime) ConfigureLogging(cmdName string) error {
 	logDir := filepath.Dir(c.LogFilePath)
 	err := os.MkdirAll(logDir, 0750)
 	if err != nil {
-		return errors.Wrapf(err, "failed to create log file directory %s", logDir)
+		return fmt.Errorf("failed to create log file directory %s: %w", logDir, err)
 	}
 
 	c.LogFile, err = os.OpenFile(c.LogFilePath, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
-		return errors.Wrapf(err, "failed to open log file %s", c.LogFilePath)
+		return fmt.Errorf("failed to open log file %s: %w", c.LogFilePath, err)
 	}
 
 	zerolog.LevelFieldName = "l"
@@ -246,13 +234,13 @@ func (c *Runtime) ConfigureLogging(cmdName string) error {
 	// NOTE Unfortunately it's not possible change the possition of the timestamp.
 	// The ttimestamp is appended to the to the log output because it is dynamically rendered
 	// see https://github.com/rs/zerolog/issues/109
-	log = zerolog.New(c.LogFile).With().Timestamp().Caller().
+	c.Log = zerolog.New(c.LogFile).With().Timestamp().Caller().
 		Str("cmd", cmdName).Str("cid", c.ContainerID).Logger()
 
 	level, err := zerolog.ParseLevel(strings.ToLower(c.LogLevel))
 	if err != nil {
 		level = zerolog.InfoLevel
-		log.Warn().Err(err).Str("val", c.LogLevel).Stringer("default", level).
+		c.Log.Warn().Err(err).Str("val", c.LogLevel).Stringer("default", level).
 			Msg("failed to parse log-level - fallback to default")
 	}
 	zerolog.SetGlobalLevel(level)
@@ -266,10 +254,10 @@ func (c *Runtime) setContainerLogLevel() error {
 	// The log level for a running container is set, and may change, per runtime call.
 	err := c.Container.SetLogLevel(c.parseContainerLogLevel())
 	if err != nil {
-		return errors.Wrap(err, "failed to set container loglevel")
+		return fmt.Errorf("failed to set container loglevel: %w", err)
 	}
 	if err := c.Container.SetLogFile(c.LogFilePath); err != nil {
-		return errors.Wrap(err, "failed to set container log file")
+		return fmt.Errorf("failed to set container log file: %w", err)
 	}
 	return nil
 }
@@ -295,44 +283,10 @@ func (c *Runtime) parseContainerLogLevel() lxc.LogLevel {
 	case "fatal":
 		return lxc.FATAL
 	default:
-		log.Warn().Str("val", c.ContainerLogLevel).
+		c.Log.Warn().Str("val", c.ContainerLogLevel).
 			Stringer("default", lxc.WARN).
 			Msg("failed to parse container-log-level - fallback to default")
 		return lxc.WARN
-	}
-}
-
-// executeRuntimeHook executes the runtime hook executable if defined.
-// Execution errors are logged at log level error.
-func (c *Runtime) executeRuntimeHook(runtimeError error) {
-	if c.RuntimeHook == "" {
-		return
-	}
-	env := []string{
-		"CONTAINER_ID=" + c.ContainerID,
-		"LXC_CONFIG=" + c.ConfigFilePath(),
-		"RUNTIME_CMD=" + c.Command,
-		"RUNTIME_PATH=" + c.RuntimePath(),
-		"BUNDLE_PATH=" + c.BundlePath,
-		"SPEC_PATH=" + c.SpecPath(),
-		"LOG_FILE=" + c.LogFilePath,
-	}
-
-	if runtimeError != nil {
-		env = append(env, "RUNTIME_ERROR="+runtimeError.Error())
-	}
-
-	log.Debug().Str("file", c.RuntimeHook).Msg("execute runtime hook")
-	// TODO drop privileges, capabilities ?
-	ctx, cancel := context.WithTimeout(context.Background(), c.RuntimeHookTimeout)
-	defer cancel()
-	// #nosec
-	cmd := exec.CommandContext(ctx, c.RuntimeHook)
-	cmd.Env = env
-	cmd.Dir = c.RuntimePath()
-	if err := cmd.Run(); err != nil {
-		log.Error().Err(err).Str("file", c.RuntimeHook).
-			Bool("timeout-expired", ctx.Err() == context.DeadlineExceeded).Msg("runtime hook failed")
 	}
 }
 
@@ -340,38 +294,45 @@ func (c *Runtime) isContainerStopped() bool {
 	return c.Container.State() == lxc.STOPPED
 }
 
-func (c *Runtime) waitCreated(timeout time.Duration) error {
-	if !c.Container.Wait(lxc.RUNNING, timeout) {
-		return fmt.Errorf("timeout starting init cmd")
+func (c *Runtime) waitCreated(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			if !c.Container.Wait(lxc.RUNNING, time.Second) {
+				continue
+			}
+			initState, err := c.getContainerInitState()
+			if err != nil {
+				return err
+			}
+			if initState != StateCreated {
+				return fmt.Errorf("unexpected init state %q", initState)
+			}
+		}
 	}
-
-	initState, err := c.getContainerInitState()
-	if err != nil {
-		return err
-	}
-	if initState != StateCreated {
-		return fmt.Errorf("unexpected init state %q", initState)
-	}
-	return nil
 }
 
-func (c *Runtime) waitRunning(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		initState, err := c.getContainerInitState()
-		if err != nil {
-			return err
-		}
-		if initState == StateRunning {
-			return nil
-		}
-		if initState == StateCreated {
+func (c *Runtime) waitRunning(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			initState, err := c.getContainerInitState()
+			if err != nil {
+				return err
+			}
+			if initState == StateRunning {
+				return nil
+			}
+			if initState != StateCreated {
+				return fmt.Errorf("unexpected init state %q", initState)
+			}
 			time.Sleep(time.Millisecond * 10)
-			continue
 		}
-		return fmt.Errorf("unexpected init state %q", initState)
 	}
-	return fmt.Errorf("timeout")
 }
 
 // getContainerInitState returns the runtime state of the container.
@@ -416,49 +377,7 @@ func (c *Runtime) getContainerInitState() (ContainerState, error) {
 	return StateRunning, nil
 }
 
-func enableCgroupControllers(cg string) error {
-	//slice := cg.ScopePath()
-	// #nosec
-	cgPath := filepath.Join("/sys/fs/cgroup", cg)
-	if err := os.MkdirAll(cgPath, 755); err != nil {
-		return err
-	}
-	/*
-	   // enable all available controllers in the scope
-	   data, err := ioutil.ReadFile("/sys/fs/cgroup/cgroup.controllers")
-	   if err != nil {
-	           return errors.Wrap(err, "failed to read cgroup.controllers")
-	   }
-	   controllers := strings.Split(strings.TrimSpace(string(data)), " ")
-
-	   var b strings.Builder
-	   for i, c := range controllers {
-	           if i > 0 {
-	                   b.WriteByte(' ')
-	           }
-	           b.WriteByte('+')
-	           b.WriteString(c)
-	   }
-	   b.WriteString("\n")
-
-	   s := b.String()
-	*/
-	s := "+cpuset +cpu +io +memory +hugetlb +pids +rdma\n"
-
-	base := "/sys/fs/cgroup"
-	for _, elem := range strings.Split(cg, "/") {
-		base = filepath.Join(base, elem)
-		c := filepath.Join(base, "cgroup.subtree_control")
-		err := ioutil.WriteFile(c, []byte(s), 0)
-		if err != nil {
-			return errors.Wrapf(err, "failed to enable cgroup controllers in %s", base)
-		}
-		log.Info().Str("file", base).Str("controllers", strings.TrimSpace(s)).Msg("cgroup activated")
-	}
-	return nil
-}
-
-func (c *Runtime) killContainer(signum unix.Signal) error {
+func (c *Runtime) killContainer(ctx context.Context, signum unix.Signal) error {
 	if signum == unix.SIGKILL || signum == unix.SIGTERM {
 		if err := c.setConfigItem("lxc.signal.stop", strconv.Itoa(int(signum))); err != nil {
 			return err
@@ -466,18 +385,22 @@ func (c *Runtime) killContainer(signum unix.Signal) error {
 		if err := c.Container.Stop(); err != nil {
 			return err
 		}
-		if !c.Container.Wait(lxc.STOPPED, time.Second*10) {
-			log.Warn().Msg("failed to stop lxc container")
+		timeout := time.Second
+		if deadline, ok := ctx.Deadline(); ok {
+			timeout = deadline.Sub(time.Now())
+		}
+		if !c.Container.Wait(lxc.STOPPED, timeout) {
+			c.Log.Warn().Msg("failed to stop lxc container")
 		}
 
 		// draining the cgroup is required to catch processes that escaped from the
 		// 'kill' e.g a bash for loop that spawns a new child immediately.
 		start := time.Now()
-		err := drainCgroup(c.CgroupDir, signum, time.Second*10)
+		err := drainCgroup(ctx, c.CgroupDir, signum)
 		if err != nil && !os.IsNotExist(err) {
-			log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to drain cgroup")
+			c.Log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to drain cgroup")
 		} else {
-			log.Info().Dur("duration", time.Since(start)).Str("file", c.CgroupDir).Msg("cgroup drained")
+			c.Log.Info().Dur("duration", time.Since(start)).Str("file", c.CgroupDir).Msg("cgroup drained")
 		}
 		return err
 	}
@@ -485,14 +408,14 @@ func (c *Runtime) killContainer(signum unix.Signal) error {
 	//  send non-terminating signals to monitor process
 	pid, err := c.Pid()
 	if err != nil && !os.IsNotExist(err) {
-		return errors.Wrapf(err, "failed to load pidfile")
+		return fmt.Errorf("failed to load pidfile: %w", err)
 	}
 	if pid > 1 {
-		log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
+		c.Log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
 		if err := unix.Kill(pid, 0); err == nil {
 			err := unix.Kill(pid, signum)
 			if err != unix.ESRCH {
-				return errors.Wrapf(err, "failed to send signal %d to container process %d", signum, pid)
+				return fmt.Errorf("failed to send signal %d to container process %d: %w", signum, pid, err)
 			}
 		}
 	}
@@ -506,13 +429,13 @@ func (c *Runtime) killContainer(signum unix.Signal) error {
 func (c *Runtime) destroy() error {
 	if c.Container != nil {
 		if err := c.Container.Destroy(); err != nil {
-			return errors.Wrap(err, "failed to destroy container")
+			return fmt.Errorf("failed to destroy container: %w", err)
 		}
 	}
 
 	err := deleteCgroup(c.CgroupDir)
 	if err != nil && !os.IsNotExist(err) {
-		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to remove cgroup dir")
+		c.Log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to remove cgroup dir")
 	}
 
 	return os.RemoveAll(c.RuntimePath())
@@ -526,7 +449,7 @@ func (c *Runtime) saveConfig() error {
 	// createContainer creates the tmpfile
 	tmpFile := c.RuntimePath(".config")
 	if _, err := os.Stat(tmpFile); err != nil {
-		return errors.Wrap(err, "failed to stat config tmpfile")
+		return fmt.Errorf("failed to stat config tmpfile: %w", err)
 	}
 	// Don't overwrite an existing config.
 	cfgFile := c.ConfigFilePath()
@@ -535,16 +458,16 @@ func (c *Runtime) saveConfig() error {
 	}
 	err := c.Container.SaveConfigFile(tmpFile)
 	if err != nil {
-		return errors.Wrapf(err, "failed to save config file to '%s'", tmpFile)
+		return fmt.Errorf("failed to save config file to %q: %w", tmpFile, err)
 	}
 	if err := os.Rename(tmpFile, cfgFile); err != nil {
-		return errors.Wrap(err, "failed to rename config file")
+		return fmt.Errorf("failed to rename config file: %w", err)
 	}
 	return nil
 }
 
-func (c *Runtime) Start(timeout time.Duration) error {
-	log.Info().Msg("notify init to start container process")
+func (c *Runtime) Start(ctx context.Context) error {
+	c.Log.Info().Msg("notify init to start container process")
 
 	err := c.loadContainer()
 	if err != nil {
@@ -565,13 +488,14 @@ func (c *Runtime) Start(timeout time.Duration) error {
 	}()
 
 	select {
+	case <-ctx.Done():
+		return fmt.Errorf("syncfifo timeout: %w", ctx.Err())
 	case err := <-done:
-		return err
-	case <-time.After(time.Second * 5):
-		return fmt.Errorf("timeout reading from syncfifo")
+		if err != nil {
+			return err
+		}
 	}
-
-	return c.waitRunning(timeout)
+	return c.waitRunning(ctx)
 }
 
 func (c *Runtime) syncFifoPath() string {
@@ -582,7 +506,7 @@ func (c *Runtime) readFifo() error {
 	// #nosec
 	f, err := os.OpenFile(c.syncFifoPath(), os.O_RDONLY, 0)
 	if err != nil {
-		return errors.Wrap(err, "failed to open sync fifo")
+		return fmt.Errorf("failed to open sync fifo: %w", err)
 	}
 	// can not set deadline on fifo
 	// #nosec
@@ -591,15 +515,15 @@ func (c *Runtime) readFifo() error {
 	data := make([]byte, len(c.ContainerID))
 	_, err = f.Read(data)
 	if err != nil {
-		return errors.Wrap(err, "problem reading from fifo")
+		return fmt.Errorf("problem reading from fifo: %w", err)
 	}
 	if c.ContainerID != string(data) {
-		return errors.Errorf("bad fifo content: %s", string(data))
+		return fmt.Errorf("bad fifo content: %s", string(data))
 	}
 	return nil
 }
 
-func (c *Runtime) Delete(force bool) error {
+func (c *Runtime) Delete(ctx context.Context, force bool) error {
 	err := c.loadContainer()
 	if err == errContainerNotExist {
 		return nil
@@ -608,14 +532,14 @@ func (c *Runtime) Delete(force bool) error {
 		return err
 	}
 
-	log.Info().Bool("force", force).Msg("delete container")
+	c.Log.Info().Bool("force", force).Msg("delete container")
 
 	if !c.isContainerStopped() {
 		if !force {
 			return fmt.Errorf("container is not not stopped (current state %s)", c.Container.State())
 		}
-		if err := c.killContainer(unix.SIGKILL); err != nil {
-			return errors.Wrap(err, "failed to kill container")
+		if err := c.killContainer(ctx, unix.SIGKILL); err != nil {
+			return fmt.Errorf("failed to kill container: %w", err)
 		}
 	}
 	return c.destroy()
@@ -629,7 +553,7 @@ func (c *Runtime) State() (*specs.State, error) {
 
 	pid, err := c.Pid()
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to load pidfile")
+		return nil, fmt.Errorf("failed to load pidfile: %w", err)
 	}
 
 	state := &specs.State{
@@ -646,11 +570,11 @@ func (c *Runtime) State() (*specs.State, error) {
 		return nil, err
 	}
 
-	log.Info().Int("pid", state.Pid).Str("status", state.Status).Msg("container state")
+	c.Log.Info().Int("pid", state.Pid).Str("status", state.Status).Msg("container state")
 	return state, nil
 }
 
-func (c *Runtime) Kill(signum unix.Signal) error {
+func (c *Runtime) Kill(ctx context.Context, signum unix.Signal) error {
 	err := c.loadContainer()
 	if err != nil {
 		return err
@@ -663,16 +587,21 @@ func (c *Runtime) Kill(signum unix.Signal) error {
 	if !(state == StateCreated || state == StateRunning) {
 		return fmt.Errorf("can only kill container in state Created|Running but was %q", state)
 	}
-	return c.killContainer(signum)
+	return c.killContainer(ctx, signum)
 }
 
 func (c *Runtime) ExecDetached(args []string, proc *specs.Process) (pid int, err error) {
+	err = c.loadContainer()
+	if err != nil {
+		return 0, err
+	}
+
 	opts, err := attachOptions(proc, c.Namespaces)
 	if err != nil {
 		return 0, err
 	}
 
-	log.Info().Strs("args", args).
+	c.Log.Info().Strs("args", args).
 		Int("uid", opts.UID).Int("gid", opts.GID).
 		Ints("groups", opts.Groups).Msg("execute cmd")
 
@@ -680,6 +609,10 @@ func (c *Runtime) ExecDetached(args []string, proc *specs.Process) (pid int, err
 }
 
 func (c *Runtime) Exec(args []string, proc *specs.Process) (exitStatus int, err error) {
+	err = c.loadContainer()
+	if err != nil {
+		return 0, err
+	}
 	opts, err := attachOptions(proc, c.Namespaces)
 	if err != nil {
 		return 0, err
@@ -705,18 +638,16 @@ func (c *Runtime) getConfigItem(key string) string {
 func (c *Runtime) setConfigItem(key, value string) error {
 	err := c.Container.SetConfigItem(key, value)
 	if err != nil {
-		return errors.Wrapf(err, "failed to set config item '%s=%s'", key, value)
+		return fmt.Errorf("failed to set config item '%s=%s': %w", key, value, err)
 	}
-	log.Debug().Str("lxc.config", key).Str("val", value).Msg("set config item")
+	c.Log.Debug().Str("lxc.config", key).Str("val", value).Msg("set config item")
 	return nil
 }
 
-// -- LXC helper functions
-
-func supportsConfigItem(keys ...string) bool {
+func (c *Runtime) supportsConfigItem(keys ...string) bool {
 	for _, key := range keys {
 		if !lxc.IsSupportedConfigItem(key) {
-			log.Info().Str("lxc.config", key).Msg("unsupported config item")
+			c.Log.Info().Str("lxc.config", key).Msg("unsupported config item")
 			return false
 		}
 	}
