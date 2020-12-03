@@ -4,9 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/pkg/errors"
-	"io/ioutil"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/lxc/crio-lxc/lxcontainer"
@@ -184,7 +182,7 @@ func main() {
 		if err := clxc.ConfigureLogging(ctx.Command.Name); err != nil {
 			return err
 		}
-	//	log.Debug().Strs("args", os.Args).Msg("run cmd")
+		//	log.Debug().Strs("args", os.Args).Msg("run cmd")
 		return nil
 	}
 
@@ -205,9 +203,28 @@ func main() {
 	app.CommandNotFound = func(ctx *cli.Context, cmd string) {
 		fmt.Fprintf(os.Stderr, "undefined subcommand %q cmdline%s\n", cmd, os.Args)
 	}
-  
+
 	err := app.Run(os.Args)
-  clxc.Release(err)
+
+	if err := clxc.Release(); err != nil {
+		clxc.Log.Error().Err(err).Msg("failed to release container")
+	}
+
+	cmdDuration := time.Since(startTime)
+
+	if err == nil {
+		clxc.Debug().Dur("duration", cmdDuration).Msg("cmd completed")
+		return
+	}
+
+	clxc.Log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
+	// exit with exit status of executed command
+	if err, yes := err.(execError); yes {
+		os.Exit(err.ExitStatus())
+	}
+	// write diagnostics message to stderr for crio/kubelet
+	println(err.Error())
+	os.Exit(1)
 }
 
 var createCmd = cli.Command{

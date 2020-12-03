@@ -43,8 +43,6 @@ const (
 	StateStopped ContainerState = "stopped"
 )
 
-var log zerolog.Logger
-
 var errContainerNotExist = errors.New("container does not exist")
 var errContainerExist = errors.New("container already exists")
 
@@ -80,6 +78,8 @@ type Runtime struct {
 
 	// start flags
 	StartTimeout time.Duration
+
+	Log zerolog.Logger
 }
 
 // createContainer creates a new container.
@@ -203,7 +203,7 @@ func (c *Runtime) configureCgroupPath() error {
 }
 
 // Release releases/closes allocated resources (lxc.Container, LogFile)
-func (c Runtime) Release(err error) error {
+func (c Runtime) Release() error {
 	if c.Container != nil {
 		if err := c.Container.Release(); err != nil {
 			log.Error().Err(err).Msg("failed to release container")
@@ -214,28 +214,6 @@ func (c Runtime) Release(err error) error {
 	}
 	return nil
 }
-
-
-	cmdDuration := time.Since(startTime)
-	if err != nil {
-		log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
-	} else {
-		log.Info().Dur("duration", cmdDuration).Msg("cmd completed")
-	}
-
-	if err := clxc.Release(); err != nil {
-		log.Error().Err(err).Msg("failed to release container")
-	}
-
-	if err != nil {
-		if err, yes := err.(execError); yes {
-			os.Exit(err.ExitStatus())
-		} else {
-			// write diagnostics message to stderr for crio/kubelet
-			println(err.Error())
-			os.Exit(1)
-		}
-	}
 
 func (c *Runtime) ConfigureLogging(cmdName string) error {
 	logDir := filepath.Dir(c.LogFilePath)
