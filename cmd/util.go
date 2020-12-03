@@ -13,8 +13,8 @@ import (
 )
 
 func setEnv(key, val string, overwrite bool) error {
-	 _, exist := os.LookupEnv(key)
-	 if !exist || overwrite {
+	_, exist := os.LookupEnv(key)
+	if !exist || overwrite {
 		return os.Setenv(key, val)
 	}
 	return nil
