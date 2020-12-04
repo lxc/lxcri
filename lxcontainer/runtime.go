@@ -669,11 +669,16 @@ func (c *Runtime) setConfigItem(key, value string) error {
 }
 
 func (c *Runtime) supportsConfigItem(keys ...string) bool {
+	canCheck := lxc.VersionAtLeast(4, 0, 6)
+	if !canCheck {
+		c.Log.Warn().Msg("lxc.IsSupportedConfigItem is broken in liblxc < 4.0.6")
+	}
 	for _, key := range keys {
-		if !lxc.IsSupportedConfigItem(key) {
-			c.Log.Info().Str("lxc.config", key).Msg("unsupported config item")
-			return false
+		if canCheck && lxc.IsSupportedConfigItem(key) {
+			continue
 		}
+		c.Log.Info().Str("lxc.config", key).Msg("unsupported config item")
+		return false
 	}
 	return true
 }
