@@ -13,6 +13,7 @@
 const char *syncfifo_path = "syncfifo";
 const char *cmdline_path = "cmdline";
 const char *environ_path = "environ";
+const char *termination_log = "termination-log";
 
 // A conformance test that will fail if SETENV_OVERWRITE is set to 0
 // is "StatefulSet [k8s.io] Basic StatefulSet functionality [StatefulSetBasic]
@@ -27,6 +28,12 @@ const char *environ_path = "environ";
 #ifndef SETENV_OVERWRITE
 #define SETENV_OVERWRITE 1
 #endif
+
+#define ERROR(...)                           \
+	{                                    \
+		dprintf(errfd, __VA_ARGS__); \
+		exit(EXIT_FAILURE);          \
+	}
 
 int writefifo(const char *fifo, const char *msg)
 {
@@ -56,11 +63,11 @@ int load_cmdline(const char *path, char *buf, int buflen, char **args, int maxar
 
 	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd == -1)
-		return 200;
+		return -1;
 
 	f = fdopen(fd, "r");
 	if (f == NULL)
-		return 201;
+		return -1;
 
 	for (n = 0; n < maxargs - 1; n++) {
 		char c;
@@ -77,22 +84,22 @@ int load_cmdline(const char *path, char *buf, int buflen, char **args, int maxar
 		}
 
 		if (errno != 0) /* getc failed */
-			return 202;
+			return -1;
 
 		if (c == EOF) {
 			if (i > 0) /* trailing garbage */
-				return 203;
+				return -1;
 			args[n] = (char *)NULL;
 			break;
 		}
 
 		args[n] = strndup(buf, i);
 		if (errno != 0) /* strndup failed */
-			return 204;
+			return -1;
 	}
 	/* cmdline is empty */
 	if (n == 0)
-		return 205;
+		return -1;
 
 	return 0;
 }
@@ -111,11 +118,11 @@ int load_environ(const char *path, char *buf, int buflen)
 
 	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd == -1)
-		return 210;
+		return -1;
 
 	f = fopen(path, "r");
 	if (f == NULL)
-		return 211;
+		return -1;
 
 	for (;;) {
 		char *key = NULL;
@@ -139,20 +146,20 @@ int load_environ(const char *path, char *buf, int buflen)
 		}
 
 		if (errno != 0) /* getc failed */
-			return 212;
+			return -1;
 
 		if (c == EOF) {
 			if (i > 0) /* trailing garbage */
-				return 213;
+				return -1;
 			break;
 		}
 
 		/* malformed content e.g 'fooo\0' or 'fooo=<EOF>' */
 		if (key == NULL || i == strlen(key))
-			return 214;
+			return -1;
 
 		if (setenv(key, buf + strlen(key) + 1, SETENV_OVERWRITE) == -1)
-			return 215;
+			return -1;
 	}
 	return 0;
 }
@@ -169,8 +176,8 @@ int ensure_HOME_exists()
 	errno = 0;
 	if (pw != NULL && pw->pw_dir != NULL)
 		return setenv("HOME", pw->pw_dir, 0);
-	else
-		return setenv("HOME", "/", 0);
+
+	return setenv("HOME", "/", 0);
 }
 
 int main(int argc, char **argv)
@@ -194,10 +201,16 @@ int main(int argc, char **argv)
 
 	int ret = 0;
 
+	int errfd;
+
+	errfd = open(termination_log, O_WRONLY | O_CLOEXEC);
+	if (errfd == -1)
+		errfd = 2;
+
 	if (argc != 2) {
-		fprintf(stderr, "invalid number of arguments %d\n", argc);
-		fprintf(stderr, "usage: %s <containerID>\n", argv[0]);
-		exit(-1);
+		ERROR("invalid number of arguments %d\n"
+		      "usage: %s <containerID>\n",
+		      argc, argv[0]);
 	}
 	container_id = argv[1];
 
@@ -205,38 +218,34 @@ int main(int argc, char **argv)
 	environ = NULL;
 
 	ret = load_environ(environ_path, buf, sizeof(buf));
-	if (ret != 0) {
+	if (ret == -1) {
 		if (errno != 0)
-			fprintf(stderr, "error reading environment file \"%s\": %s\n",
-				environ_path, strerror(errno));
-		exit(ret);
+			ERROR("error reading environment file \"%s\": %s\n",
+			      environ_path, strerror(errno));
 	}
 
 	ret = load_cmdline(cmdline_path, buf, sizeof(buf), args, sizeof(args));
-	if (ret != 0) {
+	if (ret == -1) {
 		if (errno != 0)
-			fprintf(stderr, "error reading cmdline file \"%s\": %s\n",
-				cmdline_path, strerror(errno));
-		exit(ret);
+			ERROR("error reading cmdline file \"%s\": %s\n",
+			      cmdline_path, strerror(errno));
 	}
 
 	if (ensure_HOME_exists() == -1) {
-		fprintf(stderr, "error setenv HOME: %s\n", strerror(errno));
-		exit(ret);
+		ERROR("failed to set HOME environment variable: %s\n",
+		      strerror(errno));
 	}
 
 	if (writefifo(syncfifo_path, container_id) == -1) {
-		perror("failed to write syncfifo");
-		exit(220);
+		ERROR("failed to write syncfifo: %s\n", strerror(errno));
 	}
 
 	if (chdir("cwd") == -1) {
-		perror("failed to change working directory");
-		exit(221);
+		ERROR("failed to change working directory: %s\n",
+		      strerror(errno));
 	}
 
 	if (execvp(args[0], args) == -1) {
-		fprintf(stderr, "failed to exec \"%s\": %s\n", args[0], strerror(errno));
-		exit(222);
+		ERROR("failed to exec \"%s\": %s\n", args[0], strerror(errno));
 	}
 }
