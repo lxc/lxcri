@@ -13,6 +13,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define ERROR(...)                   \
+	{                            \
+		printf(__VA_ARGS__); \
+		ret = EXIT_FAILURE;  \
+		goto out;            \
+	}
+
 int mask_paths_at(int rootfs, int runtime, const char *masked)
 {
 	// limits.h PATH_MAX
@@ -25,23 +32,24 @@ int mask_paths_at(int rootfs, int runtime, const char *masked)
 	fd = openat(runtime, masked, O_RDONLY);
 	if (fd == -1) {
 		if (errno == ENOENT) {
-	    printf("file \"%s\" does not exist\n", masked);
+			printf("file \"%s\" does not exist\n", masked);
 			return 0;
-    }
+		}
 		return -1;
 	}
 
 	f = fdopen(fd, "r");
 	if (f == NULL) {
-    printf("file descriptor for runtime directory is null: %s", strerror(errno));
+		printf("file descriptor for runtime directory is null: %s",
+		       strerror(errno));
 		close(fd);
 		return -1;
 	}
 
 	if (fchdir(rootfs) != 0) {
-    printf("file to change to rootfs: %s\n", strerror(errno));
+		printf("file to change to rootfs: %s\n", strerror(errno));
 		goto out;
-  }
+	}
 
 	while (fgets(line, sizeof(line), f) != NULL) {
 		line[strlen(line) - 1] = '\0';		  // remove newline;
@@ -61,7 +69,7 @@ int mask_paths_at(int rootfs, int runtime, const char *masked)
 			if (mount("tmpfs", rel, "tmpfs", MS_RDONLY, NULL) == -1)
 				goto out;
 		} else {
-		  printf("masking file %s\n", rel);
+			printf("masking file %s\n", rel);
 			if (mount("/dev/null", rel, NULL, MS_BIND, NULL) == -1)
 				goto out;
 		}
@@ -82,15 +90,16 @@ int create_devices_at(int rootfs, int runtime, const char *devices)
 	fd = openat(runtime, devices, O_RDONLY);
 	if (fd == -1) {
 		if (errno == ENOENT) {
-	    printf("file \"%s\" does not exist\n", devices);
+			printf("file \"%s\" does not exist\n", devices);
 			return 0;
-    }
+		}
 		return -1;
 	}
 
 	f = fdopen(fd, "r");
 	if (f == NULL) {
-    printf("file descriptor for runtime directory is null: %s", strerror(errno));
+		printf("file descriptor for runtime directory is null: %s",
+		       strerror(errno));
 		close(fd);
 		return -1;
 	}
@@ -107,7 +116,7 @@ int create_devices_at(int rootfs, int runtime, const char *devices)
 		int ret;
 
 		if (fchdir(rootfs) == -1) {
-      printf("file to change to rootfs: %s\n", strerror(errno));
+			printf("file to change to rootfs: %s\n", strerror(errno));
 			goto out;
 		}
 
@@ -162,7 +171,8 @@ int create_devices_at(int rootfs, int runtime, const char *devices)
 						goto out;
 				}
 				if (chdir(dir) != 0) {
-          printf("%s:%d failed to change to directory \"%s\": %s\n", devices, line, dir, strerror(errno));
+          printf("%s:%d failed to change to directory \"%s\": %s\n", 
+							devices, line, dir, strerror(errno));
 					goto out;
 				}
 			}
@@ -171,12 +181,14 @@ int create_devices_at(int rootfs, int runtime, const char *devices)
 		       dev, mode, major, minor, filemode, uid, gid);
 		ret = mknod(dev, ft | filemode, makedev(major, minor));
 		if (ret == -1) {
-			printf("%s:%d failed to create device \"%s\"\n", devices, line, dev);
+			printf("%s:%d failed to create device \"%s\"\n",
+			       devices, line, dev);
 			goto out;
 		}
 		ret = chown(dev, uid, gid);
 		if (ret == -1) {
-			printf("%s:%d failed to chown %d:%d device \"%s\"\n", devices, line, uid, gid, dev);
+			printf("%s:%d failed to chown %d:%d device \"%s\"\n",
+			       devices, line, uid, gid, dev);
 			goto out;
 		}
 	}
@@ -190,60 +202,44 @@ int main(int argc, char **argv)
 	const char *rootfs_mount;
 	const char *config_file;
 	const char *runtime_path;
-	int rootfs;
-	int runtime;
+	int rootfs_fd;
+	int runtime_fd;
 	int ret = EXIT_SUCCESS;
 
 	rootfs_mount = getenv("LXC_ROOTFS_MOUNT");
 	config_file = getenv("LXC_CONFIG_FILE");
 
-	if (rootfs_mount == NULL) {
-		printf("LXC_ROOTFS_MOUNT environment variable not set\n");
-		ret = 1;
-		goto out;
-	}
-	if (config_file == NULL) {
-		printf("LXC_CONFIG_FILE environment variable not set\n");
-		ret = 2;
-		goto out;
-	}
+	if (rootfs_mount == NULL)
+		ERROR("LXC_ROOTFS_MOUNT environment variable not set\n");
 
-	rootfs = open(rootfs_mount, O_PATH);
-	if (rootfs == -1) {
-    printf("failed to open rootfs mount directory: %s", strerror(errno));
-		ret = 3;
-		goto out;
-	}
+	if (config_file == NULL)
+		ERROR("LXC_CONFIG_FILE environment variable not set\n");
+
+	rootfs_fd = open(rootfs_mount, O_PATH);
+	if (rootfs_fd == -1)
+		ERROR("failed to open rootfs mount directory: %s",
+		      strerror(errno));
 
 	runtime_path = dirname(strdup(config_file));
-	runtime = open(runtime_path, O_PATH);
-	if (rootfs == -1) {
-    printf("failed to open runtime directory: %s", strerror(errno));
-		ret = 4;
-		goto out;
-	}
+	runtime_fd = open(runtime_path, O_PATH);
 
-  printf("create devices int container rootfs\n");
-	if (create_devices_at(rootfs, runtime, "devices.txt") == -1) {
-    printf("failed to create devices: %s", strerror(errno));
-		ret = 5;
-		goto out;
-	}
+	if (runtime_fd == -1)
+		ERROR("failed to open runtime directory: %s", strerror(errno));
 
-  printf("masking files and directories in container rootfs\n");
-	if (mask_paths_at(rootfs, runtime, "masked.txt") == -1) {
-    printf("failed to mask paths: %s", strerror(errno));
-		ret = 6;
-		goto out;
-	}
+	printf("create devices int container rootfs\n");
+	if (create_devices_at(rootfs_fd, runtime_fd, "devices.txt") == -1)
+		ERROR("failed to create devices: %s", strerror(errno));
+
+	printf("masking files and directories in container rootfs\n");
+	if (mask_paths_at(rootfs_fd, runtime_fd, "masked.txt") == -1)
+		ERROR("failed to mask paths: %s", strerror(errno));
 
 out:
-	if (rootfs >= 0)
-		close(rootfs);
+	if (rootfs_fd >= 0)
+		close(rootfs_fd);
 
-	if (runtime >= 0)
-		close(runtime);
+	if (runtime_fd >= 0)
+		close(runtime_fd);
 
-  printf("returning with %d\n", ret);
-	return ret;
+	exit(ret);
 }
