@@ -69,7 +69,7 @@ func configureInit(clxc *Runtime, spec *specs.Spec) error {
 	if spec.Annotations != nil {
 		msgPath := spec.Annotations["io.kubernetes.container.terminationMessagePath"]
 		if msgPath != "" {
-			if err := os.Symlink(msgPath, filepath.Join(runtimeInitDir, "termination-log")); err != nil {
+			if err := os.Symlink(msgPath, filepath.Join(runtimeInitDir, "error.log")); err != nil {
 				return err
 			}
 		}
