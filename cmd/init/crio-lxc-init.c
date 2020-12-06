@@ -118,7 +118,7 @@ int load_environ(const char *path, char *buf, int buflen)
 
 	fd = open(path, O_RDONLY | O_CLOEXEC);
 	if (fd == -1)
-		return -1;
+		return 0;
 
 	f = fopen(path, "r");
 	if (f == NULL)
@@ -222,16 +222,14 @@ int main(int argc, char **argv)
 
 	ret = load_environ(environ_path, buf, sizeof(buf));
 	if (ret == -1) {
-		if (errno != 0)
-			ERROR("error reading environment file \"%s\": %s\n",
-			      environ_path, strerror(errno));
+		ERROR("error reading environment file \"%s\": %s\n",
+		      environ_path, strerror(errno));
 	}
 
 	ret = load_cmdline(cmdline_path, buf, sizeof(buf), args, sizeof(args));
 	if (ret == -1) {
-		if (errno != 0)
-			ERROR("error reading cmdline file \"%s\": %s\n",
-			      cmdline_path, strerror(errno));
+		ERROR("error reading cmdline file \"%s\": %s\n", cmdline_path,
+		      strerror(errno));
 	}
 
 	if (ensure_HOME_exists() == -1) {
