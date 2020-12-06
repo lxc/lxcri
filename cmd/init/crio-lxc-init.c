@@ -204,8 +204,10 @@ int main(int argc, char **argv)
 	int errfd;
 
 	errfd = open(termination_log, O_WRONLY | O_CLOEXEC);
-	if (errfd == -1)
+	if (errfd == -1) {
+		errno = 0;
 		errfd = 2;
+	}
 
 	if (argc != 2) {
 		ERROR("invalid number of arguments %d\n"
