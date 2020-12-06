@@ -13,7 +13,7 @@
 const char *syncfifo_path = "syncfifo";
 const char *cmdline_path = "cmdline";
 const char *environ_path = "environ";
-const char *termination_log = "termination-log";
+const char *error_log = "error.log";
 
 // A conformance test that will fail if SETENV_OVERWRITE is set to 0
 // is "StatefulSet [k8s.io] Basic StatefulSet functionality [StatefulSetBasic]
@@ -203,7 +203,8 @@ int main(int argc, char **argv)
 
 	int errfd;
 
-	errfd = open(termination_log, O_WRONLY | O_CLOEXEC);
+	/* write errors to error_log if it exists otherwise to stderr */
+	errfd = open(error_log, O_WRONLY | O_CLOEXEC);
 	if (errfd == -1) {
 		errno = 0;
 		errfd = 2;
