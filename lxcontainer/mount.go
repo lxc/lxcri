@@ -70,15 +70,17 @@ func createMountDestination(spec *specs.Spec, ms *specs.Mount) error {
 		// check if mountpoint is optional ?
 		return fmt.Errorf("failed to access source for bind mount: %w", err)
 	}
+	uid := int(spec.Process.User.UID)
+	gid := int(spec.Process.User.GID)
 
 	if err == nil && !info.IsDir() {
 		ms.Options = append(ms.Options, "create=file")
 		// source exists and is not a directory
 		// create a target file that can be used as target for a bind mount
-		if err := os.MkdirAll(filepath.Dir(ms.Destination), 0750); err != nil {
+		if err := mkdirAll(filepath.Dir(ms.Destination), 0750, uid, gid); err != nil {
 			return fmt.Errorf("failed to create mount destination dir: %w", err)
 		}
-		f, err := os.OpenFile(ms.Destination, os.O_CREATE, 0440)
+		f, err := os.OpenFile(ms.Destination, os.O_CREATE, 0)
 		if err != nil {
 			return fmt.Errorf("failed to create file mountpoint: %w", err)
 		}
@@ -87,7 +89,7 @@ func createMountDestination(spec *specs.Spec, ms *specs.Mount) error {
 	ms.Options = append(ms.Options, "create=dir")
 	// FIXME exclude all directories that are below other mounts
 	// only directories / files on the readonly rootfs must be created
-	if err := os.MkdirAll(ms.Destination, 0750); err != nil {
+	if err = mkdirAll(ms.Destination, 0750, uid, gid); err != nil {
 		return fmt.Errorf("failed to create mount target dir: %w", err)
 	}
 	return nil
