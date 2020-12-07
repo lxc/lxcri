@@ -203,7 +203,7 @@ int main(int argc, char **argv)
 
 	int errfd;
 
-	/* write errors to error_log if it exists otherwise to stderr */
+	/* write errors to error.log if it exists otherwise to stderr */
 	errfd = open(error_log, O_WRONLY | O_CLOEXEC);
 	if (errfd == -1) {
 		errno = 0;
