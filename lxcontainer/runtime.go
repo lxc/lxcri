@@ -309,27 +309,6 @@ func (c *Runtime) waitCreated(ctx context.Context) error {
 	}
 }
 
-func (c *Runtime) waitStarted(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			state := c.Container.State()
-			if !(state == lxc.RUNNING) {
-				return fmt.Errorf("container state must be lxc.RUNNING (was %q)", state)
-			}
-			initState, _ := c.getContainerInitState()
-			if initState == StateRunning {
-				return nil
-			}
-			// use a short interval here because we wait for the
-			// the time it may take for crio-lxc-init to exec the container process
-			time.Sleep(time.Millisecond * 10)
-		}
-	}
-}
-
 func (c *Runtime) wait(ctx context.Context, state lxc.State) bool {
 	for {
 		select {
@@ -344,19 +323,7 @@ func (c *Runtime) wait(ctx context.Context, state lxc.State) bool {
 	}
 }
 
-func (c *Runtime) getContainerState() (state ContainerState, err error) {
-	for i := 0; i < 5; i++ {
-		state, err = c.getContainerStateOnce()
-		if err == nil {
-			return state, nil
-		}
-		c.Log.Trace().Err(err).Msg("transient container state - retry")
-		time.Sleep(time.Millisecond * 5)
-	}
-	return state, err
-}
-
-func (c *Runtime) getContainerStateOnce() (ContainerState, error) {
+func (c *Runtime) getContainerState() (ContainerState, error) {
 	state := c.Container.State()
 	switch state {
 	case lxc.STOPPED:
@@ -381,7 +348,8 @@ func (c *Runtime) getContainerInitState() (ContainerState, error) {
 	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", initPid)
 	cmdline, err := ioutil.ReadFile(cmdlinePath)
 	if err != nil {
-		// either init process died or proc filesystem was unmounted (very unlikely)
+		// either init process died or returned already
+		// or proc filesystem was unmounted (very unlikely)
 		return StateStopped, err
 	}
 
@@ -511,9 +479,6 @@ func (c *Runtime) Start(ctx context.Context) error {
 		if err != nil {
 			return errorf("failed to read from syncfifo: %w", err)
 		}
-	}
-	if err := c.waitStarted(ctx); err != nil {
-		return errorf("container is not running: %w", err)
 	}
 	return nil
 }
