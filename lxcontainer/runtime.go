@@ -343,10 +343,13 @@ func (c *Runtime) getContainerState() (ContainerState, error) {
 func (c *Runtime) getContainerInitState() (ContainerState, error) {
 	initPid := c.Container.InitPid()
 	if initPid < 1 {
-		return StateStopped, fmt.Errorf("failed to retrieve init pid")
+		return StateStopped, nil
 	}
 	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", initPid)
 	cmdline, err := ioutil.ReadFile(cmdlinePath)
+	if os.IsNotExist(err) {
+		return StateStopped, nil
+	}
 	if err != nil {
 		// either init process died or returned already
 		// or proc filesystem was unmounted (very unlikely)
