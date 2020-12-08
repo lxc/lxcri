@@ -170,12 +170,25 @@ int load_environ(const char *path, char *buf, int buflen)
 int ensure_HOME_exists()
 {
 	struct passwd *pw;
+	int root_fd;
+
+	// fast path
+	if (getenv("HOME") != NULL)
+		return 0;
 
 	pw = getpwuid(geteuid());
 	/* ignore error from getpwuid */
 	errno = 0;
 	if (pw != NULL && pw->pw_dir != NULL)
 		return setenv("HOME", pw->pw_dir, 0);
+
+	root_fd = open("/root", O_PATH | O_CLOEXEC);
+	errno = 0;
+	if (root_fd != -1) {
+		close(root_fd);
+		errno = 0;
+		return setenv("HOME", "/root", 0);
+	}
 
 	return setenv("HOME", "/", 0);
 }
