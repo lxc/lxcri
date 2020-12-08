@@ -77,6 +77,13 @@ func main() {
 			Destination: &clxc.LogFilePath,
 		},
 		&cli.StringFlag{
+			Name:        "log-timestamp",
+			Usage:       "timestamp format for the runtime log (see golang time package), default matches liblxc timestamp",
+			EnvVars:     []string{"CRIO_LXC_LOG_TIMESTAMP"}, // e.g  '0102 15:04:05.000'
+			Value:       "20060102150405.000",
+			Destination: &clxc.LogTimestamp,
+		},
+		&cli.StringFlag{
 			Name:  "root",
 			Usage: "container runtime root where (logs, init and hook scripts). tmpfs is recommended.",
 			// exec permissions are not required because init is bind mounted into the root

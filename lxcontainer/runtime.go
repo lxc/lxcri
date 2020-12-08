@@ -17,12 +17,6 @@ import (
 	"gopkg.in/lxc/go-lxc.v2"
 )
 
-// logging constants
-const (
-	// liblxc timestamp formattime format
-	timeFormatLXCMillis = "20060102150405.000"
-)
-
 // ContainerState represents the state of a container.
 type ContainerState string
 
@@ -52,6 +46,7 @@ type Runtime struct {
 	LogFile           *os.File
 	LogFilePath       string
 	LogLevel          string
+	LogTimestamp      string
 	ContainerLogLevel string
 	SystemdCgroup     bool
 	MonitorCgroup     string
@@ -211,7 +206,7 @@ func (c *Runtime) ConfigureLogging(cmdName string) error {
 
 	// match liblxc timestamp format
 	zerolog.TimestampFieldName = "t"
-	zerolog.TimeFieldFormat = timeFormatLXCMillis
+	zerolog.TimeFieldFormat = c.LogTimestamp
 	zerolog.TimestampFunc = func() time.Time {
 		return time.Now().UTC()
 	}
