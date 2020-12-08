@@ -343,18 +343,16 @@ func (c *Runtime) getContainerInitState() (ContainerState, error) {
 	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", initPid)
 	cmdline, err := ioutil.ReadFile(cmdlinePath)
 	if os.IsNotExist(err) {
+		// init process died or returned
 		return StateStopped, nil
 	}
 	if err != nil {
-		// either init process died or returned already
-		// or proc filesystem was unmounted (very unlikely)
+		// it's a serious error if cmdlinePath exists but can't be read
 		return StateStopped, err
 	}
 
-	// comm contains a trailing newline
 	initCmdline := fmt.Sprintf("/.crio-lxc/init\000%s\000", c.ContainerID)
 	if string(cmdline) == initCmdline {
-		//if strings.HasPrefix(c.ContainerID, strings.TrimSpace(string(comm))) {
 		return StateCreated, nil
 	}
 	return StateRunning, nil
@@ -374,7 +372,7 @@ func (c *Runtime) killContainer(ctx context.Context, signum unix.Signal) error {
 			c.Log.Warn().Msg("failed to stop lxc container")
 		}
 
-		// draining the cgroup is required to catch processes that escaped from the
+		// draining the cgroup is required to catch processes that escaped from
 		// 'kill' e.g a bash for loop that spawns a new child immediately.
 		start := time.Now()
 		err := drainCgroup(ctx, c.CgroupDir, signum)
