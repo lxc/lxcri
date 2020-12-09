@@ -1,11 +1,11 @@
 #define _GNU_SOURCE
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <fcntl.h>
-#include <string.h>
-#include <signal.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <lxc/lxccontainer.h>
 
@@ -15,30 +15,30 @@
 */
 #define ENABLE_LXCINIT 0
 
+#define ERROR(format, ...)                                                  \
+	{                                                                   \
+		fprintf(stderr, "[crio-lxc-start] " format, ##__VA_ARGS__); \
+		ret = EXIT_FAILURE;                                         \
+		goto out;                                                   \
+	}
+
 /* NOTE lxc_execute.c was taken as guidline and some lines where copied. */
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
-	int ret;
-	struct lxc_container *c;
-	int err = EXIT_FAILURE;
-	const char * name;
-	const char * lxcpath;
-	const char * rcfile;
+	struct lxc_container *c = NULL;
+	int ret = EXIT_SUCCESS;
+	const char *name;
+	const char *lxcpath;
+	const char *rcfile;
 
 	/* Ensure stdout and stderr are line bufferd. */
 	setvbuf(stdout, NULL, _IOLBF, -1);
 	setvbuf(stderr, NULL, _IOLBF, -1);
+	errno = 0;
 
-	if (argc != 4) {
-		fprintf(stderr, "invalid cmdline: usage %s <container_name> <lxcpath> <config_path>\n", argv[0]);
-		exit(err);
-	}
-
-	ret = isatty(STDIN_FILENO);
-	if (ret < 0) {
-		perror("isatty");
-		exit(96);
-	}
+	if (argc != 4)
+		ERROR("invalid argument count, usage: "
+		      "$0 <container_name> <lxcpath> <config_path>\n");
 
 	/*
 	/ If this is non interactive, get rid of our controlling terminal,
@@ -46,38 +46,35 @@ int main(int argc, char** argv)
 	/ Ignore any error - because controlling terminal could be a PTY.
 	*/
 	setsid();
+	errno = 0;
 
 	name = argv[1];
 	lxcpath = argv[2];
 	rcfile = argv[3];
 
 	c = lxc_container_new(name, lxcpath);
-	if (!c) {
-		fprintf(stderr, "failed to create container");
-		exit(err);
-	}
+	if (c == NULL)
+		ERROR("failed to create new container");
 
 	c->clear_config(c);
-	if (!c->load_config(c, rcfile)) {
-		fprintf(stderr, "failed to load container config file");
-		goto out;
-	}
+
+	if (!c->load_config(c, rcfile))
+		ERROR("failed to load container config %s\n", rcfile);
 
 	/* Do not daemonize - this would null the inherited stdio. */
 	c->daemonize = false;
 
-	if (!c->start(c, ENABLE_LXCINIT, NULL)) {
-		fprintf(stderr, "lxc container failed to start");
-		goto out;
-	}
+	if (!c->start(c, ENABLE_LXCINIT, NULL))
+		ERROR("failed to start container\n");
 
-	if (WIFEXITED(c->error_num))
-		err = WEXITSTATUS(c->error_num);
-	else
+	if (WIFSIGNALED(c->error_num))
 		/* Try to die with the same signal the task did. */
 		kill(0, WTERMSIG(c->error_num));
 
+	if (WIFEXITED(c->error_num))
+		ret = WEXITSTATUS(c->error_num);
 out:
-	lxc_container_put(c);
-	exit(err);
+	if (c != NULL)
+		lxc_container_put(c);
+	exit(ret);
 }

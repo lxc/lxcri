@@ -22,10 +22,10 @@ crio-lxc: $(GO_SRC) Makefile go.mod
 	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd
 
 crio-lxc-start: cmd/start/crio-lxc-start.c
-	$(CC) -Wall $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags lxc) -o $@ $? 
+	$(CC) -Wall -Wpedantic $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags lxc) -o $@ $?
 
 crio-lxc-init: cmd/init/crio-lxc-init.c
-	/usr/local/musl/bin/musl-gcc -Wpedantic -Wall  -static -g  -o $@ $? 
+	/usr/local/musl/bin/musl-gcc -Wall -Wpedantic -static -g -o $@ $?
 	#musl-gcc -g3 -Wall -static $? -o $@
 	# ensure that crio-lxc-init is statically compiled
 	! ldd $@  2>/dev/null

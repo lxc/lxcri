@@ -29,10 +29,10 @@ const char *error_log = "error.log";
 #define SETENV_OVERWRITE 1
 #endif
 
-#define ERROR(...)                           \
-	{                                    \
-		dprintf(errfd, __VA_ARGS__); \
-		exit(EXIT_FAILURE);          \
+#define ERROR(format, ...)                                                \
+	{                                                                 \
+		dprintf(errfd, "[crio-lxc-init] " format, ##__VA_ARGS__); \
+		exit(EXIT_FAILURE);                                       \
 	}
 
 int writefifo(const char *fifo, const char *msg)

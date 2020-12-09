@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 
 	"golang.org/x/sys/unix"
 )
@@ -114,11 +113,10 @@ func nullTerminatedString(data []byte) string {
 }
 
 func errorf(sfmt string, args ...interface{}) error {
-	_, file, line, ok := runtime.Caller(1)
-	if ok {
-		return fmt.Errorf(filepath.Base(file)+":"+strconv.Itoa(line)+" "+sfmt, args...)
-	}
-	return fmt.Errorf(sfmt, args...)
+	bin := filepath.Base(os.Args[0])
+	_, file, line, _ := runtime.Caller(1)
+	prefix := fmt.Sprintf("[%s:%s:%d] ", bin, filepath.Base(file), line)
+	return fmt.Errorf(prefix+sfmt, args...)
 }
 
 // Modified version of golang standard library os.MkdirAll
