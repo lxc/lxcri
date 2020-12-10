@@ -89,6 +89,20 @@ func (clxc *Runtime) runStartCmd(ctx context.Context, spec *specs.Spec) (err err
 		return err
 	}
 
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go func() {
+		// NOTE this goroutine may leak until crio-lxc is terminated
+		ps, err := cmd.Process.Wait()
+		if err != nil {
+			clxc.Log.Error().Err(err).Msg("failed to wait for start process")
+		} else {
+			clxc.Log.Warn().Int("pid", cmd.Process.Pid).Stringer("status", ps).Msg("start process terminated")
+		}
+		cancel()
+	}()
+
 	clxc.Log.Debug().Msg("waiting for init")
 	if err := clxc.waitCreated(ctx); err != nil {
 		return err
