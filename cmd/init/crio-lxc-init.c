@@ -120,7 +120,7 @@ int load_environ(const char *path, char *buf, int buflen)
 	if (fd == -1)
 		return 0;
 
-	f = fopen(path, "r");
+	f = fdopen(fd, "r");
 	if (f == NULL)
 		return -1;
 
