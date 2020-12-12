@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pwd.h>
@@ -193,6 +194,31 @@ int ensure_HOME_exists()
 	return setenv("HOME", "/", 0);
 }
 
+int close_extra_fds()
+{
+	// avoid leaking file descriptors
+	// although all fds are set to O_CLOEXEC we may leak
+	// interited file scriptors, so close all FDs except 0,1,2
+	int fd;
+	DIR *dirp = NULL;
+	struct dirent *entry;
+
+	fd = open("/proc/self/fd", O_RDONLY | O_CLOEXEC);
+	if (fd == -1)
+		return -1;
+
+	dirp = fdopendir(fd);
+	if (dirp == NULL)
+		return -1;
+
+	while ((entry = readdir(dirp)) != NULL) {
+		int xfd = atoi(entry->d_name);
+		if ((xfd > 2) && (xfd != fd))
+			close(fd);
+	}
+	return closedir(dirp);
+}
+
 int main(int argc, char **argv)
 {
 	/* Buffer for reading arguments and environment variables.
@@ -253,6 +279,9 @@ int main(int argc, char **argv)
 	if (chdir("cwd") == -1)
 		ERROR("failed to change working directory: %s\n",
 		      strerror(errno));
+
+	if (close_extra_fds() == -1)
+		ERROR("failed to close extra fds: %s\n", strerror(errno));
 
 	if (execvp(args[0], args) == -1) {
 		ERROR("failed to exec \"%s\": %s\n", args[0], strerror(errno));
