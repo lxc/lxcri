@@ -223,41 +223,36 @@ int main(int argc, char **argv)
 		errfd = 2;
 	}
 
-	if (argc != 2) {
+	if (argc != 2)
 		ERROR("invalid number of arguments %d\n"
 		      "usage: %s <containerID>\n",
 		      argc, argv[0]);
-	}
+
 	container_id = argv[1];
 
 	/* clear environment */
 	environ = NULL;
 
 	ret = load_environ(environ_path, buf, sizeof(buf));
-	if (ret == -1) {
+	if (ret == -1)
 		ERROR("error reading environment file \"%s\": %s\n",
 		      environ_path, strerror(errno));
-	}
 
 	ret = load_cmdline(cmdline_path, buf, sizeof(buf), args, sizeof(args));
-	if (ret == -1) {
+	if (ret == -1)
 		ERROR("error reading cmdline file \"%s\": %s\n", cmdline_path,
 		      strerror(errno));
-	}
 
-	if (ensure_HOME_exists() == -1) {
+	if (ensure_HOME_exists() == -1)
 		ERROR("failed to set HOME environment variable: %s\n",
 		      strerror(errno));
-	}
 
-	if (writefifo(syncfifo_path, container_id) == -1) {
+	if (writefifo(syncfifo_path, container_id) == -1)
 		ERROR("failed to write syncfifo: %s\n", strerror(errno));
-	}
 
-	if (chdir("cwd") == -1) {
+	if (chdir("cwd") == -1)
 		ERROR("failed to change working directory: %s\n",
 		      strerror(errno));
-	}
 
 	if (execvp(args[0], args) == -1) {
 		ERROR("failed to exec \"%s\": %s\n", args[0], strerror(errno));
