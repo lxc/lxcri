@@ -304,6 +304,21 @@ func (c *Runtime) waitCreated(ctx context.Context) error {
 	}
 }
 
+func (c *Runtime) waitNot(ctx context.Context, state ContainerState) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			initState, _ := c.getContainerInitState()
+			if initState != state {
+				return nil
+			}
+			time.Sleep(time.Millisecond * 10)
+		}
+	}
+}
+
 func (c *Runtime) wait(ctx context.Context, state lxc.State) bool {
 	for {
 		select {
@@ -476,7 +491,8 @@ func (c *Runtime) Start(ctx context.Context) error {
 			return errorf("failed to read from syncfifo: %w", err)
 		}
 	}
-	return nil
+	// wait for container state to change
+	return c.waitNot(ctx, StateCreated)
 }
 
 func (c *Runtime) syncFifoPath() string {
