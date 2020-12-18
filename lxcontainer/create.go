@@ -224,8 +224,17 @@ func configureContainer(clxc *Runtime, spec *specs.Spec) error {
 		}
 	}
 
+	// `man lxc.container.conf`: "A resource with no explicitly configured limitation will be inherited
+	// from the process starting up the container"
+	seenLimits := make([]string, 0, len(spec.Process.Rlimits))
 	for _, limit := range spec.Process.Rlimits {
 		name := strings.TrimPrefix(strings.ToLower(limit.Type), "rlimit_")
+		for _, seen := range seenLimits {
+			if seen == name {
+				return fmt.Errorf("duplicate resource limit %q", limit.Type)
+			}
+		}
+		seenLimits = append(seenLimits, name)
 		val := fmt.Sprintf("%d:%d", limit.Soft, limit.Hard)
 		if err := clxc.setConfigItem("lxc.prlimit."+name, val); err != nil {
 			return err
