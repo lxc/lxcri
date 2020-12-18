@@ -108,12 +108,11 @@ func (clxc *Runtime) runStartCmd(ctx context.Context, spec *specs.Spec) (err err
 		return err
 	}
 
-	clxc.Log.Info().Int("pid", cmd.Process.Pid).Msg("container process is running")
+	clxc.Log.Info().Int("pid", cmd.Process.Pid).Msg("init process is running, container is created")
 	return CreatePidFile(clxc.PidFile, cmd.Process.Pid)
 }
 
 func configureContainer(clxc *Runtime, spec *specs.Spec) error {
-
 	if spec.Hostname != "" {
 		if err := clxc.setConfigItem("lxc.uts.name", spec.Hostname); err != nil {
 			return err
