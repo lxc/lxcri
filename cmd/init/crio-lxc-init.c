@@ -194,29 +194,33 @@ int ensure_HOME_exists()
 	return setenv("HOME", "/", 0);
 }
 
-int close_extra_fds()
+/* To avoid leaking inherited file descriptors,
+ * all file descriptors except stdio (0,1,2) are closed.
+ * File descriptor leaks may lead to serious security issues.
+ */
+int close_extra_fds(int errfd)
 {
-	// avoid leaking file descriptors
-	// although all fds are set to O_CLOEXEC we may leak
-	// interited file scriptors, so close all FDs except 0,1,2
 	int fd;
 	DIR *dirp = NULL;
-	struct dirent *entry;
+	struct dirent *entry = NULL;
 
 	fd = open("/proc/self/fd", O_RDONLY | O_CLOEXEC);
 	if (fd == -1)
-		return -1;
+		ERROR("open /proc/self/fd failed");
 
 	dirp = fdopendir(fd);
 	if (dirp == NULL)
-		return -1;
+		ERROR("fdopendir for /proc/self/fd failed");
 
 	while ((entry = readdir(dirp)) != NULL) {
 		int xfd = atoi(entry->d_name);
 		if ((xfd > 2) && (xfd != fd))
 			close(fd);
 	}
-	return closedir(dirp);
+
+	closedir(dirp);
+	errno = 0; // ignore errors from close
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -280,10 +284,9 @@ int main(int argc, char **argv)
 		ERROR("failed to change working directory: %s\n",
 		      strerror(errno));
 
-	if (close_extra_fds() == -1)
+	if (close_extra_fds(errfd) == -1)
 		ERROR("failed to close extra fds: %s\n", strerror(errno));
 
-	if (execvp(args[0], args) == -1) {
+	if (execvp(args[0], args) == -1)
 		ERROR("failed to exec \"%s\": %s\n", args[0], strerror(errno));
-	}
 }
