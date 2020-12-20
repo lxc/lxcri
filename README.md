@@ -4,7 +4,7 @@ This is a wrapper around [LXC](https://github.com/lxc/lxc) which can be used as
 a drop-in container runtime replacement for use by
 [CRI-O](https://github.com/kubernetes-sigs/cri-o).
 
-## Installation 
+## Installation
 
 For the installation of the runtime see [INSTALL.md](INSTALL.md)</br>
 For the installation and initialization of a kubernetes cluster see [K8S.md](K8S.md)
@@ -44,10 +44,10 @@ The runtime evaluates the flag value in the following order (lower order takes p
 ### Environment variables
 
 Currently you have to compile to environment file yourself.</br>
-To get all available variables 
+To list  all available variables:
 
 ```
-grep EnvVars cmd/*.go | grep -o CRIO_LXC_[A-Za-z_]* | xargs -n1 -I'{}' echo "#{}="
+grep EnvVars cmd/cli.go | grep -o CRIO_LXC_[A-Za-z_]* | xargs -n1 -I'{}' echo "#{}="
 ```
 
 ###  Environment file
@@ -62,25 +62,24 @@ In production it's recommended that you replace the environment file atomically.
 E.g the environment file `/etc/default/crio-lxc` could look like this:
 
 ```
-#CRIO_LXC_CONTAINER_HOOK=
-#CRIO_LXC_CREATE_TIMEOUT=30s
+CRIO_LXC_LOG_LEVEL=debug
+CRIO_LXC_CONTAINER_LOG_LEVEL=debug
+#CRIO_LXC_LOG_FILE=
+#CRIO_LXC_LOG_TIMESTAMP=
+#CRIO_LXC_MONITOR_CGROUP=
 #CRIO_LXC_INIT_CMD=
 #CRIO_LXC_START_CMD=
-#CRIO_LXC_START_TIMEOUT=30s
-
-CRIO_LXC_APPARMOR=true
-CRIO_LXC_CAPABILITIES=true
-CRIO_LXC_CGROUP_DEVICES=true
-CRIO_LXC_SECCOMP=true
-
-CRIO_LXC_LOG_FILE=/tmp/crio-lxc.log
-CRIO_LXC_LOG_LEVEL=info
-CRIO_LXC_CONTAINER_LOG_LEVEL=warn
-
-CRIO_LXC_MONITOR_CGROUP=crio-lxc-monitor.slice
-CRIO_LXC_RUNTIME_HOOK=/usr/local/bin/crio-lxc-backup.sh
-#CRIO_LXC_RUNTIME_HOOK_RUN_ALWAYS=false
-#CRIO_LXC_RUNTIME_HOOK_TIMEOUT=
+#CRIO_LXC_CONTAINER_HOOK=
+#CRIO_LXC_APPARMOR=
+#CRIO_LXC_CAPABILITIES=
+#CRIO_LXC_CGROUP_DEVICES=
+#CRIO_LXC_SECCOMP=
+#CRIO_LXC_CREATE_TIMEOUT=
+#CRIO_LXC_CREATE_HOOK=/usr/local/bin/crio-lxc-backup.sh
+#CRIO_LXC_CREATE_HOOK_TIMEOUT=
+#CRIO_LXC_START_TIMEOUT=
+#CRIO_LXC_KILL_TIMEOUT=
+#CRIO_LXC_DELETE_TIMEOUT=
 ```
 
 ### Runtime (security) features
@@ -99,6 +98,7 @@ Details see `crio-lxc --help`
 There is only a single log file for runtime and container process log output.</br>
 The log-level for the runtime and the container process can be set independently.
 
+* containers are ephemeral, but the log file should not be
 * a single logfile is easy to rotate and monitor
 * a single logfile is easy to tail (watch for errors / events ...)
 * robust implementation is easy
@@ -127,12 +127,11 @@ Fields that are always present:
 * `cmd` runtime command
 * `t` timestamp in UTC (format matches container process output)
 
-
 Log message specific fields:
 
 * `pid` a process ID
 * `file` a path to a file
-* `lxc.config` the key of a container process config item 
+* `lxc.config` the key of a container process config item
 * `env` the key of an environment variable
 
 
@@ -140,21 +139,21 @@ Log message specific fields:
 
 Apart from the logfile following resources are useful:
 
-* Systemd journal for cri-o and kubelet services 
-* `coredumpctl` if runtime or container process segfaults. 
+* Systemd journal for cri-o and kubelet services
+* `coredumpctl` if runtime or container process segfaults.
 
-#### Runtime Hook
+#### Create Hook
 
-If a runtime hook is defined, it is executed when the `create` command returns with an error.</br>
-You can use the runtime hook to backup the runtime spec and container process config for further analysis.</br>
+If a create hook is defined, it is executed before the `create` command returns.</br>
+You can use it to backup the runtime spec and container process config for further analysis.</br>
 
-The runtime hook executable must 
+The create hook executable must
 
 * not use the standard file descriptors (stdin/stdout/stderr) although they are nulled.
-* not exceeds `CRIO_LXC_RUNTIME_HOOK_TIMEOUT` or it gets killed.
+* not exceed `CRIO_LXC_CREATE_HOOK_TIMEOUT` or it is killed.
 * not modify/delete any resources created by the runtime or container process
 
-The runtime hook process environment contains the following variables:
+The process environment contains the following variables:
 
 * `CONTAINER_ID` the container ID
 * `LXC_CONFIG` the path to runtime process config
@@ -162,18 +161,24 @@ The runtime hook process environment contains the following variables:
 * `RUNTIME_PATH` the path to the container runtime directory
 * `BUNDLE_PATH` the absolute path to the container bundle
 * `SPEC_PATH` the absolute path to the the JSON runtime spec
+* `LOG_FILE` the path to the log file
 * `RUNTIME_ERROR` (optional) the error message if the runtime cmd return with error
 
-Example environment of a shell script:
+Example script `crio-lxc-backup.sh` that backs up any container runtime directory:
 
 ```
-SPEC_PATH=/var/run/containers/storage/overlay-containers/XXX/userdata/config.json
-PWD=/
-RUNTIME_PATH=/run/crio-lxc/XXX
-CONTAINER_ID=XXX
-SHLVL=1
-RUNTIME_CMD=create
-BUNDLE_PATH=/var/run/containers/storage/overlay-containers/XXX/userdata
-LXC_CONFIG=/run/crio-lxc/XXX/config
-_=/usr/bin/env
+#!/bin/sh
+
+LOGDIR=$(dirname $LOG_FILE)
+OUT=$LOGDIR/$CONTAINER_ID
+
+# backup container runtime directory to log directory
+cp -r $RUNTIME_PATH $OUT
+# copy OCI runtime spec to container runtime directory
+cp $SPEC_PATH $OUT/spec.json
+
+# remove non `grep` friendly runtime files (symlinks, binaries, fifos)
+rm $OUT/.crio-lxc/cwd
+rm $OUT/.crio-lxc/init
+rm $OUT/.crio-lxc/syncfifo
 ```
