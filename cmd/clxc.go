@@ -141,11 +141,14 @@ func (c *crioLXC) createContainer() error {
 
 	// An empty tmpfile is created to ensure that createContainer can only succeed once.
 	// The config file is atomically activated in saveConfig.
+	// #nosec
 	f, err := os.OpenFile(c.runtimePath(".config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
 	if err != nil {
 		return err
 	}
-	f.Close()
+	if err := f.Close(); err != nil {
+	  return errors.Wrap(err, "failed to close empty config file")
+	}
 
 	container, err := lxc.NewContainer(c.ContainerID, c.RuntimeRoot)
 	if err != nil {
@@ -335,6 +338,7 @@ func (c *crioLXC) executeRuntimeHook(err error) {
 	// TODO drop privileges, capabilities ?
 	ctx, cancel := context.WithTimeout(context.Background(), clxc.RuntimeHookTimeout)
 	defer cancel()
+	// #nosec
 	cmd := exec.CommandContext(ctx, c.RuntimeHook)
 	cmd.Env = env
 	cmd.Dir = "/"

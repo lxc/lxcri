@@ -54,6 +54,7 @@ func WriteSpec(spec *specs.Spec, specFilePath string) error {
 	return f.Sync()
 }
 
+// WriteFifo writes to the SyncFifo to synchronize container process init 
 func WriteFifo() error {
 	f, err := os.OpenFile(SyncFifoPath, os.O_WRONLY, 0)
 	if err != nil {
@@ -66,6 +67,8 @@ func WriteFifo() error {
 	return f.Close()
 }
 
+// ReadFifo reads the content from the SyncFifo that was written by #WriteFifo.
+// The read operation is aborted after the given timeout.
 func ReadFifo(fifoPath string, timeout time.Duration) error {
 	// #nosec
 	f, err := os.OpenFile(fifoPath, os.O_RDONLY, 0)
