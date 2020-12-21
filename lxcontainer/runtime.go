@@ -17,24 +17,6 @@ import (
 	"gopkg.in/lxc/go-lxc.v2"
 )
 
-// ContainerState represents the state of a container.
-type ContainerState string
-
-const (
-	// StateCreating indicates that the container is being created
-	StateCreating ContainerState = "creating"
-
-	// StateCreated indicates that the runtime has finished the create operation
-	StateCreated ContainerState = "created"
-
-	// StateRunning indicates that the container process has executed the
-	// user-specified program but has not exited
-	StateRunning ContainerState = "running"
-
-	// StateStopped indicates that the container process has exited
-	StateStopped ContainerState = "stopped"
-)
-
 var ErrNotExist = fmt.Errorf("container does not exist")
 var ErrExist = fmt.Errorf("container already exists")
 
@@ -296,7 +278,7 @@ func (c *Runtime) waitCreated(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if initState == StateCreated {
+			if initState == specs.StateCreated {
 				return nil
 			}
 			return fmt.Errorf("unexpected init state %q", initState)
@@ -304,7 +286,7 @@ func (c *Runtime) waitCreated(ctx context.Context) error {
 	}
 }
 
-func (c *Runtime) waitNot(ctx context.Context, state ContainerState) error {
+func (c *Runtime) waitNot(ctx context.Context, state specs.ContainerState) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -333,44 +315,44 @@ func (c *Runtime) wait(ctx context.Context, state lxc.State) bool {
 	}
 }
 
-func (c *Runtime) getContainerState() (ContainerState, error) {
+func (c *Runtime) getContainerState() (specs.ContainerState, error) {
 	state := c.Container.State()
 	switch state {
 	case lxc.STOPPED:
-		return StateStopped, nil
+		return specs.StateStopped, nil
 	case lxc.STARTING:
-		return StateCreating, nil
+		return specs.StateCreating, nil
 	case lxc.RUNNING, lxc.STOPPING, lxc.ABORTING, lxc.FREEZING, lxc.FROZEN, lxc.THAWED:
 		return c.getContainerInitState()
 	default:
-		return StateStopped, fmt.Errorf("unsupported lxc container state %q", state)
+		return specs.StateStopped, fmt.Errorf("unsupported lxc container state %q", state)
 	}
 }
 
 // getContainerInitState returns the detailed state of the container init process.
 // This should be called if the container is in state lxc.RUNNING.
 // On error the caller should call getContainerState() again
-func (c *Runtime) getContainerInitState() (ContainerState, error) {
+func (c *Runtime) getContainerInitState() (specs.ContainerState, error) {
 	initPid := c.Container.InitPid()
 	if initPid < 1 {
-		return StateStopped, nil
+		return specs.StateStopped, nil
 	}
 	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", initPid)
 	cmdline, err := ioutil.ReadFile(cmdlinePath)
 	if os.IsNotExist(err) {
 		// init process died or returned
-		return StateStopped, nil
+		return specs.StateStopped, nil
 	}
 	if err != nil {
 		// it's a serious error if cmdlinePath exists but can't be read
-		return StateStopped, err
+		return specs.StateStopped, err
 	}
 
 	initCmdline := fmt.Sprintf("/.crio-lxc/init\000%s\000", c.ContainerID)
 	if string(cmdline) == initCmdline {
-		return StateCreated, nil
+		return specs.StateCreated, nil
 	}
-	return StateRunning, nil
+	return specs.StateRunning, nil
 }
 
 func (c *Runtime) killContainer(ctx context.Context, signum unix.Signal) error {
@@ -474,8 +456,8 @@ func (c *Runtime) Start(ctx context.Context) error {
 	if err != nil {
 		return errorf("failed to get container state: %w", err)
 	}
-	if state != StateCreated {
-		return fmt.Errorf("invalid container state. expected %q, but was %q", StateCreated, state)
+	if state != specs.StateCreated {
+		return fmt.Errorf("invalid container state. expected %q, but was %q", specs.StateCreated, state)
 	}
 
 	done := make(chan error)
@@ -492,7 +474,7 @@ func (c *Runtime) Start(ctx context.Context) error {
 		}
 	}
 	// wait for container state to change
-	return c.waitNot(ctx, StateCreated)
+	return c.waitNot(ctx, specs.StateCreated)
 }
 
 func (c *Runtime) syncFifoPath() string {
@@ -560,13 +542,12 @@ func (c *Runtime) State() (*specs.State, error) {
 		Annotations: c.Annotations,
 	}
 
-	s, err := c.getContainerState()
-	state.Status = string(s)
+	state.Status, err = c.getContainerState()
 	if err != nil {
 		return nil, errorf("failed to get container state: %w", err)
 	}
 
-	c.Log.Info().Int("pid", state.Pid).Str("status", state.Status).Msg("container state")
+	c.Log.Info().Int("pid", state.Pid).Str("status", string(state.Status)).Msg("container state")
 	return state, nil
 }
 
