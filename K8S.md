@@ -1,6 +1,6 @@
 ## kubernetes
 
-The following skript downloads kubernetes [v1.19.4](https://dl.k8s.io/v1.19.4) and installs it to `/usr/local/bin`.</br>
+The following skript downloads kubernetes [v1.19.6](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.19.md#v1196) and installs it to `/usr/local/bin`.</br>
 You have to create the `kubelet.service` and `10-kubeadm.conf` before running the script.
 
 ```sh
@@ -15,12 +15,12 @@ You have to create the `kubelet.service` and `10-kubeadm.conf` before running th
 # * run this script again
 
 ARCH="linux-amd64"
-RELEASE="1.19.4"
+RELEASE="1.19.6"
 ARCHIVE=kubernetes-server-$ARCH.tar.gz
-CHECKSUM="fc9de14121af682af167ef99ce8a3803c25e92ef4739ed7eb592eadb30086b2cb9ede51d57816d1c3835f6202753d726eba804b839ae9cd516eff4e94c81c189"
+CHECKSUM="126f6ab16d9e007ff75c58fab20fbaf4c6ff16212b8bbf5e71105f0f3611867ad1410ee05cd39b4e4e6cb3b6313fcff4b12ec91fa430b38f29d72221dda8c624"
 DESTDIR="/usr/local/bin"
 
-[ -e "$ARCHIVE" ] || wget https://dl.k8s.io/v$RELEASE/$FILE
+[ -e "$ARCHIVE" ] || wget https://dl.k8s.io/v$RELEASE/$ARCHIVE
 
 echo "$CHECKSUM $ARCHIVE" | sha512sum -c || exit 1
 
@@ -98,7 +98,7 @@ kind: KubeletConfiguration
 cgroupDriver: systemd
 ---
 kind: ClusterConfiguration
-kubernetesVersion: v1.19.4
+kubernetesVersion: v1.19.6
 apiVersion: kubeadm.k8s.io/v1beta2
 apiServer:
   timeoutForControlPlane: 4m0s
