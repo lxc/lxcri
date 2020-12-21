@@ -66,13 +66,6 @@ func configureDeviceController(clxc *Runtime, spec *specs.Spec) error {
 
 	if !clxc.CgroupDevices {
 		clxc.Log.Warn().Msg("cgroup device controller is disabled (access to all devices is granted)")
-		// allow read-write-mknod access to all char and block devices
-		if err := clxc.setConfigItem(devicesAllow, "b *:* rwm"); err != nil {
-			return err
-		}
-		if err := clxc.setConfigItem(devicesAllow, "c *:* rwm"); err != nil {
-			return err
-		}
 		return nil
 	}
 
