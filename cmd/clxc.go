@@ -26,13 +26,6 @@ const (
 	timeFormatLXCMillis      = "20060102150405.000"
 	defaultContainerLogLevel = lxc.WARN
 	defaultLogLevel          = zerolog.WarnLevel
-
-	// ConfigDir is the path to the crio-lxc resources relative to the container rootfs.
-	configDir = "/.crio-lxc"
-	// SyncFifoPath is the path to the fifo used to block container start in init until start cmd is called.
-	syncFifoPath = configDir + "/syncfifo"
-	// InitCmd is the path where the init binary is bind mounted.
-	initCmd = configDir + "/init"
 )
 
 // ContainerState represents the state of a container.

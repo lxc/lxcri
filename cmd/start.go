@@ -58,7 +58,7 @@ func doStart(ctx *cli.Context) error {
 
 func readFifo() error {
 	// #nosec
-	f, err := os.OpenFile(clxc.runtimePath(syncFifoPath), os.O_RDONLY, 0)
+	f, err := os.OpenFile(syncFifoPath(), os.O_RDONLY, 0)
 	if err != nil {
 		return errors.Wrap(err, "failed to open sync fifo")
 	}
