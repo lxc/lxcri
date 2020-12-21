@@ -1,4 +1,4 @@
-package main
+package lxcontainer
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func configureMounts(spec *specs.Spec) error {
+func configureMounts(clxc *Runtime, spec *specs.Spec) error {
 	// excplicitly disable auto-mounting
 	if err := clxc.setConfigItem("lxc.mount.auto", ""); err != nil {
 		return err

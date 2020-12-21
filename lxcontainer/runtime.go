@@ -1,4 +1,4 @@
-package main
+package lxcontainer
 
 import (
 	"context"
@@ -22,9 +22,7 @@ import (
 // logging constants
 const (
 	// liblxc timestamp formattime format
-	timeFormatLXCMillis      = "20060102150405.000"
-	defaultContainerLogLevel = lxc.WARN
-	defaultLogLevel          = zerolog.WarnLevel
+	timeFormatLXCMillis = "20060102150405.000"
 )
 
 // ContainerState represents the state of a container.
@@ -52,7 +50,7 @@ var errContainerExist = errors.New("container already exists")
 
 var version string
 
-func versionString() string {
+func Version() string {
 	return fmt.Sprintf("%s (%s) (lxc:%s)", version, runtime.Version(), lxc.Version())
 }
 
@@ -205,7 +203,7 @@ func (c *Runtime) configureCgroupPath() error {
 }
 
 // Release releases/closes allocated resources (lxc.Container, LogFile)
-func (c Runtime) release() error {
+func (c Runtime) Release(err error) error {
 	if c.Container != nil {
 		if err := c.Container.Release(); err != nil {
 			log.Error().Err(err).Msg("failed to release container")
@@ -217,7 +215,29 @@ func (c Runtime) release() error {
 	return nil
 }
 
-func (c *Runtime) configureLogging() error {
+
+	cmdDuration := time.Since(startTime)
+	if err != nil {
+		log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
+	} else {
+		log.Info().Dur("duration", cmdDuration).Msg("cmd completed")
+	}
+
+	if err := clxc.Release(); err != nil {
+		log.Error().Err(err).Msg("failed to release container")
+	}
+
+	if err != nil {
+		if err, yes := err.(execError); yes {
+			os.Exit(err.ExitStatus())
+		} else {
+			// write diagnostics message to stderr for crio/kubelet
+			println(err.Error())
+			os.Exit(1)
+		}
+	}
+
+func (c *Runtime) ConfigureLogging(cmdName string) error {
 	logDir := filepath.Dir(c.LogFilePath)
 	err := os.MkdirAll(logDir, 0750)
 	if err != nil {
@@ -249,11 +269,11 @@ func (c *Runtime) configureLogging() error {
 	// The ttimestamp is appended to the to the log output because it is dynamically rendered
 	// see https://github.com/rs/zerolog/issues/109
 	log = zerolog.New(c.LogFile).With().Timestamp().Caller().
-		Str("cmd", c.Command).Str("cid", c.ContainerID).Logger()
+		Str("cmd", cmdName).Str("cid", c.ContainerID).Logger()
 
 	level, err := zerolog.ParseLevel(strings.ToLower(c.LogLevel))
 	if err != nil {
-		level = defaultLogLevel
+		level = zerolog.InfoLevel
 		log.Warn().Err(err).Str("val", c.LogLevel).Stringer("default", level).
 			Msg("failed to parse log-level - fallback to default")
 	}
@@ -298,9 +318,9 @@ func (c *Runtime) parseContainerLogLevel() lxc.LogLevel {
 		return lxc.FATAL
 	default:
 		log.Warn().Str("val", c.ContainerLogLevel).
-			Stringer("default", defaultContainerLogLevel).
+			Stringer("default", lxc.WARN).
 			Msg("failed to parse container-log-level - fallback to default")
-		return defaultContainerLogLevel
+		return lxc.WARN
 	}
 }
 
@@ -576,9 +596,13 @@ func (c *Runtime) Start(timeout time.Duration) error {
 	return c.waitRunning(timeout)
 }
 
+func (c *Runtime) syncFifoPath() string {
+	return c.RuntimePath(initDir, "syncfifo")
+}
+
 func (c *Runtime) readFifo() error {
 	// #nosec
-	f, err := os.OpenFile(syncFifoPath(), os.O_RDONLY, 0)
+	f, err := os.OpenFile(c.syncFifoPath(), os.O_RDONLY, 0)
 	if err != nil {
 		return errors.Wrap(err, "failed to open sync fifo")
 	}

@@ -1,4 +1,4 @@
-package main
+package lxcontainer
 
 import (
 	"github.com/stretchr/testify/require"

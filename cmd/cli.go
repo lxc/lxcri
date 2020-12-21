@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lxc/crio-lxc/lxcontainer"
 	"github.com/urfave/cli/v2"
 )
 
@@ -17,13 +18,13 @@ import (
 var envFile = "/etc/default/crio-lxc"
 
 // The singelton that wraps the lxc.Container
-var clxc Runtime
+var clxc lxcontainer.Runtime
 
 func main() {
 	app := cli.NewApp()
 	app.Name = "crio-lxc"
 	app.Usage = "crio-lxc is a CRI compliant runtime wrapper for lxc"
-	app.Version = versionString()
+	app.Version = lxcontainer.Version()
 	// Disable the default ExitErrHandler.
 	// It will call os.Exit if a command returns an error that implements
 	// the cli.ExitCoder interface. E.g an unwrapped error from os.Exec.
@@ -44,14 +45,14 @@ func main() {
 			Name:        "log-level",
 			Usage:       "set the runtime log level (trace|debug|info|warn|error)",
 			EnvVars:     []string{"CRIO_LXC_LOG_LEVEL"},
-			Value:       defaultLogLevel.String(),
+			Value:       "info",
 			Destination: &clxc.LogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-level",
 			Usage:       "set the container process (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
 			EnvVars:     []string{"CRIO_LXC_CONTAINER_LOG_LEVEL"},
-			Value:       strings.ToLower(defaultContainerLogLevel.String()),
+			Value:       "warn",
 			Destination: &clxc.ContainerLogLevel,
 		},
 		&cli.StringFlag{
@@ -161,7 +162,7 @@ func main() {
 	env, envErr := loadEnvFile(envFile)
 	if env != nil {
 		for key, val := range env {
-			if err := setEnvIfNew(key, val); err != nil {
+			if err := setEnv(key, val, false); err != nil {
 				envErr = err
 				break
 			}
@@ -179,35 +180,11 @@ func main() {
 			return errors.New("missing container ID")
 		}
 		clxc.ContainerID = containerID
-		clxc.Command = ctx.Command.Name
 
-		if err := clxc.configureLogging(); err != nil {
+		if err := clxc.ConfigureLogging(ctx.Command.Name); err != nil {
 			return err
 		}
-
-		if env != nil {
-			stat, _ := os.Stat(envFile)
-			if stat != nil && (stat.Mode().Perm()^0640) != 0 {
-				log.Warn().Str("file", envFile).Stringer("mode", stat.Mode().Perm()).Msgf("environment file should have mode %s", os.FileMode(0640))
-			}
-			for key, val := range env {
-				log.Trace().Str("env", key).Str("val", val).Msg("environment file value")
-			}
-			log.Debug().Str("file", envFile).Msg("loaded environment variables from file")
-		} else {
-			if os.IsNotExist(envErr) {
-				log.Warn().Str("file", envFile).Msg("environment file does not exist")
-			} else {
-				return errors.Wrapf(envErr, "failed to load env file %s", envFile)
-			}
-		}
-
-		for _, f := range ctx.Command.Flags {
-			name := f.Names()[0]
-			log.Trace().Str("flag", name).Str("val", ctx.String(name)).Msg("flag value")
-		}
-
-		log.Debug().Strs("args", os.Args).Msg("run cmd")
+	//	log.Debug().Strs("args", os.Args).Msg("run cmd")
 		return nil
 	}
 
@@ -228,60 +205,9 @@ func main() {
 	app.CommandNotFound = func(ctx *cli.Context, cmd string) {
 		fmt.Fprintf(os.Stderr, "undefined subcommand %q cmdline%s\n", cmd, os.Args)
 	}
-
+  
 	err := app.Run(os.Args)
-	cmdDuration := time.Since(startTime)
-	if err != nil {
-		log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
-	} else {
-		log.Info().Dur("duration", cmdDuration).Msg("cmd completed")
-	}
-
-	if err := clxc.release(); err != nil {
-		log.Error().Err(err).Msg("failed to release container")
-	}
-
-	if err != nil {
-		if err, yes := err.(execError); yes {
-			os.Exit(err.ExitStatus())
-		} else {
-			// write diagnostics message to stderr for crio/kubelet
-			println(err.Error())
-			os.Exit(1)
-		}
-	}
-}
-
-func setEnvIfNew(key, val string) error {
-	if _, exist := os.LookupEnv(key); !exist {
-		return os.Setenv(key, val)
-	}
-	return nil
-}
-
-func loadEnvFile(envFile string) (map[string]string, error) {
-	// #nosec
-	data, err := ioutil.ReadFile(envFile)
-	if err != nil {
-		return nil, err
-	}
-	lines := strings.Split(string(data), "\n")
-	env := make(map[string]string, len(lines))
-	for n, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		// skip over comments and blank lines
-		if len(trimmed) == 0 || trimmed[0] == '#' {
-			continue
-		}
-		vals := strings.SplitN(trimmed, "=", 2)
-		if len(vals) != 2 {
-			return nil, fmt.Errorf("invalid environment variable at line %s:%d", envFile, n+1)
-		}
-		key := strings.TrimSpace(vals[0])
-		val := strings.Trim(strings.TrimSpace(vals[1]), `"'`)
-		env[key] = val
-	}
-	return env, nil
+  clxc.Release(err)
 }
 
 var createCmd = cli.Command{
