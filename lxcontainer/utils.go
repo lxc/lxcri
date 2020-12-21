@@ -1,6 +1,7 @@
-package main
+package lxcontainer
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -122,4 +123,9 @@ func encodeFileJSON(dst string, obj interface{}, flags int, mode uint32) error {
 		return fmt.Errorf("failed to close %s: %w", dst, err)
 	}
 	return nil
+}
+
+func nullTerminatedString(data []byte) string {
+	i := bytes.Index(data, []byte{0})
+	return string(data[:i])
 }

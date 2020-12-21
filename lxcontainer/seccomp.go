@@ -1,8 +1,7 @@
-package main
+package lxcontainer
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -21,19 +20,6 @@ var seccompAction = map[specs.LinuxSeccompAction]string{
 	//specs.ActTrace: "trace",
 	//specs.ActLog: "log",
 	//specs.ActKillProcess: "kill_process",
-}
-
-func configureSeccomp(spec *specs.Spec) error {
-	if spec.Linux.Seccomp == nil || len(spec.Linux.Seccomp.Syscalls) == 0 {
-		return nil
-	}
-
-	profilePath := clxc.RuntimePath("seccomp.conf")
-	if err := writeSeccompProfile(profilePath, spec.Linux.Seccomp); err != nil {
-		return err
-	}
-
-	return clxc.setConfigItem("lxc.seccomp.profile", profilePath)
 }
 
 // Note seccomp flags (see `man 2 seccomp`) are currently not supported
@@ -116,11 +102,6 @@ func seccompArchs(seccomp *specs.LinuxSeccomp) ([]string, error) {
 		archs = append(archs, s)
 	}
 	return archs, nil
-}
-
-func nullTerminatedString(data []byte) string {
-	i := bytes.Index(data, []byte{0})
-	return string(data[:i])
 }
 
 func writeSeccompSyscall(w *bufio.Writer, sc specs.LinuxSyscall) error {

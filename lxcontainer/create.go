@@ -1,4 +1,4 @@
-package main
+package lxcontainer
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -19,7 +18,7 @@ import (
 	lxc "gopkg.in/lxc/go-lxc.v2"
 )
 
-func doCreateInternal() error {
+func doCreateInternal(clxc *Runtime) error {
 	err := canExecute(clxc.StartCommand, clxc.ContainerHook, clxc.InitCommand)
 	if err != nil {
 		return err
@@ -46,13 +45,13 @@ func doCreateInternal() error {
 		return errors.Wrap(err, "failed to create container")
 	}
 
-	if err := configureContainer(spec); err != nil {
+	if err := configureContainer(clxc, spec); err != nil {
 		return errors.Wrap(err, "failed to configure container")
 	}
 
 	// #nosec
 	startCmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.ConfigFilePath())
-	if err := runStartCmd(startCmd, spec); err != nil {
+	if err := runStartCmd(clxc, startCmd, spec); err != nil {
 		return errors.Wrap(err, "failed to start container process")
 	}
 	log.Info().Int("cpid", startCmd.Process.Pid).Int("pid", os.Getpid()).Int("ppid", os.Getppid()).Msg("started container process")
@@ -64,8 +63,8 @@ func doCreateInternal() error {
 	return createPidFile(clxc.PidFile, startCmd.Process.Pid)
 }
 
-func configureContainer(spec *specs.Spec) error {
-	if err := configureRootfs(spec); err != nil {
+func configureContainer(clxc *Runtime, spec *specs.Spec) error {
+	if err := configureRootfs(clxc, spec); err != nil {
 		return err
 	}
 
@@ -77,19 +76,19 @@ func configureContainer(spec *specs.Spec) error {
 		return err
 	}
 
-	if err := configureInit(spec); err != nil {
+	if err := configureInit(clxc, spec); err != nil {
 		return err
 	}
 
-	if err := configureMounts(spec); err != nil {
+	if err := configureMounts(clxc, spec); err != nil {
 		return err
 	}
 
-	if err := configureReadonlyPaths(spec); err != nil {
+	if err := configureReadonlyPaths(clxc, spec); err != nil {
 		return err
 	}
 
-	if err := configureNamespaces(spec.Linux.Namespaces); err != nil {
+	if err := configureNamespaces(clxc, spec.Linux.Namespaces); err != nil {
 		return errors.Wrap(err, "failed to configure namespaces")
 	}
 
@@ -106,7 +105,7 @@ func configureContainer(spec *specs.Spec) error {
 	}
 
 	if clxc.Apparmor {
-		if err := configureApparmor(spec); err != nil {
+		if err := configureApparmor(clxc, spec); err != nil {
 			return errors.Wrap(err, "failed to configure apparmor")
 		}
 	} else {
@@ -114,26 +113,42 @@ func configureContainer(spec *specs.Spec) error {
 	}
 
 	if clxc.Seccomp {
-		if err := configureSeccomp(spec); err != nil {
-			return errors.Wrap(err, "failed to configure seccomp")
+		if spec.Linux.Seccomp == nil || len(spec.Linux.Seccomp.Syscalls) == 0 {
+		} else {
+			profilePath := clxc.RuntimePath("seccomp.conf")
+			if err := writeSeccompProfile(profilePath, spec.Linux.Seccomp); err != nil {
+				return err
+			}
+			if err := clxc.setConfigItem("lxc.seccomp.profile", profilePath); err != nil {
+				return err
+			}
 		}
 	} else {
 		log.Warn().Msg("seccomp is disabled")
 	}
 
 	if clxc.Capabilities {
-		if err := configureCapabilities(spec); err != nil {
+		if err := configureCapabilities(clxc, spec); err != nil {
 			return errors.Wrap(err, "failed to configure capabilities")
 		}
 	} else {
 		log.Warn().Msg("capabilities are disabled")
 	}
 
-	if err := setHostname(spec); err != nil {
-		return errors.Wrap(err, "set hostname")
+	if spec.Hostname != "" {
+		if err := clxc.setConfigItem("lxc.uts.name", spec.Hostname); err != nil {
+			return err
+		}
+
+		uts := getNamespace(specs.UTSNamespace, spec.Linux.Namespaces)
+		if uts != nil && uts.Path != "" {
+			if err := setHostname(uts.Path, spec.Hostname); err != nil {
+				return errors.Wrap(err, "set hostname")
+			}
+		}
 	}
 
-	if err := ensureDefaultDevices(spec); err != nil {
+	if err := ensureDefaultDevices(clxc, spec); err != nil {
 		return errors.Wrap(err, "failed to add default devices")
 	}
 
@@ -141,7 +156,7 @@ func configureContainer(spec *specs.Spec) error {
 		return errors.Wrap(err, "failed to configure cgroups path")
 	}
 
-	if err := configureCgroup(spec); err != nil {
+	if err := configureCgroup(clxc, spec); err != nil {
 		return errors.Wrap(err, "failed to configure cgroups")
 	}
 
@@ -161,7 +176,7 @@ func configureContainer(spec *specs.Spec) error {
 	return nil
 }
 
-func configureRootfs(spec *specs.Spec) error {
+func configureRootfs(clxc *Runtime, spec *specs.Spec) error {
 	if err := clxc.setConfigItem("lxc.rootfs.path", spec.Root.Path); err != nil {
 		return err
 	}
@@ -187,7 +202,7 @@ func configureRootfs(spec *specs.Spec) error {
 	return nil
 }
 
-func configureReadonlyPaths(spec *specs.Spec) error {
+func configureReadonlyPaths(clxc *Runtime, spec *specs.Spec) error {
 	rootmnt := clxc.getConfigItem("lxc.rootfs.mount")
 	if rootmnt == "" {
 		return errors.New("lxc.rootfs.mount unavailable")
@@ -201,7 +216,7 @@ func configureReadonlyPaths(spec *specs.Spec) error {
 	return nil
 }
 
-func configureApparmor(spec *specs.Spec) error {
+func configureApparmor(clxc *Runtime, spec *specs.Spec) error {
 	// The value *apparmor_profile*  from crio.conf is used if no profile is defined by the container.
 	aaprofile := spec.Process.ApparmorProfile
 	if aaprofile == "" {
@@ -214,7 +229,7 @@ func configureApparmor(spec *specs.Spec) error {
 // See `man lxc.container.conf` lxc.cap.drop and lxc.cap.keep for details.
 // https://blog.container-solutions.com/linux-capabilities-in-practice
 // https://blog.container-solutions.com/linux-capabilities-why-they-exist-and-how-they-work
-func configureCapabilities(spec *specs.Spec) error {
+func configureCapabilities(clxc *Runtime, spec *specs.Spec) error {
 	keepCaps := "none"
 	if spec.Process.Capabilities != nil {
 		var caps []string
@@ -256,7 +271,7 @@ func addDevicePerms(spec *specs.Spec, devType string, major *int64, minor *int64
 // crio can add devices to containers, but this does not work for privileged containers.
 // See https://github.com/cri-o/cri-o/blob/a705db4c6d04d7c14a4d59170a0ebb4b30850675/server/container_create_linux.go#L45
 // TODO file an issue on cri-o (at least for support)
-func ensureDefaultDevices(spec *specs.Spec) error {
+func ensureDefaultDevices(clxc *Runtime, spec *specs.Spec) error {
 	// make sure autodev is disabled
 	if err := clxc.setConfigItem("lxc.autodev", "0"); err != nil {
 		return err
@@ -305,7 +320,7 @@ func setenv(env []string, key, val string, overwrite bool) []string {
 	return append(env, key+"="+val)
 }
 
-func runStartCmd(cmd *exec.Cmd, spec *specs.Spec) error {
+func runStartCmd(clxc *Runtime, cmd *exec.Cmd, spec *specs.Spec) error {
 	// Start container with a clean environment.
 	// LXC will export variables defined in the config lxc.environment.
 	// The environment variables defined by the container spec are exported within the init cmd CRIO_LXC_INIT_CMD.
@@ -333,7 +348,7 @@ func runStartCmd(cmd *exec.Cmd, spec *specs.Spec) error {
 		if err := clxc.saveConfig(); err != nil {
 			return err
 		}
-		return runStartCmdConsole(cmd, clxc.ConsoleSocket)
+		return runStartCmdConsole(cmd, clxc.ConsoleSocket, clxc.ConsoleSocketTimeout)
 	}
 	if !spec.Process.Terminal {
 		// Inherit stdio from calling process (conmon).
@@ -350,22 +365,22 @@ func runStartCmd(cmd *exec.Cmd, spec *specs.Spec) error {
 		return err
 	}
 
-	if err := writeDevices(spec); err != nil {
+	if err := writeDevices(clxc.RuntimePath("devices.txt"), spec); err != nil {
 		return errors.Wrap(err, "failed to create devices.txt")
 	}
 
-	if err := writeMasked(spec); err != nil {
+	if err := writeMasked(clxc.RuntimePath("masked.txt"), spec); err != nil {
 		return errors.Wrap(err, "failed to create masked.txt file")
 	}
 
 	return cmd.Start()
 }
 
-func writeDevices(spec *specs.Spec) error {
+func writeDevices(dst string, spec *specs.Spec) error {
 	if spec.Linux.Devices == nil {
 		return nil
 	}
-	f, err := os.OpenFile(clxc.RuntimePath("devices.txt"), os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}
@@ -391,12 +406,12 @@ func writeDevices(spec *specs.Spec) error {
 	return f.Close()
 }
 
-func writeMasked(spec *specs.Spec) error {
+func writeMasked(dst string, spec *specs.Spec) error {
 	// #nosec
 	if spec.Linux.MaskedPaths == nil {
 		return nil
 	}
-	f, err := os.OpenFile(clxc.RuntimePath("masked.txt"), os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
+	f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}
@@ -410,7 +425,7 @@ func writeMasked(spec *specs.Spec) error {
 	return f.Close()
 }
 
-func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string) error {
+func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string, timeout time.Duration) error {
 	addr, err := net.ResolveUnixAddr("unix", consoleSocket)
 	if err != nil {
 		return errors.Wrap(err, "failed to resolve console socket")
@@ -420,7 +435,7 @@ func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string) error {
 		return errors.Wrap(err, "connecting to console socket failed")
 	}
 	defer conn.Close()
-	deadline := time.Now().Add(clxc.ConsoleSocketTimeout)
+	deadline := time.Now().Add(timeout)
 	err = conn.SetDeadline(deadline)
 	if err != nil {
 		return errors.Wrap(err, "failed to set connection deadline")
@@ -446,58 +461,4 @@ func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string) error {
 		return errors.Wrap(err, "failed to send console fd")
 	}
 	return ptmx.Close()
-}
-
-func setHostname(spec *specs.Spec) error {
-	if spec.Hostname == "" {
-		return nil
-	}
-
-	if err := clxc.setConfigItem("lxc.uts.name", spec.Hostname); err != nil {
-		return err
-	}
-
-	// lxc does not set the hostname on shared namespaces
-	for _, ns := range spec.Linux.Namespaces {
-		if ns.Type != specs.UTSNamespace {
-			continue
-		}
-
-		// namespace is not shared
-		if ns.Path == "" {
-			return nil
-		}
-
-		// setns only affects the current thread
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-
-		f, err := os.Open(ns.Path)
-		if err != nil {
-			return errors.Wrapf(err, "failed to open uts namespace %s", ns.Path)
-		}
-		// #nosec
-		defer f.Close()
-
-		self, err := os.Open("/proc/self/ns/uts")
-		if err != nil {
-			return errors.Wrapf(err, "failed to open %s", "/proc/self/ns/uts")
-		}
-		// #nosec
-		defer self.Close()
-
-		err = unix.Setns(int(f.Fd()), unix.CLONE_NEWUTS)
-		if err != nil {
-			return err
-		}
-		err = unix.Sethostname([]byte(spec.Hostname))
-		if err != nil {
-			return err
-		}
-		err = unix.Setns(int(self.Fd()), unix.CLONE_NEWUTS)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

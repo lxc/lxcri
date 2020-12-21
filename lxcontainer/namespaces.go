@@ -1,7 +1,9 @@
-package main
+package lxcontainer
 
 import (
 	"fmt"
+	"os"
+	"runtime"
 	"strings"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -36,7 +38,7 @@ func cloneFlags(namespaces []specs.LinuxNamespace) (int, error) {
 	return flags, nil
 }
 
-func configureNamespaces(namespaces []specs.LinuxNamespace) error {
+func configureNamespaces(clxc *Runtime, namespaces []specs.LinuxNamespace) error {
 	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
 	for _, ns := range namespaces {
 		if _, ok := seenNamespaceTypes[ns.Type]; ok {
@@ -78,4 +80,47 @@ func isNamespaceEnabled(spec *specs.Spec, nsType specs.LinuxNamespaceType) bool 
 		}
 	}
 	return false
+}
+
+func getNamespace(nsType specs.LinuxNamespaceType, namespaces []specs.LinuxNamespace) *specs.LinuxNamespace {
+	for _, n := range namespaces {
+		if n.Type == nsType {
+			return &n
+		}
+	}
+	return nil
+}
+
+// lxc does not set the hostname on shared namespaces
+func setHostname(nsPath string, hostname string) error {
+	// setns only affects the current thread
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	f, err := os.Open(nsPath)
+	if err != nil {
+		return fmt.Errorf("failed to open uts namespace %s: %w", nsPath, err)
+	}
+	// #nosec
+	defer f.Close()
+
+	self, err := os.Open("/proc/self/ns/uts")
+	if err != nil {
+		return fmt.Errorf("failed to open /proc/self/ns/uts: %w", err)
+	}
+	// #nosec
+	defer func() {
+		unix.Setns(int(self.Fd()), unix.CLONE_NEWUTS)
+		self.Close()
+	}()
+
+	err = unix.Setns(int(f.Fd()), unix.CLONE_NEWUTS)
+	if err != nil {
+		return fmt.Errorf("failed to switch to UTS namespace %s: %w", nsPath, err)
+	}
+	err = unix.Sethostname([]byte(hostname))
+	if err != nil {
+		return fmt.Errorf("unix.Sethostname failed: %w", err)
+	}
+	return nil
 }

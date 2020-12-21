@@ -1,4 +1,4 @@
-package main
+package lxcontainer
 
 import (
 	"bytes"
@@ -18,9 +18,9 @@ import (
 // https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md
 // TODO New spec will contain a property Unified for cgroupv2 properties
 // https://github.com/opencontainers/runtime-spec/blob/master/config-linux.md#unified
-func configureCgroup(spec *specs.Spec) error {
+func configureCgroup(clxc *Runtime, spec *specs.Spec) error {
 	if devices := spec.Linux.Resources.Devices; devices != nil {
-		if err := configureDeviceController(spec); err != nil {
+		if err := configureDeviceController(clxc, spec); err != nil {
 			return err
 		}
 	}
@@ -30,7 +30,7 @@ func configureCgroup(spec *specs.Spec) error {
 	}
 
 	if cpu := spec.Linux.Resources.CPU; cpu != nil {
-		if err := configureCPUController(cpu); err != nil {
+		if err := configureCPUController(clxc, cpu); err != nil {
 			return err
 		}
 	}
@@ -54,7 +54,7 @@ func configureCgroup(spec *specs.Spec) error {
 	return nil
 }
 
-func configureDeviceController(spec *specs.Spec) error {
+func configureDeviceController(clxc *Runtime, spec *specs.Spec) error {
 	devicesAllow := "lxc.cgroup2.devices.allow"
 	devicesDeny := "lxc.cgroup2.devices.deny"
 
@@ -123,7 +123,7 @@ func configureDeviceController(spec *specs.Spec) error {
 	return nil
 }
 
-func configureCPUController(linux *specs.LinuxCPU) error {
+func configureCPUController(clxc *Runtime, slinux *specs.LinuxCPU) error {
 	// CPU resource restriction configuration
 	// use strconv.FormatUint(n, 10) instead of fmt.Sprintf ?
 	log.Debug().Msg("TODO configure cgroup cpu controller")

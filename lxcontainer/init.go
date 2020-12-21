@@ -1,4 +1,4 @@
-package main
+package lxcontainer
 
 import (
 	"fmt"
@@ -16,20 +16,14 @@ const (
 	initDir = "/.crio-lxc"
 )
 
-func syncFifoPath() string {
-	return clxc.RuntimePath(initDir, "syncfifo")
-}
-
 func createFifo(dst string, uid int, gid int, mode uint32) error {
-	//prevMask := unix.Umask(0000) // ?
-	//defer unix.Umask(prevMask)   // ?
 	if err := unix.Mkfifo(dst, mode); err != nil {
 		return err
 	}
 	return unix.Chown(dst, uid, gid)
 }
 
-func configureInit(spec *specs.Spec) error {
+func configureInit(clxc *Runtime, spec *specs.Spec) error {
 	runtimeInitDir := clxc.RuntimePath(initDir)
 	rootfsInitDir := filepath.Join(spec.Root.Path, initDir)
 
@@ -58,7 +52,7 @@ func configureInit(spec *specs.Spec) error {
 	gid := int(spec.Process.User.GID)
 
 	// create files required for crio-lxc-init
-	if err := createFifo(syncFifoPath(), uid, gid, 0600); err != nil {
+	if err := createFifo(clxc.syncFifoPath(), uid, gid, 0600); err != nil {
 		return errors.Wrapf(err, "failed to create sync fifo")
 	}
 
@@ -72,7 +66,7 @@ func configureInit(spec *specs.Spec) error {
 		return err
 	}
 
-	if err := configureInitUser(spec); err != nil {
+	if err := configureInitUser(clxc, spec); err != nil {
 		return err
 	}
 
@@ -129,7 +123,7 @@ func createList(dst string, entries []string, uid int, gid int, mode uint32) err
 	return unix.Chmod(dst, mode)
 }
 
-func configureInitUser(spec *specs.Spec) error {
+func configureInitUser(clxc *Runtime, spec *specs.Spec) error {
 	// TODO ensure that the user namespace is enabled
 	// See `man lxc.container.conf` lxc.idmap.
 	for _, m := range spec.Linux.UIDMappings {
