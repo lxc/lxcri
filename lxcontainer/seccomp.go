@@ -107,6 +107,15 @@ func writeSeccompSyscall(w *bufio.Writer, sc specs.LinuxSyscall) error {
 		if !ok {
 			return fmt.Errorf("unsupported seccomp action: %s", sc.Action)
 		}
+
+		if sc.Action == specs.ActErrno {
+			var ret uint = 0
+			if sc.ErrnoRet != nil {
+				ret = *sc.ErrnoRet
+			}
+			action = fmt.Sprintf("%s %d", action, ret)
+		}
+
 		if len(sc.Args) == 0 {
 			fmt.Fprintf(w, "%s %s\n", name, action)
 		} else {
