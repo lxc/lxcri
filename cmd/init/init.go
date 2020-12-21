@@ -3,7 +3,6 @@ package main
 import (
 	"github.com/lxc/crio-lxc/cmd/internal"
 	"golang.org/x/sys/unix"
-	"os"
 	"os/exec"
 	"os/user"
 	"strings"
@@ -19,14 +18,8 @@ func main() {
 		panic(err)
 	}
 
-	fifo, err := os.OpenFile(internal.SyncFifoPath, os.O_WRONLY, 0)
-	if err != nil {
-		fail(err, "open sync fifo")
-	}
-
-	_, err = fifo.Write([]byte(internal.SyncFifoContent))
-	if err != nil {
-		fail(err, "write to sync fifo")
+	if err := internal.WriteFifo(); err != nil {
+		fail(err, "write fifo")
 	}
 
 	env := setHome(spec.Process.Env, spec.Process.User.Username, spec.Process.Cwd)

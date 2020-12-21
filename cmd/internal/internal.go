@@ -3,7 +3,9 @@ package internal
 import (
 	"encoding/json"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/pkg/errors"
 	"os"
+	"time"
 )
 
 const (
@@ -50,4 +52,40 @@ func WriteSpec(spec *specs.Spec, specFilePath string) error {
 		return err
 	}
 	return f.Sync()
+}
+
+func WriteFifo() error {
+	f, err := os.OpenFile(SyncFifoPath, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write([]byte(SyncFifoContent))
+	if err != nil {
+		return err
+	}
+	return f.Close()
+}
+
+func ReadFifo(fifoPath string, timeout time.Duration) error {
+	// #nosec
+	f, err := os.OpenFile(fifoPath, os.O_RDONLY, 0)
+	if err != nil {
+		return errors.Wrap(err, "failed to open sync fifo")
+	}
+	err = f.SetDeadline(time.Now().Add(timeout))
+	if err != nil {
+		return errors.Wrap(err, "failed to set deadline")
+	}
+	// #nosec
+	defer f.Close()
+
+	data := make([]byte, len(SyncFifoContent))
+	n, err := f.Read(data)
+	if err != nil {
+		return errors.Wrap(err, "problem reading from fifo")
+	}
+	if n != len(SyncFifoContent) || string(data) != SyncFifoContent {
+		return errors.Errorf("bad fifo content: %s", string(data))
+	}
+	return nil
 }

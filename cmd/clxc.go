@@ -111,7 +111,7 @@ func (c *crioLXC) createContainer() error {
 		return errContainerExist
 	}
 
-	if err := os.MkdirAll(c.runtimePath(), 0700); err != nil {
+	if err := os.Mkdir(c.runtimePath(), 0700); err != nil {
 		return errors.Wrap(err, "failed to create container dir")
 	}
 
@@ -342,27 +342,19 @@ func (c *crioLXC) isContainerStopped() bool {
 // is created, but not yet running/started.
 // This requires the proc filesystem to be mounted on the host.
 func (c *crioLXC) getContainerState() (int, string, error) {
-	switch state := c.Container.State(); state {
-	case lxc.STARTING:
-		return 0, stateCreating, nil
-	case lxc.STOPPED:
+	if c.isContainerStopped() {
 		return 0, stateStopped, nil
 	}
 
-	pid, proc := c.safeGetInitPid()
-	if proc != nil {
-		// #nosec
-		defer proc.Close()
-	}
-	if pid <= 0 {
-		return 0, stateStopped, nil
+	pid := c.Container.InitPid()
+	if pid < 0 {
+		return 0, stateCreating, nil
 	}
 
 	envFile := fmt.Sprintf("/proc/%d/environ", pid)
 	// #nosec
 	data, err := ioutil.ReadFile(envFile)
 	if err != nil {
-		// This is fatal. It should not happen because a filehandle to /proc/%d is open.
 		return 0, stateStopped, errors.Wrapf(err, "failed to read init process environment %s", envFile)
 	}
 
@@ -373,37 +365,4 @@ func (c *crioLXC) getContainerState() (int, string, error) {
 		}
 	}
 	return pid, stateRunning, nil
-}
-
-func (c *crioLXC) safeGetInitPid() (pid int, proc *os.File) {
-	pid = c.Container.InitPid()
-	if pid <= 0 {
-		// Errors returned from safeGetInitPid indicate that the init process has died.
-		return 0, nil
-	}
-	// Open the proc directory of the init process to avoid that
-	// it's PID is recycled before it receives the signal.
-	proc, err := os.Open(fmt.Sprintf("/proc/%d", pid))
-
-	// double check that the init process still exists, and the proc
-	// directory actually belongs to the init process.
-	pid2 := c.Container.InitPid()
-	if pid2 != pid {
-		if proc != nil {
-			// #nosec
-			proc.Close()
-		}
-		// init process has died which should only happen if /proc/%d was not opened
-		return 0, nil
-	}
-
-	// The init PID still exists, but /proc/{pid} can not be opened.
-	// The only reason maybe that the proc filesystem is not mounted.
-	// It's unlikely a permissions problem because crio runs as privileged process.
-	// This leads to race conditions and should appear in the logs.
-	if proc == nil {
-		log.Error().Err(err).Int("pid", pid).Msg("failed to open /proc directory for init PID - procfs mounted?")
-	}
-
-	return pid, proc
 }
