@@ -69,7 +69,7 @@ In production it's recommended that you replace the environment file atomically.
 
 E.g the environment file `/etc/default/crio-lxc` could look like this:
 
-```
+```sh
 CRIO_LXC_LOG_LEVEL=debug
 CRIO_LXC_CONTAINER_LOG_LEVEL=debug
 #CRIO_LXC_LOG_FILE=
@@ -174,7 +174,7 @@ The process environment contains the following variables:
 
 Example script `crio-lxc-backup.sh` that backs up any container runtime directory:
 
-```
+```sh
 #!/bin/sh
 
 LOGDIR=$(dirname $LOG_FILE)
