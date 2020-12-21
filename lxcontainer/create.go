@@ -32,9 +32,13 @@ func (clxc *Runtime) Create(ctx context.Context) error {
 	if err := isFilesystem(cgroupRoot, "cgroup2"); err != nil {
 		return errorf("ccgroup2 not mounted on %s: %w", cgroupRoot, err)
 	}
-	// TODO test this version
+
+	if !lxc.VersionAtLeast(3, 1, 0) {
+		return errorf("liblxc runtime version is %s, but >= 3.1.0 is required", lxc.Version())
+	}
+
 	if !lxc.VersionAtLeast(4, 0, 5) {
-		return errorf("liblxc runtime version is %s, but >= 4.0.5 is required", lxc.Version())
+		clxc.Log.Warn().Msgf("liblxc runtime version >= 4.0.5 is recommended (was %s)", lxc.Version())
 	}
 
 	spec, err := clxc.ReadSpec()
