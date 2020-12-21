@@ -1,36 +1,31 @@
+// +build go1.10
+
 package main
 
 import (
 	"fmt"
-	"os"
-	"syscall"
+	"strconv"
 
 	"golang.org/x/sys/unix"
 
-	//"github.com/apex/log"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
-
-	lxc "gopkg.in/lxc/go-lxc.v2"
+	"github.com/urfave/cli/v2"
 )
 
 var killCmd = cli.Command{
 	Name:   "kill",
 	Usage:  "sends a signal to a container",
 	Action: doKill,
-	ArgsUsage: `[containerID]
+	ArgsUsage: `[containerID] [signal]
 
 <containerID> is the ID of the container to send a signal to
+[signal] name (without SIG) or signal num ?
 `,
-	Flags: []cli.Flag{
-		cli.StringFlag{
-			Name:  "signal",
-			Usage: "the signal to send, as a string",
-			Value: "TERM",
-		},
-	},
 }
-var signalMap = map[string]syscall.Signal{
+
+const sigzero = unix.Signal(0)
+
+var signalMap = map[string]unix.Signal{
 	"ABRT":   unix.SIGABRT,
 	"ALRM":   unix.SIGALRM,
 	"BUS":    unix.SIGBUS,
@@ -67,39 +62,53 @@ var signalMap = map[string]syscall.Signal{
 	"XFSZ":   unix.SIGXFSZ,
 }
 
-func doKill(ctx *cli.Context) error {
-	containerID := ctx.Args().Get(0)
-	if len(containerID) == 0 {
-		fmt.Fprintf(os.Stderr, "missing container ID\n")
-		cli.ShowCommandHelpAndExit(ctx, "state", 1)
+// Retrieve the PID from container init process safely.
+func getSignal(ctx *cli.Context) (unix.Signal, error) {
+	sig := ctx.Args().Get(1)
+	if len(sig) == 0 {
+		return sigzero, errors.New("missing signal")
 	}
 
-	exists, err := containerExists(containerID)
-	if err != nil {
-		return errors.Wrap(err, "failed to check if container exists")
+	// handle numerical signal value
+	if num, err := strconv.Atoi(sig); err == nil {
+		for _, signum := range signalMap {
+			if num == int(signum) {
+				return signum, nil
+			}
+		}
+		return sigzero, fmt.Errorf("signal %s does not exist", sig)
 	}
+
+	// handle string signal value
+	signum, exists := signalMap[sig]
 	if !exists {
-		return fmt.Errorf("container '%s' not found", containerID)
+		return unix.Signal(0), fmt.Errorf("signal %s does not exist", sig)
 	}
+	return signum, nil
+}
 
-	c, err := lxc.NewContainer(containerID, LXC_PATH)
+func doKill(ctx *cli.Context) error {
+	err := clxc.loadContainer()
 	if err != nil {
 		return errors.Wrap(err, "failed to load container")
 	}
-	defer c.Release()
 
-	if err := configureLogging(ctx, c); err != nil {
-		return errors.Wrap(err, "failed to configure logging")
-
+	// Attempting to send a signal to a container that is neither created nor running
+	// MUST have no effect on the container and MUST generate an error.
+	if !clxc.Container.Running() {
+		return fmt.Errorf("container is not running")
 	}
 
-	if c.Running() && checkHackyPreStart(c) == "started" {
-		pid := c.InitPid()
-
-		if err := unix.Kill(pid, signalMap[ctx.String("signal")]); err != nil {
-			return errors.Wrap(err, "failed to send signal")
-		}
-		return nil
+	signum, err := getSignal(ctx)
+	if err != nil {
+		return errors.Wrap(err, "invalid signal param")
 	}
-	return fmt.Errorf("container '%s' is not running", containerID)
+	pid, proc := clxc.safeGetInitPid()
+	if proc != nil {
+		defer proc.Close()
+	}
+	if pid <= 0 {
+		return errors.New("init process is not running")
+	}
+	return unix.Kill(pid, signum)
 }

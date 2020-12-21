@@ -14,17 +14,17 @@ func fail(err error, step string) {
 }
 
 func main() {
-	spec, err := internal.ReadSpec(internal.INIT_SPEC)
+	spec, err := internal.ReadSpec(internal.InitSpec)
 	if err != nil {
 		panic(err)
 	}
 
-	fifo, err := os.OpenFile(internal.SYNC_FIFO_PATH, os.O_WRONLY, 0)
+	fifo, err := os.OpenFile(internal.SyncFifoPath, os.O_WRONLY, 0)
 	if err != nil {
 		fail(err, "open sync fifo")
 	}
 
-	_, err = fifo.Write([]byte(internal.SYNC_FIFO_CONTENT))
+	_, err = fifo.Write([]byte(internal.SyncFifoContent))
 	if err != nil {
 		fail(err, "write to sync fifo")
 	}

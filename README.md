@@ -13,6 +13,28 @@ make
 Then specify the `crio-lxc` binary you just built as the value for
 `default_runtime` in the `crio.runtime` section of `/etc/crio/crio.conf`.
 
+#### change liblxc source path
+
+The installation prefix environment variable is set to `PREFIX=/usr/local` by default.
+The library source path for `pkg-config` is set to `$PREFIX/lib/pkg-config` by default.
+You can change that by setting the `PKG_CONFIG_PATH` environment variable.
+
+E.g to install binaries in `/opt/bin` and use liblxc from `/usr/lib`:
+
+	PREFIX=/opt PKG_CONFIG_PATH=/usr/lib/pkgconfig make install
+
+#### rebuild all libraries
+
+To rebuild all libraries set `GOFLAGS=-a`.
+E.g after an liblxc upgrade the go-lxc library must be rebuild.
+
+	make clean
+	GOFLAGS=-a make
+
+### cri-o
+
+crio-lxc-install 
+
 ## Notes
 
 Note that you must have a new enough liblxc, one which supports the
@@ -51,3 +73,33 @@ You'll also need conntrack installed:
 ```
 apt install conntrack
 ```
+
+You have to install [bats](https://github.com/bats-core/bats-core) to run the tests.
+On debian you can install bats with:
+	
+	apt-get install bats
+
+
+To keep the tempdir of of a test run, you have to create the lockfile `.keeptempdirs` 
+in the top-level of this repository.
+
+	touch .keeptempdirs
+
+To debug `crictl` calls within a test run:
+
+	CRICTLDEBUG="-D" make basic.bats
+
+`bats` does not show any output when the test was successful.
+The logfile is created in /tmp and deleted when the test was successful.
+To watch the test output while the test is running:
+
+	tail -f /tmp/bats.*.log
+
+Expand multi-line output int cri-o log (e.g stacktrace)
+
+echo "output" | sed 's/\\n\\t/\n/g' 
+
+
+# TODO
+## generate nice buttons for the project page
+https://goreportcard.com

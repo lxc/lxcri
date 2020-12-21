@@ -7,14 +7,20 @@ import (
 )
 
 const (
-	// CFG_DIR is bind mounted (readonly) to container
-	CFG_DIR           = "/.crio-lxc"
-	SYNC_FIFO_PATH    = CFG_DIR + "/syncfifo"
-	SYNC_FIFO_CONTENT = "meshuggah rocks"
-	INIT_CMD          = CFG_DIR + "/init"
-	INIT_SPEC         = CFG_DIR + "/spec.json"
+	// ConfigDir is the path to the crio-lxc resources relative to the container rootfs.
+	ConfigDir = "/.crio-lxc"
+	// SyncFifoPath is the path to the fifo used to block container start in init until start cmd is called.
+	SyncFifoPath = ConfigDir + "/syncfifo"
+	// SyncFifoContent is the content exchanged through the sync fifo.
+	SyncFifoContent = "meshuggah rocks"
+	// InitCmd is the path where the init binary is bind mounted.
+	InitCmd = ConfigDir + "/init"
+	// InitSpec is the path where the modified runtime spec is written to.
+	// The init command loads the spec from this path.
+	InitSpec = ConfigDir + "/spec.json"
 )
 
+// ReadSpec deserializes the JSON encoded runtime spec from the given path.
 func ReadSpec(specFilePath string) (*specs.Spec, error) {
 	specFile, err := os.Open(specFilePath)
 	if err != nil {
@@ -29,11 +35,15 @@ func ReadSpec(specFilePath string) (*specs.Spec, error) {
 	return spec, nil
 }
 
+// WriteSpec serializes the runtime spec to JSON and writes it to the given path.
 func WriteSpec(spec *specs.Spec, specFilePath string) error {
 	f, err := os.OpenFile(specFilePath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0444)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	return json.NewEncoder(f).Encode(spec)
+	if err := json.NewEncoder(f).Encode(spec); err != nil {
+		return err
+	}
+	return f.Sync()
 }

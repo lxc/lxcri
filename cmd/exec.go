@@ -40,7 +40,7 @@ var execCmd = cli.Command{
 }
 
 func doExec(ctx *cli.Context) error {
-	err := clxc.LoadContainer()
+	err := clxc.loadContainer()
 	if err != nil {
 		return errors.Wrap(err, "failed to load container")
 	}
@@ -89,12 +89,12 @@ func doExec(ctx *cli.Context) error {
 	}
 
 	// Load container spec to get the list of supported namespaces.
-	spec, err := internal.ReadSpec(clxc.RuntimePath(internal.INIT_SPEC))
+	spec, err := internal.ReadSpec(clxc.runtimePath(internal.InitSpec))
 	if err != nil {
 		return errors.Wrap(err, "failed to read container runtime spec")
 	}
 	for _, ns := range spec.Linux.Namespaces {
-		n, supported := NamespaceMap[ns.Type]
+		n, supported := namespaceMap[ns.Type]
 		if !supported {
 			return fmt.Errorf("can not attach to %s: unsupported namespace", ns.Type)
 		}
@@ -120,12 +120,13 @@ func doExec(ctx *cli.Context) error {
 			return nil
 		}
 		return createPidFile(pidFile, pid)
-	} else {
-		exitStatus, err := c.RunCommandStatus(procArgs, attachOpts)
-		if err != nil {
-			return errors.Wrapf(err, "c.RunCommandStatus returned with exit code %d", exitStatus)
-		}
-		log.Debug().Int("exit", exitStatus).Msg("cmd executed synchronous")
 	}
+
+	exitStatus, err := c.RunCommandStatus(procArgs, attachOpts)
+	if err != nil {
+		return errors.Wrapf(err, "c.RunCommandStatus returned with exit code %d", exitStatus)
+	}
+	log.Debug().Int("exit", exitStatus).Msg("cmd executed synchronous")
+
 	return nil
 }
