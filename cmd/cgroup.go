@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -70,6 +71,12 @@ func configureCgroupPath(linux *specs.Linux) error {
 		return clxc.setConfigItem("lxc.cgroup.dir", linux.CgroupsPath)
 	}
 	cgPath := parseSystemdCgroupPath(linux.CgroupsPath)
+
+	/*
+		if err := enableCgroupControllers(cgPath); err != nil {
+			return errors.Wrapf(err, "cgroup path error")
+		}
+	*/
 	// @since lxc @a900cbaf257c6a7ee9aa73b09c6d3397581d38fb
 	// checking for on of the config items shuld be enough, because they were introduced together ...
 	if supportsConfigItem("lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor") {
@@ -212,6 +219,14 @@ func (cg cgroupPath) String() string {
 	return filepath.Join(append(cg.Slices, cg.Scope)...)
 }
 
+func (cg cgroupPath) SlicePath() string {
+	return filepath.Join("/sys/fs/cgroup", filepath.Join(cg.Slices...))
+}
+
+func (cg cgroupPath) ScopePath() string {
+	return filepath.Join(cg.SlicePath(), cg.Scope)
+}
+
 // kubernetes creates the cgroup hierarchy which can be changed by serveral cgroup related flags.
 // kubepods.slice/kubepods-besteffort.slice/kubepods-besteffort-pod87f8bc68_7c18_4a1d_af9f_54eff815f688.slice
 // kubepods-burstable-pod9da3b2a14682e1fb23be3c2492753207.slice:crio:fe018d944f87b227b3b7f86226962639020e99eac8991463bf7126ef8e929589
@@ -351,4 +366,52 @@ func killCgroupProcs(scope string) (int, error) {
 	}
 
 	return numPids, nil
+}
+
+func enableCgroupControllers(cg cgroupPath) error {
+	slice := cg.ScopePath()
+	// #nosec
+	if err := os.MkdirAll(slice, 755); err != nil {
+		return err
+	}
+	// enable all available controllers in the scope
+	data, err := ioutil.ReadFile("/sys/fs/cgroup/cgroup.controllers")
+	if err != nil {
+		return errors.Wrap(err, "failed to read cgroup.controllers")
+	}
+	controllers := strings.Split(strings.TrimSpace(string(data)), " ")
+
+	var b strings.Builder
+	for i, c := range controllers {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteByte('+')
+		b.WriteString(c)
+	}
+	b.WriteString("\n")
+
+	s := b.String()
+
+	base := "/sys/fs/cgroup"
+	for _, elem := range cg.Slices {
+		base = filepath.Join(base, elem)
+		c := filepath.Join(base, "cgroup.subtree_control")
+		err := ioutil.WriteFile(c, []byte(s), 0)
+		if err != nil {
+			return errors.Wrapf(err, "failed to enable cgroup controllers in %s", base)
+		}
+		log.Info().Str("file", base).Str("controllers", s).Msg("cgroup activated")
+	}
+	return nil
+}
+
+func auditCgroupSubtreeControl(cg cgroupPath, auditKey string) error {
+	log.Debug().Str("file", cg.SlicePath()).Str("key", auditKey).Msg("audit cgroup subtree control")
+	watchPath := filepath.Join(cg.SlicePath(), "cgroup.subtree_control")
+	out, err := exec.Command("auditctl", "-w", watchPath, "-p", "w", "-k", auditKey).CombinedOutput()
+	if err != nil {
+		return errors.Wrapf(err, "auditctl error %s", string(out))
+	}
+	return nil
 }
