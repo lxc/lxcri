@@ -3,14 +3,11 @@ package main
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
-	"github.com/apex/log"
-	//	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/lxc/crio-lxc/cmd/internal"
 	"github.com/pkg/errors"
-	"github.com/urfave/cli"
-
-	lxc "gopkg.in/lxc/go-lxc.v2"
+	"github.com/urfave/cli/v2"
+	"time"
 )
 
 var startCmd = cli.Command{
@@ -21,68 +18,44 @@ var startCmd = cli.Command{
 
 starts <containerID>
 `,
-}
-
-func checkHackyPreStart(c *lxc.Container) string {
-	hooks := c.ConfigItem("lxc.hook.pre-start")
-	for _, h := range hooks {
-		if h == "/bin/true" {
-			return "started"
-		}
-	}
-	return "prestart"
-}
-
-func setHackyPreStart(c *lxc.Container) {
-	err := c.SetConfigItem("lxc.hook.pre-start", "/bin/true")
-	if err != nil {
-		log.Warnf("Failed to set \"container started\" indicator: %v", err)
-	}
-	err = c.SaveConfigFile(filepath.Join(LXC_PATH, c.Name(), "config"))
-	if err != nil {
-		log.Warnf("Failed to save \"container started\" indicator: %v", err)
-	}
+	Flags: []cli.Flag{
+		&cli.DurationFlag{
+			Name:        "timeout",
+			Usage:       "timeout for reading from syncfifo",
+			EnvVars:     []string{"CRIO_LXC_TIMEOUT_START"},
+			Value:       time.Second * 30,
+			Destination: &clxc.StartTimeout,
+		},
+	},
 }
 
 func doStart(ctx *cli.Context) error {
-	containerID := ctx.Args().Get(0)
-	if len(containerID) == 0 {
-		fmt.Fprintf(os.Stderr, "missing container ID\n")
-		cli.ShowCommandHelpAndExit(ctx, "state", 1)
-	}
-
-	log.Infof("about to create container")
-	c, err := lxc.NewContainer(containerID, LXC_PATH)
+	fifoPath := clxc.runtimePath(internal.SyncFifoPath)
+	f, err := os.OpenFile(fifoPath, os.O_RDONLY, 0)
+	log.Debug().Err(err).Str("fifo", fifoPath).Msg("open fifo")
 	if err != nil {
-		return errors.Wrap(err, "failed to load container")
+		return errors.Wrap(err, "container not started - failed to open sync fifo")
 	}
-	defer c.Release()
-	log.Infof("checking if running")
-	if !c.Running() {
-		return fmt.Errorf("'%s' is not ready", containerID)
-	}
-	if checkHackyPreStart(c) == "started" {
-		return fmt.Errorf("'%s' already running", containerID)
-	}
-	log.Infof("not running, can start")
-	setHackyPreStart(c)
-	fifoPath := filepath.Join(LXC_PATH, containerID, "syncfifo")
-	log.Infof("opening fifo '%s'", fifoPath)
-	f, err := os.OpenFile(fifoPath, os.O_RDWR, 0)
-	if err != nil {
-		return errors.Wrap(err, "failed to open sync fifo")
-	}
+	defer f.Close()
 
-	log.Infof("opened fifo, reading")
-	data := make([]byte, len(SYNC_FIFO_CONTENT))
-	n, err := f.Read(data)
-	if err != nil {
-		return errors.Wrapf(err, "problem reading from fifo")
-	}
-	if n != len(SYNC_FIFO_CONTENT) || string(data) != SYNC_FIFO_CONTENT {
-		return errors.Errorf("bad fifo content: %s", string(data))
-	}
+	done := make(chan error)
 
-	log.Infof("read '%s' from fifo, done", data)
-	return nil
+	go func() {
+		data := make([]byte, len(internal.SyncFifoContent))
+		n, err := f.Read(data)
+		if err != nil {
+			done <- errors.Wrapf(err, "problem reading from fifo")
+		}
+		if n != len(internal.SyncFifoContent) || string(data) != internal.SyncFifoContent {
+			done <- errors.Errorf("bad fifo content: %s", string(data))
+		}
+		done <- nil
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(clxc.StartTimeout):
+		return fmt.Errorf("timeout reading from syncfifo %s", fifoPath)
+	}
 }

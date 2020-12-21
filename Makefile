@@ -7,7 +7,7 @@ BINS := crio-lxc crio-lxc-start crio-lxc-init crio-lxc-hook
 PREFIX ?= /usr/local
 PKG_CONFIG_PATH ?= $(PREFIX)/lib/pkgconfig
 export PKG_CONFIG_PATH
-LDFLAGS=-s -w -X main.version=$(COMMIT)
+LDFLAGS=-X main.version=$(COMMIT)
 
 all: fmt $(BINS)
 

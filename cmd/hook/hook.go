@@ -25,7 +25,7 @@ func main() {
 		fail(err, "stat for rootfs mount failed "+rootfs)
 	}
 
-	specPath := filepath.Join(rootfs, internal.INIT_SPEC)
+	specPath := filepath.Join(rootfs, internal.InitSpec)
 	spec, err := internal.ReadSpec(specPath)
 	if err != nil {
 		fail(err, "parse spec "+specPath)
@@ -75,6 +75,7 @@ func createDevice(spec *specs.Spec, dev specs.LinuxDevice) error {
 		devMode = int(unix.Mkdev(uint32(dev.Major), uint32(dev.Minor)))
 	}
 
+	// ignore error (mknod will fail)
 	os.MkdirAll(filepath.Dir(dev.Path), 0755)
 
 	err := unix.Mknod(dev.Path, mode, devMode)
