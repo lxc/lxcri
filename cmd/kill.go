@@ -98,11 +98,7 @@ func doKill(ctx *cli.Context) error {
 		return errors.Wrap(err, "failed to load container")
 	}
 
-	pid, proc := clxc.safeGetInitPid()
-	if proc != nil {
-		// #nosec
-		defer proc.Close()
-	}
+	pid := clxc.Container.InitPid()
 	if pid <= 0 {
 		return errors.New("init process is neither running nor created")
 	}

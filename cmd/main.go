@@ -20,6 +20,10 @@ func main() {
 	app.Name = "crio-lxc"
 	app.Usage = "crio-lxc is a CRI compliant runtime wrapper for lxc"
 	app.Version = versionString()
+	// The default handler will exit the appp if the command returns an error
+	// that implements the cli.ExitCoder interface.
+	// E.g an unwrapped error from os.Exec
+	app.ExitErrHandler = func(context *cli.Context, err error) {}
 	app.Commands = []*cli.Command{
 		&stateCmd,
 		&createCmd,
@@ -194,7 +198,7 @@ func main() {
 
 	// Disable the default error messages for cmdline errors.
 	// By default the app/cmd help is printed to stdout, which produces garbage in cri-o log output.
-	// Instead the cmdline is reflected to identify cmdline interface errors
+	// Instead the cmdline is printed to stderr to identify cmdline interface errors.
 	errUsage := func(context *cli.Context, err error, isSubcommand bool) error {
 		fmt.Fprintf(os.Stderr, "usage error %s: %s\n", err, os.Args)
 		return err

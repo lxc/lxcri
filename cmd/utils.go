@@ -2,12 +2,23 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 )
 
-// createPidFile atomically creates a pid file for the given pid at the given path
 func createPidFile(path string, pid int) error {
+	return createPidFileSimple(path, pid)
+}
+
+func createPidFileSimple(path string, pid int) error {
+	return ioutil.WriteFile(path, []byte(strconv.Itoa(pid)), 0640)
+}
+
+// createPidFile atomically creates a pid file for the given pid at the given path
+func createPidFileComplex(path string, pid int) error {
 	tmpDir := filepath.Dir(path)
 	tmpName := filepath.Join(tmpDir, fmt.Sprintf(".%s", filepath.Base(path)))
 
@@ -25,4 +36,13 @@ func createPidFile(path string, pid int) error {
 		return err
 	}
 	return os.Rename(tmpName, path)
+}
+
+func readPidFile(path string) (int, error) {
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	s := strings.TrimSpace(string(data))
+	return strconv.Atoi(s)
 }

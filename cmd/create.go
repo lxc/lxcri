@@ -45,10 +45,11 @@ var createCmd = cli.Command{
 			Destination: &clxc.PidFile,
 		},
 		&cli.DurationFlag{
-			Name:        "timeout",
-			Usage:       "timeout for container creation",
-			EnvVars:     []string{"CRIO_LXC_CREATE_TIMEOUT"},
-			Value:       time.Second * 60,
+			Name:    "timeout",
+			Usage:   "timeout for sending pty master to socket",
+			EnvVars: []string{"CRIO_LXC_CREATE_TIMEOUT"},
+			Value:   time.Second * 60,
+			// TODO rename to console-socket-timeout
 			Destination: &clxc.CreateTimeout,
 		},
 	},
@@ -107,12 +108,12 @@ func doCreateInternal() error {
 
 	// #nosec
 	startCmd := exec.Command(clxc.StartCommand, clxc.Container.Name(), clxc.RuntimeRoot, clxc.configFilePath())
-	if err := runStartCmd(startCmd, spec, clxc.CreateTimeout); err != nil {
-		return err
+	if err := runStartCmd(startCmd, spec); err != nil {
+		return errors.Wrap(err, "failed to start container process")
 	}
-	ps := startCmd.ProcessState
-	log.Info().Int("pid", ps.Pid()).Int("status", ps.ExitCode()).Msg("started container process")
-	return nil
+	log.Info().Int("pid", startCmd.Process.Pid).Msg("started container process")
+	return createPidFile(clxc.PidFile, startCmd.Process.Pid)
+
 }
 
 func configureContainer(spec *specs.Spec) error {
@@ -445,7 +446,7 @@ func ensureDefaultDevices(spec *specs.Spec) error {
 	return nil
 }
 
-func runStartCmd(cmd *exec.Cmd, spec *specs.Spec, timeout time.Duration) error {
+func runStartCmd(cmd *exec.Cmd, spec *specs.Spec) error {
 	// Start container with a clean environment.
 	// LXC will export variables defined in the config lxc.environment.
 	// The environment variables defined by the container spec are exported within the init cmd CRIO_LXC_INIT_CMD.
@@ -477,16 +478,7 @@ func runStartCmd(cmd *exec.Cmd, spec *specs.Spec, timeout time.Duration) error {
 	if err := internal.WriteSpec(spec, clxc.runtimePath(internal.InitSpec)); err != nil {
 		return errors.Wrapf(err, "failed to write init spec")
 	}
-
-	if err := cmd.Start(); err != nil {
-		return errors.Wrap(err, "failed to start container process")
-	}
-
-	if clxc.PidFile != "" {
-		log.Debug().Str("file", clxc.PidFile).Msg("creating PID file")
-		return createPidFile(clxc.PidFile, cmd.Process.Pid)
-	}
-	return nil
+	return cmd.Start()
 }
 
 func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string) error {
@@ -499,7 +491,7 @@ func runStartCmdConsole(cmd *exec.Cmd, consoleSocket string) error {
 		return errors.Wrap(err, "connecting to console socket failed")
 	}
 	defer conn.Close()
-	deadline := time.Now().Add(time.Second * 10)
+	deadline := time.Now().Add(time.Second * clxc.CreateTimeout)
 	err = conn.SetDeadline(deadline)
 	if err != nil {
 		return errors.Wrap(err, "failed to set connection deadline")
