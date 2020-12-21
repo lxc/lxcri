@@ -400,6 +400,7 @@ func (c *crioLXC) configureLogging() error {
 	// NOTE Unfortunately it's not possible change the possition of the timestamp.
 	// The ttimestamp is appended to the to the log output because it is dynamically rendered
 	// see https://github.com/rs/zerolog/issues/109
+	//log = zerolog.New(c.LogFile).With().Timestamp().CallerWithSkipFrameCount(-1).
 	log = zerolog.New(c.LogFile).With().Timestamp().Caller().
 		Str("cmd", c.Command).Str("cid", c.ContainerID).Logger()
 
@@ -483,7 +484,7 @@ func (c *crioLXC) executeRuntimeHook(runtimeError error) {
 	// #nosec
 	cmd := exec.CommandContext(ctx, c.RuntimeHook)
 	cmd.Env = env
-	cmd.Dir = "/"
+	cmd.Dir = c.runtimePath()
 	if err := cmd.Run(); err != nil {
 		log.Error().Err(err).Str("file", c.RuntimeHook).
 			Bool("timeout-expired", ctx.Err() == context.DeadlineExceeded).Msg("runtime hook failed")
@@ -492,6 +493,40 @@ func (c *crioLXC) executeRuntimeHook(runtimeError error) {
 
 func (c *crioLXC) isContainerStopped() bool {
 	return c.Container.State() == lxc.STOPPED
+}
+
+func (c *crioLXC) waitCreated(timeout time.Duration) error {
+	if !c.Container.Wait(lxc.RUNNING, timeout) {
+		return fmt.Errorf("timeout starting init cmd")
+	}
+
+	initState, err := c.getContainerInitState()
+	if err != nil {
+		return err
+	}
+	if initState != StateCreated {
+		return fmt.Errorf("unexpected init state %q", initState)
+	}
+	return nil
+}
+
+func (c *crioLXC) waitRunning(timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		initState, err := c.getContainerInitState()
+		if err != nil {
+			return err
+		}
+		if initState == StateRunning {
+			return nil
+		}
+		if initState == StateCreated {
+			time.Sleep(time.Millisecond * 10)
+			continue
+		}
+		return fmt.Errorf("unexpected init state %q", initState)
+	}
+	return fmt.Errorf("timeout")
 }
 
 // getContainerInitState returns the runtime state of the container.
@@ -506,14 +541,21 @@ func (c *crioLXC) getContainerState() (ContainerState, error) {
 		return StateStopped, nil
 	case lxc.STARTING:
 		return StateCreating, nil
+	case lxc.RUNNING, lxc.STOPPING, lxc.ABORTING, lxc.FREEZING, lxc.FROZEN, lxc.THAWED:
+		return c.getContainerInitState()
+	default:
+		return StateStopped, fmt.Errorf("unsupported lxc container state %q", state)
 	}
-	// RUNNING, STOPPING, ABORTING, FREEZING, FROZEN, THAWED:
-	pid := c.Container.InitPid()
-	if pid < 0 {
-		return StateCreating, nil
-	}
+}
 
-	commPath := fmt.Sprintf("/proc/%d/cmdline", pid)
+// getContainerInitState returns the detailed state of the container init process.
+// If the init process is not running StateStopped is returned along with an error.
+func (c *crioLXC) getContainerInitState() (ContainerState, error) {
+	initPid := c.Container.InitPid()
+	if initPid < 1 {
+		return StateStopped, fmt.Errorf("init cmd is not running")
+	}
+	commPath := fmt.Sprintf("/proc/%d/cmdline", initPid)
 	cmdline, err := ioutil.ReadFile(commPath)
 	if err != nil {
 		// can not determine state, caller may try again
@@ -526,7 +568,6 @@ func (c *crioLXC) getContainerState() (ContainerState, error) {
 		//if strings.HasPrefix(c.ContainerID, strings.TrimSpace(string(comm))) {
 		return StateCreated, nil
 	}
-
 	return StateRunning, nil
 }
 
@@ -573,12 +614,6 @@ func enableCgroupControllers(cg string) error {
 }
 
 func (c *crioLXC) killContainer(signum unix.Signal) error {
-	pid, err := c.readPidFile()
-	if err != nil && !os.IsNotExist(err) {
-		return errors.Wrapf(err, "failed to load pidfile")
-	}
-	log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
-
 	if signum == unix.SIGKILL || signum == unix.SIGTERM {
 		if err := c.setConfigItem("lxc.signal.stop", strconv.Itoa(int(signum))); err != nil {
 			return err
@@ -587,28 +622,42 @@ func (c *crioLXC) killContainer(signum unix.Signal) error {
 			return err
 		}
 		if !c.Container.Wait(lxc.STOPPED, time.Second*10) {
-			log.Warn().Msg("failed to stop lxc container - sending kill")
+			log.Warn().Msg("failed to stop lxc container")
 		}
+
+		// draining the cgroup is required to catch processes that escaped from the
+		// 'kill' e.g a bash for loop that spawns a new child immediately.
+		start := time.Now()
+		err := drainCgroup(c.CgroupDir, signum, time.Second*10)
+		if err != nil && !os.IsNotExist(err) {
+			log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to drain cgroup")
+		} else {
+			log.Info().Dur("duration", time.Since(start)).Str("file", c.CgroupDir).Msg("cgroup drained")
+		}
+		return err
 	}
 
-	// TODO wait for the monitor process to die ?
-
-	// kill remaining processes within the cgroup
-	if err := unix.Kill(pid, 0); err == nil {
-		err := unix.Kill(pid, signum)
-		if err != unix.ESRCH {
-			return errors.Wrap(err, "failed to kill container process")
-		}
-	}
-
-	err = killCgroupProcs(c.CgroupDir, signum)
+	//  send non-terminating signals to monitor process
+	pid, err := c.readPidFile()
 	if err != nil && !os.IsNotExist(err) {
-		log.Warn().Err(err).Msg("failed to kill cgroup procs")
+		return errors.Wrapf(err, "failed to load pidfile")
 	}
-
+	if pid > 1 {
+		log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
+		if err := unix.Kill(pid, 0); err == nil {
+			err := unix.Kill(pid, signum)
+			if err != unix.ESRCH {
+				return errors.Wrapf(err, "failed to send signal %d to container process %d", signum, pid)
+			}
+		}
+	}
 	return nil
 }
 
+// "Note that resources associated with the container,
+// but not created by this container, MUST NOT be deleted."
+// TODO - because we set rootfs.managed=0, Destroy() doesn't
+// delete the /var/lib/lxc/$containerID/config file:
 func (c *crioLXC) destroy() error {
 	if c.Container != nil {
 		if err := c.Container.Destroy(); err != nil {
@@ -616,23 +665,10 @@ func (c *crioLXC) destroy() error {
 		}
 	}
 
-	start := time.Now()
-	err := drainCgroup(c.CgroupDir, unix.SIGKILL, time.Second*10)
-	if err != nil && !os.IsNotExist(err) {
-		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to drain cgroup")
-	} else {
-		log.Info().Dur("duration", time.Since(start)).Str("file", c.CgroupDir).Msg("cgroup drained")
-	}
-
-	err = deleteCgroup(c.CgroupDir)
+	err := deleteCgroup(c.CgroupDir)
 	if err != nil && !os.IsNotExist(err) {
 		log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to remove cgroup dir")
 	}
-
-	// "Note that resources associated with the container,
-	// but not created by this container, MUST NOT be deleted."
-	// TODO - because we set rootfs.managed=0, Destroy() doesn't
-	// delete the /var/lib/lxc/$containerID/config file:
 
 	return os.RemoveAll(c.runtimePath())
 }

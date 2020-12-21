@@ -54,6 +54,8 @@ func doStart(ctx *cli.Context) error {
 	case <-time.After(clxc.StartTimeout):
 		return fmt.Errorf("timeout reading from syncfifo")
 	}
+
+	return clxc.waitRunning(time.Second * 5)
 }
 
 func readFifo() error {
