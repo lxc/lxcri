@@ -39,8 +39,8 @@ pacman -Sy conntrack-tools ebtables jq
 ## runtime dependencies
 
 * [lxc](https://github.com/lxc/lxc.git) >= 4.0.5, master recommened
-* [conmon/pinns](https://github.com/containers/conmon.git) v2.0.2
-* [cri-o](https://github.com/cri-o/cri-o.git) release-1.19
+* [conmon/pinns](https://github.com/containers/conmon.git) v2.0.22
+* [cri-o](https://github.com/cri-o/cri-o.git) release-1.20
 
 By default everything is installed to `/usr/local`
 
@@ -80,7 +80,7 @@ Keep in mind that you have to change the `INSTALL_PREFIX` in the crio install sc
 ```sh
 git clone https://github.com/containers/conmon.git
 cd conmon 
-git reset --hard v2.0.2
+git reset --hard v2.0.22
 make clean
 make install
 ```
@@ -91,7 +91,7 @@ make install
 #!/bin/sh
 git clone https://github.com/cri-o/cri-o.git
 cd cri-o
-git reset --hard origin/release-1.19
+git reset --hard origin/release-1.20
 make install
 
 PREFIX=/usr/local
