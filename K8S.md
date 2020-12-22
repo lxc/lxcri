@@ -1,6 +1,6 @@
 ## kubernetes
 
-The following skript downloads kubernetes [v1.19.6](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.19.md#v1196) and installs it to `/usr/local/bin`.</br>
+The following skript downloads kubernetes [v1.20.1](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.20.md#v1201) and installs it to `/usr/local/bin`.</br>
 You have to create the `kubelet.service` and `10-kubeadm.conf` before running the script.
 
 ```sh
@@ -15,9 +15,9 @@ You have to create the `kubelet.service` and `10-kubeadm.conf` before running th
 # * run this script again
 
 ARCH="linux-amd64"
-RELEASE="1.19.6"
+RELEASE="1.20.1"
 ARCHIVE=kubernetes-server-$ARCH.tar.gz
-CHECKSUM="126f6ab16d9e007ff75c58fab20fbaf4c6ff16212b8bbf5e71105f0f3611867ad1410ee05cd39b4e4e6cb3b6313fcff4b12ec91fa430b38f29d72221dda8c624"
+CHECKSUM="fb56486a55dbf7dbacb53b1aaa690bae18d33d244c72a1e2dc95fb0fcce45108c44ba79f8fa04f12383801c46813dc33d2d0eb2203035cdce1078871595e446e"
 DESTDIR="/usr/local/bin"
 
 [ -e "$ARCHIVE" ] || wget https://dl.k8s.io/v$RELEASE/$ARCHIVE
