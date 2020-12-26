@@ -217,8 +217,9 @@ func main() {
 		println(err.Error())
 
 		// exit with exit status of executed command
-		if err, yes := err.(execError); yes {
-			os.Exit(err.ExitStatus())
+		var errExec execError
+		if errors.As(err, &errExec) {
+			os.Exit(errExec.exitStatus())
 		}
 		os.Exit(1)
 	}
@@ -452,12 +453,24 @@ var execCmd = cli.Command{
 
 type execError int
 
-func (e execError) ExitStatus() int {
+func (e execError) exitStatus() int {
 	return int(e)
 }
 
 func (e execError) Error() string {
-	return fmt.Sprintf("exec cmd exited with status %d", int(e))
+	// liblxc remaps execvp exit codes to shell exit codes.
+	// FIXME This is undocumented behaviour lxc/src/lxc/attach.c:lxc_attach_run_command
+	// https://github.com/lxc/go-lxc/blob/d1943fb48dc73ef5cbc0ef43ed585420f7b2eb3a/container.go#L1370
+	// RunCommandStatus returns with exitCode 126 or 127 but without error, so it is not possible to determine
+	// whether this is the exit code from the command itself (e.g a shell itself) or from liblxc exec.
+	switch int(e) {
+	case 126:
+		return "can not execute file: file header not recognized"
+	case 127:
+		return "executable file not found in $PATH"
+	default:
+		return fmt.Sprintf("cmd execution failed with exit status %d", e.exitStatus)
+	}
 }
 
 func doExec(ctx *cli.Context) error {
