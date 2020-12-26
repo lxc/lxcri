@@ -213,12 +213,13 @@ func main() {
 	if err != nil {
 		clxc.Log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
 		clxc.Release()
+		// write diagnostics message to stderr for crio/kubelet
+		println(err.Error())
+
 		// exit with exit status of executed command
 		if err, yes := err.(execError); yes {
 			os.Exit(err.ExitStatus())
 		}
-		// write diagnostics message to stderr for crio/kubelet
-		println(err.Error())
 		os.Exit(1)
 	}
 
