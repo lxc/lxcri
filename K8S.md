@@ -118,3 +118,40 @@ networking:
 scheduler: {}
 controlPlaneEndpoint: "${HOSTIP}:6443"
 ```
+
+#### preflight issues
+
+There are some `preflight` checks that might fail once you start kubeadm.
+
+##### install cri-tools
+
+```
+[ERROR FileExisting-crictl]: crictl not found in system path
+```
+
+Please install the `cri-tools` from https://github.com/kubernetes-sigs/cri-tools/releases to your `PATH` e.g [cri-tools v1.20.0](https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.20.0/crictl-v1.20.0-linux-amd64.tar.gz)
+
+
+##### load br-netfilter
+
+```
+[ERROR FileContent--proc-sys-net-bridge-bridge-nf-call-iptables]: /proc/sys/net/bridge/bridge-nf-call-iptables does not exist
+```
+
+You must load the `br-netfilter` kernel module. To do that automatically on startup add it to `/etc/modules-load.d` e.g :
+
+```
+echo 'br-netfilter' > /etc/modules-load.d/kubelet.conf
+```
+
+##### enable IP forwarding
+```
+[ERROR FileContent--proc-sys-net-ipv4-ip_forward]: /proc/sys/net/ipv4/ip_forward contents are not set to 1
+````
+
+IP forwarding must be enabled. E.g
+
+```
+echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-kubelet.conf
+sysctl --system
+```
