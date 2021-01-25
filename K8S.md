@@ -1,6 +1,6 @@
 ## kubernetes
 
-The following skript downloads kubernetes [v1.20.1](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.20.md#v1201) and installs it to `/usr/local/bin`.</br>
+The following skript downloads kubernetes [v1.20.2](https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.20.md#v1202) and installs it to `/usr/local/bin`.</br>
 You have to create the `kubelet.service` and `10-kubeadm.conf` before running the script.
 
 ```sh
@@ -15,9 +15,9 @@ You have to create the `kubelet.service` and `10-kubeadm.conf` before running th
 # * run this script again
 
 ARCH="linux-amd64"
-RELEASE="1.20.1"
+RELEASE="1.20.2"
 ARCHIVE=kubernetes-server-$ARCH.tar.gz
-CHECKSUM="fb56486a55dbf7dbacb53b1aaa690bae18d33d244c72a1e2dc95fb0fcce45108c44ba79f8fa04f12383801c46813dc33d2d0eb2203035cdce1078871595e446e"
+CHECKSUM="65abf178782e43bc21e8455ffbfdadf6064dbeae3ff704ccf9e13e8acee18235c280b06778e5de4bd702f5507e1870fe38c561366d125ef4f821ed7aa46e9f45"
 DESTDIR="/usr/local/bin"
 
 [ -e "$ARCHIVE" ] || wget https://dl.k8s.io/v$RELEASE/$ARCHIVE
@@ -98,7 +98,7 @@ kind: KubeletConfiguration
 cgroupDriver: systemd
 ---
 kind: ClusterConfiguration
-kubernetesVersion: v1.19.6
+kubernetesVersion: v1.20.2
 apiVersion: kubeadm.k8s.io/v1beta2
 apiServer:
   timeoutForControlPlane: 4m0s
