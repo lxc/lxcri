@@ -22,16 +22,16 @@ crio-lxc: $(GO_SRC) Makefile go.mod
 	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd
 
 crio-lxc-start: cmd/start/crio-lxc-start.c
-	$(CC) -Wall -Wpedantic $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags lxc) -o $@ $?
+	$(CC) -Werror -Wpedantic $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags lxc) -o $@ $?
 
 crio-lxc-init: cmd/init/crio-lxc-init.c
-	/usr/local/musl/bin/musl-gcc -Wall -Wpedantic -static -g -o $@ $?
-	#musl-gcc -g3 -Wall -static $? -o $@
+	/usr/local/musl/bin/musl-gcc -Werror -Wpedantic -static -g -o $@ $?
+	#musl-gcc -g3 -Werror -static $? -o $@
 	# ensure that crio-lxc-init is statically compiled
 	! ldd $@  2>/dev/null
 
 crio-lxc-container-hook: cmd/container-hook/hook.c
-	musl-gcc -DDEBUG -Wall -Wpedantic $? -o $@
+	musl-gcc -DDEBUG -Werror -Wpedantic $? -o $@
 
 # make test TEST=basic will run only the basic test.
 .PHONY: check
