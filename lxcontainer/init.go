@@ -158,7 +158,7 @@ func configureInitUser(clxc *Runtime, spec *specs.Spec) error {
 		var b strings.Builder
 		for i, gid := range spec.Process.User.AdditionalGids {
 			if i > 0 {
-				b.WriteByte(' ')
+				b.WriteByte(',')
 			}
 			fmt.Fprintf(&b, "%d", gid)
 		}
