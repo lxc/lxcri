@@ -19,6 +19,15 @@ func setEnv(key, val string, overwrite bool) error {
 }
 
 func loadEnvFile(envFile string) (map[string]string, error) {
+	// don't fail if environment file does not exist
+	_, err := os.Stat(envFile)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	// #nosec
 	data, err := ioutil.ReadFile(envFile)
 	if err != nil {
