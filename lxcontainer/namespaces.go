@@ -100,7 +100,7 @@ func setHostname(nsPath string, hostname string) error {
 
 	f, err := os.Open(nsPath)
 	if err != nil {
-		return fmt.Errorf("failed to open container uts namespace: %w", nsPath, err)
+		return fmt.Errorf("failed to open container uts namespace %q: %w", nsPath, err)
 	}
 	// #nosec
 	defer f.Close()
