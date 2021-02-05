@@ -168,7 +168,7 @@ func main() {
 	if env != nil {
 		for key, val := range env {
 			if err := setEnv(key, val, false); err != nil {
-				err = fmt.Errorf("failed to set environment variable \"%s=%s\": %w", err)
+				err = fmt.Errorf("failed to set environment variable \"%s=%s\": %w", key, val, err)
 				println(err.Error())
 				os.Exit(1)
 			}
@@ -469,7 +469,7 @@ func (e execError) Error() string {
 	case 127:
 		return "executable file not found in $PATH"
 	default:
-		return fmt.Sprintf("cmd execution failed with exit status %d", e.exitStatus)
+		return fmt.Sprintf("cmd execution failed with exit status %d", e.exitStatus())
 	}
 }
 
