@@ -38,7 +38,7 @@ pacman -Sy conntrack-tools ebtables jq
 
 ## runtime dependencies
 
-* [lxc](https://github.com/lxc/lxc.git) >= 4.0.5, master recommened
+* [lxc](https://github.com/lxc/lxc.git) >= b5daeddc5afce1cad4915aef3e71fdfe0f428709
 * [conmon/pinns](https://github.com/containers/conmon.git) v2.0.22
 * [cri-o](https://github.com/cri-o/cri-o.git) release-1.20
 
@@ -50,11 +50,11 @@ By default everything is installed to `/usr/local`
 git clone https://github.com/lxc/lxc.git
 cd lxc
 ./autogen.sh
-./configure --enable-bash=no --enable-tools=no \
-  --enable-commands=no --enable-seccomp=yes \
+./configure --enable-bash=no --enable-seccomp=yes \
   --enable-capabilities=yes --enable-apparmor=yes
 make install
 
+git describe --tags > /usr/local/lib/liblxc.version.txt
 echo /usr/local/lib > /etc/ld.so.conf.d/local.conf
 ldconfig
 ```
@@ -79,13 +79,13 @@ Keep in mind that you have to change the `INSTALL_PREFIX` in the crio install sc
 
 ```sh
 git clone https://github.com/containers/conmon.git
-cd conmon 
+cd conmon
 git reset --hard v2.0.22
 make clean
 make install
 ```
 
-### cri-o 
+### cri-o
 
 ```sh
 #!/bin/sh
