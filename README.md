@@ -23,8 +23,10 @@ For the installation and initialization of a kubernetes cluster see [K8S.md](K8S
 
 ## Requirements and restrictions
 
-* Only cgroupv2 unified cgroup hierarchy is supported.
-* A recent kernel > 5.8 is required for full cgroup support.
+* Only cgroupv2 (unified cgroup hierarchy) is supported.
+* A recent kernel >= 5.8 is required for full cgroup support.
+
+### Unimplemented features
 
 * [runtime: Implement POSIX platform hooks](https://github.com/Drachenfels-GmbH/crio-lxc/issues/10)
 * [runtime: Implement cgroup2 resource limits](https://github.com/Drachenfels-GmbH/crio-lxc/issues/11)
@@ -86,7 +88,7 @@ CRIO_LXC_CONTAINER_LOG_LEVEL=debug
 ### Runtime (security) features
 
 All supported runtime security features are enabled by default.</br>
-There following runtime (security) features can optionally be disabled.</br>
+The following runtime (security) features can optionally be disabled.</br>
 Details see `crio-lxc --help`
 
 * apparmor
