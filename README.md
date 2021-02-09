@@ -25,16 +25,9 @@ For the installation and initialization of a kubernetes cluster see [K8S.md](K8S
 
 * Only cgroupv2 unified cgroup hierarchy is supported.
 * A recent kernel > 5.8 is required for full cgroup support.
-* Cgroup resource limits are not implemented yet. This will change soon.
 
-### AdditionalGids
-
-* https://github.com/lxc/lxc/pull/3575
-
-Additional group ids for the container's process require the following development repositories:
-
-* https://github.com/Drachenfels-GmbH/lxc
-* https://github.com/Drachenfels-GmbH/go-lxc
+* [runtime: Implement POSIX platform hooks](https://github.com/Drachenfels-GmbH/crio-lxc/issues/10)
+* [runtime: Implement cgroup2 resource limits](https://github.com/Drachenfels-GmbH/crio-lxc/issues/11)
 
 ## Configuration
 
