@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	// SyncFifoPath is the path to the fifo used to block container start in init until start cmd is called.
+	// initDir is the working directory for crio-lxc-init.
+	// It contains the init binary itself and all files required for it.
 	initDir = "/.crio-lxc"
 )
 
