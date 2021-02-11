@@ -33,6 +33,9 @@ func filterMountOptions(clxc *Runtime, fs string, opts []string) []string {
 	case "tmpfs":
 		// TODO make this configurable per filesystem
 		return removeMountOptions(clxc, fs, opts, "rprivate", "tmpcopyup")
+	case "cgroup2":
+		// TODO make this configurable per filesystem
+		return removeMountOptions(clxc, fs, opts, "private")
 	}
 	return opts
 }
