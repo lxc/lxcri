@@ -9,6 +9,34 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
+func removeMountOptions(clxc *Runtime, fs string, opts []string, unsupported ...string) []string {
+	supported := make([]string, 0, len(opts))
+	for _, opt := range opts {
+		addOption := true
+		for _, u := range unsupported {
+			if opt == u {
+				addOption = false
+				break
+			}
+		}
+		if addOption {
+			supported = append(supported, opt)
+		} else {
+			clxc.Log.Info().Str("fs", fs).Str("option", opt).Msg("removed mount option")
+		}
+	}
+	return supported
+}
+
+func filterMountOptions(clxc *Runtime, fs string, opts []string) []string {
+	switch fs {
+	case "tmpfs":
+		// TODO make this configurable per filesystem
+		return removeMountOptions(clxc, fs, opts, "rprivate", "tmpcopyup")
+	}
+	return opts
+}
+
 func configureMounts(clxc *Runtime, spec *specs.Spec) error {
 	// excplicitly disable auto-mounting
 	if err := clxc.setConfigItem("lxc.mount.auto", ""); err != nil {
@@ -45,6 +73,8 @@ func configureMounts(clxc *Runtime, spec *specs.Spec) error {
 		if err != nil {
 			return fmt.Errorf("failed to create mount target %s: %w", ms.Destination, err)
 		}
+
+		ms.Options = filterMountOptions(clxc, ms.Type, ms.Options)
 
 		mnt := fmt.Sprintf("%s %s %s %s", ms.Source, ms.Destination, ms.Type, strings.Join(ms.Options, ","))
 
