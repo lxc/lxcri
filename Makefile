@@ -9,6 +9,7 @@ PKG_CONFIG_PATH ?= $(PREFIX)/lib/pkgconfig
 export PKG_CONFIG_PATH
 LDFLAGS=-X main.version=$(COMMIT)
 CC ?= cc
+MUSL_CC ?= musl-gcc
 
 all: fmt $(BINS)
 
@@ -25,7 +26,7 @@ crio-lxc-start: cmd/start/crio-lxc-start.c
 	$(CC) -Werror -Wpedantic $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags lxc) -o $@ $?
 
 crio-lxc-init: cmd/init/crio-lxc-init.c
-	/usr/local/musl/bin/musl-gcc -Werror -Wpedantic -static -g -o $@ $?
+	$(MUSL_CC) -Werror -Wpedantic -static -g -o $@ $?
 	#musl-gcc -g3 -Werror -static $? -o $@
 	# ensure that crio-lxc-init is statically compiled
 	! ldd $@  2>/dev/null
