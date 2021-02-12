@@ -11,10 +11,14 @@ LDFLAGS=-X main.version=$(COMMIT)
 CC ?= cc
 MUSL_CC ?= musl-gcc
 
-all: fmt $(BINS)
+all: fmt test $(BINS)
 
 install: all
 	cp -v $(BINS) $(PREFIX)/bin
+
+.PHONY: test
+test:
+	go test -v ./...
 
 lint:
 	golangci-lint run -c ./lint.yaml ./...
