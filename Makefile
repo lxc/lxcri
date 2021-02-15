@@ -38,13 +38,6 @@ crio-lxc-init: cmd/init/crio-lxc-init.c
 crio-lxc-container-hook: cmd/container-hook/hook.c
 	musl-gcc -DDEBUG -Werror -Wpedantic $? -o $@
 
-# make test TEST=basic will run only the basic test.
-.PHONY: check
-check: crio-lxc
-	go fmt ./... && ([ -z $(TRAVIS) ] || git diff --quiet)
-	go test ./...
-	PACKAGES_DIR=$(PACKAGES_DIR) sudo -E "PATH=$$PATH" bats -t $(patsubst %,test/%.bats,$(TEST))
-
 .PHONY: vendorup
 vendorup:
 	go get -u
