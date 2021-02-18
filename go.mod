@@ -10,4 +10,8 @@ require (
 	gopkg.in/lxc/go-lxc.v2 v2.0.0-20210205143421-c4b883be4881
 )
 
+replace golang.org/x/crypto => golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
+
+replace golang.org/x/text => golang.org/x/text v0.3.3
+
 go 1.13
