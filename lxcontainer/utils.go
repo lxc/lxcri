@@ -127,7 +127,7 @@ func mkdirAll(path string, perm os.FileMode, uid int, gid int) error {
 		if dir.IsDir() {
 			return nil
 		}
-		return &os.PathError{"mkdir", path, unix.ENOTDIR}
+		return &os.PathError{Op: "mkdir", Path: path, Err: unix.ENOTDIR}
 	}
 
 	// Slow path: make sure parent exists and then call Mkdir for path.

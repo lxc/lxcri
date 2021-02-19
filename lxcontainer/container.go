@@ -20,7 +20,7 @@ type ContainerInfo struct {
 	RuntimeRoot string
 
 	BundlePath    string
-	ConsoleSocket string `json;",omitempty"`
+	ConsoleSocket string `json:",omitempty"`
 	// PidFile is the absolute path to the PID file of the container monitor process (crio-lxc-start)
 	PidFile          string
 	MonitorCgroupDir string
