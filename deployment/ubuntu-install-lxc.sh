@@ -10,8 +10,9 @@ set -e
 # see `man 5 os-release` and http://0pointer.de/blog/projects/os-release
 . /etc/os-release
 
+export DEBIAN_FRONTEND=noninteractive
+
 apt_cleanup() {
-	export DEBIAN_FRONTEND=noninteractive
 	apt-get purge --yes $@
 	apt-get autoremove --yes
 	apt-get clean
@@ -19,7 +20,6 @@ apt_cleanup() {
 }
 
 apt_install() {
-	export DEBIAN_FRONTEND=noninteractive
 	apt-get update
 	apt-get install --no-install-recommends --yes $@
 }
