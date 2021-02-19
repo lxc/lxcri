@@ -67,9 +67,9 @@ case $LXC_INSTALL_FROM in
 	install_lxc_ppa
 	apt_clean $LXC_PPA_DEPS
 	;;
- *)
+*)
 	echo "Installation method 'LXC_INSTALL_FROM=$LXC_INSTALL_FROM' is unsupported" >&2
-    echo "Supported installation methods are: 'git' and 'ppa'" >&2
+	echo "Supported installation methods are: 'git' and 'ppa'" >&2
 	exit 1
 	;;
 esac
