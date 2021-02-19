@@ -5,8 +5,10 @@ TEST?=$(patsubst test/%.bats,%,$(wildcard test/*.bats))
 PACKAGES_DIR?=~/packages
 BINS := crio-lxc crio-lxc-start crio-lxc-init crio-lxc-container-hook
 PREFIX ?= /usr/local
-PKG_CONFIG_PATH ?= $(PREFIX)/lib/pkgconfig
+# Note: The default pkg-config directory is search after PKG_CONFIG_PATH
+PKG_CONFIG_PATH ?= /usr/local/lib/pkgconfig
 export PKG_CONFIG_PATH
+LIBLXC_LDFLAGS = $(shell pkg-config --libs --cflags lxc)
 LDFLAGS=-X main.version=$(COMMIT)
 CC ?= cc
 MUSL_CC ?= musl-gcc
@@ -27,12 +29,11 @@ crio-lxc: $(GO_SRC) Makefile go.mod
 	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd
 
 crio-lxc-start: cmd/start/crio-lxc-start.c
-	$(CC) -Werror -Wpedantic $(shell PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) pkg-config --libs --cflags lxc) -o $@ $?
+	$(CC) -Werror -Wpedantic -o $@ $? $(LIBLXC_LDFLAGS)
 
 crio-lxc-init: cmd/init/crio-lxc-init.c
 	$(MUSL_CC) -Werror -Wpedantic -static -g -o $@ $?
-	#musl-gcc -g3 -Werror -static $? -o $@
-	# ensure that crio-lxc-init is statically compiled
+	# this is paranoia - but ensure it is statically compiled
 	! ldd $@  2>/dev/null
 
 crio-lxc-container-hook: cmd/container-hook/hook.c
