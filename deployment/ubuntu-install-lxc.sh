@@ -10,19 +10,7 @@ set -e
 # see `man 5 os-release` and http://0pointer.de/blog/projects/os-release
 . /etc/os-release
 
-export DEBIAN_FRONTEND=noninteractive
-
-apt_cleanup() {
-	apt-get purge --yes $@
-	apt-get autoremove --yes
-	apt-get clean
-	rm -rf /var/lib/apt/lists/*
-}
-
-apt_install() {
-	apt-get update
-	apt-get install --no-install-recommends --yes $@
-}
+. $(dirname $(readlink -f $0))/utils.sh
 
 LXC_PPA=${LXC_PPA:-http://ppa.launchpad.net/ubuntu-lxc/lxc-git-master/ubuntu}
 LXC_PPA_KEY=${LXC_PPA_KEY:-93763AC528C8C52568951BE0D5495F657635B973}
@@ -72,12 +60,12 @@ case $LXC_INSTALL_FROM in
 "git")
 	apt_install $LXC_BUILD_DEPS $LXC_RUNTIME_DEPS
 	install_lxc_git
-	apt_cleanup $LXC_BUILD_DEPS
+	apt_clean $LXC_BUILD_DEPS
 	;;
 "ppa")
 	apt_install $LXC_PPA_DEPS
 	install_lxc_ppa
-	apt_cleanup $LXC_PPA_DEPS
+	apt_clean $LXC_PPA_DEPS
 	;;
  *)
 	echo "Installation method 'LXC_INSTALL_FROM=$LXC_INSTALL_FROM' is unsupported" >&2
