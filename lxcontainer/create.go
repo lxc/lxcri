@@ -364,6 +364,10 @@ func ensureDefaultDevices(c *Runtime, spec *specs.Spec) error {
 	pts0 := specs.LinuxDevice{Path: "/dev/pts/0", Type: "c", Major: 88, Minor: 0}
 	addDevicePerms(spec, "c", &pts0.Major, nil, "rwm") // dev/pts/[0..9]
 
+	if spec.Linux.Resources == nil {
+		spec.Linux.Resources = &specs.LinuxResources{}
+	}
+
 	// add missing default devices
 	for _, dev := range devices {
 		if !isDeviceEnabled(spec, dev) {
