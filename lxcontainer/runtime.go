@@ -671,17 +671,3 @@ func attachOptions(procSpec *specs.Process, ns []specs.LinuxNamespace) (lxc.Atta
 	}
 	return opts, nil
 }
-
-func ReadSpec(src string) (spec *specs.Spec, err error) {
-	err = decodeFileJSON(spec, src)
-	return
-}
-
-func ReadSpecProcess(src string) (*specs.Process, error) {
-	if src == "" {
-		return nil, nil
-	}
-	proc := new(specs.Process)
-	err := decodeFileJSON(proc, src)
-	return proc, err
-}

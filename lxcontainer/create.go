@@ -16,7 +16,7 @@ import (
 	"gopkg.in/lxc/go-lxc.v2"
 )
 
-func (c *Runtime) Create(ctx context.Context) error {
+func (c *Runtime) Create(ctx context.Context, spec *specs.Spec) error {
 	if c.runtimePathExists() {
 		return ErrExist
 	}
@@ -39,11 +39,6 @@ func (c *Runtime) Create(ctx context.Context) error {
 
 	if !lxc.VersionAtLeast(4, 0, 5) {
 		c.Log.Warn().Msgf("liblxc runtime version >= 4.0.5 is recommended (was %s)", lxc.Version())
-	}
-
-	spec, err := c.ReadSpec()
-	if err != nil {
-		return errorf("failed to load container spec from bundle: %w", err)
 	}
 
 	err = c.createContainer(spec)

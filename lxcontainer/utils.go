@@ -70,7 +70,7 @@ func isFilesystem(dir string, fsName string) error {
 	return nil
 }
 
-func decodeFileJSON(obj interface{}, src string) error {
+func DecodeFileJSON(obj interface{}, src string) error {
 	// #nosec
 	f, err := os.Open(src)
 	if err != nil {

@@ -73,21 +73,11 @@ func (c ContainerInfo) CreatePidFile(pid int) error {
 
 // RuntimeRoot and ContainerID must be set
 func (c *ContainerInfo) Load() error {
-	return decodeFileJSON(c, c.RuntimePath("container.json"))
+	return DecodeFileJSON(c, c.RuntimePath("container.json"))
 }
 
 func (c *ContainerInfo) Create() error {
 	p := c.RuntimePath("container.json")
 	c.CreatedAt = time.Now()
 	return encodeFileJSON(p, c, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
-}
-
-func (c ContainerInfo) SpecPath() string {
-	return filepath.Join(c.BundlePath, "config.json")
-}
-
-func (c *ContainerInfo) ReadSpec() (*specs.Spec, error) {
-	spec := new(specs.Spec)
-	err := decodeFileJSON(spec, c.SpecPath())
-	return spec, err
 }

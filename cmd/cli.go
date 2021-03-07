@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/lxc/crio-lxc/lxcontainer"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli/v2"
 )
 
@@ -277,14 +279,23 @@ var createCmd = cli.Command{
 }
 
 func doCreate(unused *cli.Context) error {
-	ctx, cancel := context.WithTimeout(context.Background(), clxc.CreateTimeout)
-	defer cancel()
-
-	err := clxc.Create(ctx)
+	err := doCreateInternal(unused)
 	if clxc.CreateHook != "" {
 		runCreateHook(err)
 	}
 	return err
+}
+
+func doCreateInternal(unused *cli.Context) error {
+	ctx, cancel := context.WithTimeout(context.Background(), clxc.CreateTimeout)
+	defer cancel()
+
+	specPath := filepath.Join(clxc.BundlePath, "config.json")
+	spec, err := readSpec(specPath)
+	if err != nil {
+		return fmt.Errorf("failed to load container spec from bundle: %w", err)
+	}
+	return clxc.Create(ctx, spec)
 }
 
 func runCreateHook(err error) {
@@ -294,7 +305,7 @@ func runCreateHook(err error) {
 		"RUNTIME_CMD=" + clxc.Command,
 		"RUNTIME_PATH=" + clxc.RuntimePath(),
 		"BUNDLE_PATH=" + clxc.BundlePath,
-		"SPEC_PATH=" + clxc.SpecPath(),
+		"SPEC_PATH=" + filepath.Join(clxc.BundlePath, "config.json"),
 		"LOG_FILE=" + clxc.LogFilePath,
 	}
 	if err != nil {
@@ -486,7 +497,7 @@ func doExec(ctx *cli.Context) error {
 		clxc.Log.Warn().Msg("detaching process but pid-file value is unset")
 	}
 
-	procSpec, err := lxcontainer.ReadSpecProcess(ctx.String("process"))
+	procSpec, err := readSpecProcess(ctx.String("process"))
 	if err != nil {
 		return err
 	}
@@ -513,3 +524,29 @@ func doExec(ctx *cli.Context) error {
 	}
 	return nil
 }
+
+func readSpec(src string) (spec *specs.Spec, err error) {
+	err = lxcontainer.DecodeFileJSON(spec, src)
+	return
+}
+
+func readSpecProcess(src string) (*specs.Process, error) {
+	if src == "" {
+		return nil, nil
+	}
+	proc := new(specs.Process)
+	err := lxcontainer.DecodeFileJSON(proc, src)
+	return proc, err
+}
+
+/*
+func (c ContainerInfo) SpecPath() string {
+	return filepath.Join(c.BundlePath, "config.json")
+}
+
+func (c *ContainerInfo) ReadSpec() (*specs.Spec, error) {
+	spec := new(specs.Spec)
+	err := DecodeFileJSON(spec, c.SpecPath())
+	return spec, err
+}
+*/
