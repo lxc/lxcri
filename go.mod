@@ -1,4 +1,4 @@
-module github.com/lxc/crio-lxc
+module github.com/Drachenfels-GmbH/crio-lxc
 
 require (
 	github.com/creack/pty v1.1.11

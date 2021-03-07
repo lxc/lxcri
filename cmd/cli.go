@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/lxc/crio-lxc/lxcontainer"
+	"github.com/Drachenfels-GmbH/crio-lxc/lxcontainer"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli/v2"
 )
