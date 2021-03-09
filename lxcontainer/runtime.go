@@ -38,6 +38,12 @@ type Runtime struct {
 	ContainerHook string
 
 	Log zerolog.Logger
+
+	// runtime hooks (not OCI runtime hooks)
+
+	// AfterCreateContainer is called right after creating the container runtime directory and descriptor,
+	// and before creating the lxc 'config' file for the container.
+	AfterCreateContainer func(c *Runtime) error
 }
 
 // createContainer creates a new container.
@@ -89,7 +95,14 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 		return err
 	}
 	c.Container = container
-	return c.setContainerLogLevel()
+	if err := c.setContainerLogLevel(); err != nil {
+		return err
+	}
+
+	if c.AfterCreateContainer != nil {
+		return c.AfterCreateContainer(c)
+	}
+	return nil
 }
 
 // loadContainer checks for the existence of the lxc config file.
