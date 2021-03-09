@@ -164,9 +164,12 @@ func (c Runtime) Release() error {
 		if err := c.Container.Release(); err != nil {
 			c.Log.Error().Err(err).Msg("failed to release container")
 		}
+		c.Container = nil
 	}
 	if c.LogFile != nil {
-		return c.LogFile.Close()
+		err := c.LogFile.Close()
+		c.LogFile = nil
+		return err
 	}
 	return nil
 }
