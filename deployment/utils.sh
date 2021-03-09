@@ -18,7 +18,7 @@ GOLANG_CHECKSUM="${GOLANG_CHECKSUM:-013a489ebb3e24ef3d915abe5b94c3286c070dfe0818
 
 install_golang() {
 	local archive="$(basename $GOLANG_SRC)"
-	local destdir"/tmp"
+	local destdir="/tmp"
 
 	cd $destdir
 	wget --quiet $GOLANG_SRC
