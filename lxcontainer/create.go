@@ -41,6 +41,27 @@ func (c *Runtime) Create(ctx context.Context, spec *specs.Spec) error {
 		c.Log.Warn().Msgf("liblxc runtime version >= 4.0.5 is recommended (was %s)", lxc.Version())
 	}
 
+	if spec.Linux.Resources == nil {
+		spec.Linux.Resources = &specs.LinuxResources{}
+	}
+
+	if spec.Linux.Devices == nil {
+		spec.Linux.Devices = make([]specs.LinuxDevice, 0, 20)
+	}
+
+	if spec.Process == nil {
+		return fmt.Errorf("spec.Process is nil")
+	}
+
+	if len(spec.Process.Args) == 0 {
+		return fmt.Errorf("specs.Process.Args is empty")
+	}
+
+	if spec.Process.Cwd == "" {
+		c.Log.Info().Msg("specs.Process.Cwd is unset defaulting to '/'")
+		spec.Process.Cwd = "/"
+	}
+
 	err = c.createContainer(spec)
 	if err != nil {
 		return errorf("failed to create container: %w", err)
