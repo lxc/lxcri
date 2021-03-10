@@ -139,7 +139,8 @@ mountopt = "nodev,redirect_dir=off,metacopy=off"
 
 #### HTTP proxy
 
-If you're system is proxied you can add the proxy environment variables to `/etc/default/crio`
+If you need a HTTP proxy for internet access you may have to set the proxy environment variables in `/etc/default/crio`
+for crio-o to be able to fetch images from remote repositories.
 
 ```
 http_proxy="http://myproxy:3128"

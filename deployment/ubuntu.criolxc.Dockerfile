@@ -1,4 +1,4 @@
-FROM debian-buster-lxc:0.1
+FROM myimage
 
 ENV CRIO_LXC_GIT_VERSION=master
 

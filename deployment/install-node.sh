@@ -72,19 +72,34 @@ install_crio() {
 	sed -i 's/ExecStart=\//ExecStart=+\//' /usr/local/lib/systemd/system/crio.service
 }
 
-install_kubernetes() {
+install_cri_tools() {
+	local release="${CRI_TOOLS_RELEASE:-v1.20.0}"
+	local checksum="${CRI_TOOLS_CHECKSUM:-44d5f550ef3f41f9b53155906e0229ffdbee4b19452b4df540265e29572b899c}"
 	local arch="linux-amd64"
-	# TODO maybe make arch a global variable ${GOHOSTOS}-${GOHOSTARCH}
-	local archive="kubernetes-server-$arch.tar.gz"
-	# see https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.20.md
-	local sum="37738bc8430b0832f32c6d13cdd68c376417270568cd9b31a1ff37e96cfebcc1e2970c72bed588f626e35ed8273671c77200f0d164e67809b5626a2a99e3c5f5"
-	K8S_CHECKSUM="${KUBERNETES_CHECKSUM:-${sum}}"
-	K8S_RELEASE="${KUBERNETES_RELEASE:-1.20.4}"
+	local archive="crictl-${release}-${arch}.tar.gz"
+	local url="https://github.com/kubernetes-sigs/cri-tools/releases/download/$release/$archive"
 	local destdir="/usr/local/bin"
 
 	cd /tmp
-	wget --quiet https://dl.k8s.io/v${K8S_RELEASE}/$archive
-	echo "$K8S_CHECKSUM $archive" | sha512sum -c
+	wget --quiet $url
+	echo "$checksum $archive" | sha256sum -c
+	tar -x -z -f $archive -C $destdir
+	rm $archive
+}
+
+install_kubernetes() {
+	# see https://github.com/kubernetes/kubernetes/blob/master/CHANGELOG/CHANGELOG-1.20.md
+	local checksum="${K8S_CHECKSUM:-37738bc8430b0832f32c6d13cdd68c376417270568cd9b31a1ff37e96cfebcc1e2970c72bed588f626e35ed8273671c77200f0d164e67809b5626a2a99e3c5f5}"
+	local release="${K8S_RELEASE:-v1.20.4}"
+	local arch="linux-amd64"
+	# TODO maybe make arch a global variable ${GOHOSTOS}-${GOHOSTARCH}
+	local archive="kubernetes-server-$arch.tar.gz"
+	local url="https://dl.k8s.io/${release}/${archive}"
+	local destdir="/usr/local/bin"
+
+	cd /tmp
+	wget --quiet $url
+	echo "$checksum $archive" | sha512sum -c
 	tar -x -z -f $archive -C $destdir --strip-components=3 \
 		kubernetes/server/bin/kubectl kubernetes/server/bin/kubeadm kubernetes/server/bin/kubelet
 	rm $archive
@@ -123,19 +138,24 @@ install_kubernetes() {
 }
 
 # TODO let install functions append build dependencies and runtime dependencies
-BUILD_LIBS="libseccomp-dev libapparmor-dev libbtrfs-dev libdevmapper-dev libcap-dev libc6-dev libglib2.0-dev"
-BUILD_TOOLCHAIN="wget ca-certificates git build-essential libtool make automake pkg-config"
-BUILD_DEPS="$BUILD_LIBS $BUILD_TOOLCHAIN"
+BUILD_DEPS_CONMON="libglib2.0-dev"
+BUILD_DEPS_CRIO="libseccomp-dev libapparmor-dev libbtrfs-dev libdevmapper-dev libcap-dev libc6-dev"
+BUILD_DEPS="wget ca-certificates git build-essential libtool make automake pkg-config"
+BUILD_DEPS="${BUILD_DEPS} ${BUILD_DEPS_CONMON} ${BUILD_DEPS_CRIO}"
 
-K8S_RUNTIME_DEPS="ebtables iptables conntrack"
-RUNTIME_DEPS="$K8S_RUNTIME_DEPS tzdata systemd"
+DEPS_CONMON="libglib2.0-0"
+DEPS_CRIO="tzdata"
+DEPS_K8S="ebtables ethtool socat conntrack iproute2 iptables"
+DEPS="$DEPS_CONMON $DEPS_CRIO $DEPS_K8S"
+DEPS="$DEPS systemd"
 
-PKGS="$BUILD_DEPS $RUNTIME_DEPS"
+PKGS="$DEPS $BUILD_DEPS"
 
 apt_install $PKGS
 install_golang
 install_cni
 install_conmon
+install_cri_tools
 install_crio
 install_kubernetes
 uninstall_golang
