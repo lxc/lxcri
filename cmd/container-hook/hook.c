@@ -192,6 +192,24 @@ int create_devices_at(int rootfs, int runtime, const char *devices)
 			goto out;
 		}
 	}
+
+	int ret;
+
+	ret = symlink("/proc/self/fd/0", "/dev/stdin");
+	if (ret == -1) {
+		printf("failed to create symlink /dev/stdin -> /proc/self/fd/0 : %s\n", strerror(errno));
+		goto out;
+	}
+	ret = symlink("/proc/self/fd/1", "/dev/stdout");
+	if (ret == -1) {
+		printf("failed to create symlink /dev/stdout -> /proc/self/fd/1 : %s\n", strerror(errno));
+		goto out;
+	}
+	ret = symlink("/proc/self/fd/2", "/dev/stderr");
+	if (ret == -1) {
+		printf("failed to create symlink /dev/stderr -> /proc/self/fd/2 : %s\n", strerror(errno));
+		goto out;
+	}
 out:
 	fclose(f);
 	return (errno == 0) ? 0 : -1;
