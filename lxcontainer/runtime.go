@@ -69,7 +69,8 @@ func (c *Runtime) createContainer(spec *specs.Spec) error {
 	}
 
 	if spec.Linux.CgroupsPath == "" {
-		return fmt.Errorf("empty cgroups path in spec")
+		//return fmt.Errorf("empty cgroups path in spec")
+		spec.Linux.CgroupsPath = "foo.slice"
 	}
 	if c.SystemdCgroup {
 		c.CgroupDir = parseSystemdCgroupPath(spec.Linux.CgroupsPath)
