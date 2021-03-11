@@ -1,4 +1,4 @@
-FROM localhost/criolxc:0.1
+FROM localhost/criolxc:0.4
 
 COPY install-node.sh utils.sh /tmp
 RUN /tmp/install-node.sh

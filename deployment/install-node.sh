@@ -140,11 +140,11 @@ install_kubernetes() {
 # TODO let install functions append build dependencies and runtime dependencies
 BUILD_DEPS_CONMON="libglib2.0-dev"
 BUILD_DEPS_CRIO="libseccomp-dev libapparmor-dev libbtrfs-dev libdevmapper-dev libcap-dev libc6-dev"
-BUILD_DEPS="wget ca-certificates git build-essential libtool make automake pkg-config"
+BUILD_DEPS="wget git build-essential libtool make automake pkg-config"
 BUILD_DEPS="${BUILD_DEPS} ${BUILD_DEPS_CONMON} ${BUILD_DEPS_CRIO}"
 
 DEPS_CONMON="libglib2.0-0"
-DEPS_CRIO="tzdata"
+DEPS_CRIO="tzdata ca-certificates"
 DEPS_K8S="ebtables ethtool socat conntrack iproute2 iptables"
 DEPS="$DEPS_CONMON $DEPS_CRIO $DEPS_K8S"
 DEPS="$DEPS systemd"
