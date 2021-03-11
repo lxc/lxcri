@@ -424,7 +424,7 @@ func writeDevices(dst string, spec *specs.Spec) error {
 			uid = *d.UID
 		}
 		gid := spec.Process.User.GID
-		if d.GID == nil {
+		if d.GID != nil {
 			gid = *d.GID
 		}
 		mode := os.FileMode(0600)
