@@ -525,9 +525,10 @@ func doExec(ctx *cli.Context) error {
 	return nil
 }
 
-func readSpec(src string) (spec *specs.Spec, err error) {
-	err = lxcontainer.DecodeFileJSON(spec, src)
-	return
+func readSpec(src string) (*specs.Spec, error) {
+	spec := new(specs.Spec)
+	err := lxcontainer.DecodeFileJSON(spec, src)
+	return spec, err
 }
 
 func readSpecProcess(src string) (*specs.Process, error) {
