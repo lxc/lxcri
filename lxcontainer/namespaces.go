@@ -11,20 +11,30 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-type namespace struct {
+type Namespace struct {
 	Name      string
 	CloneFlag int
 }
 
+var CgroupNamespace = Namespace{"cgroup", unix.CLONE_NEWCGROUP}
+var IPCNamespace = Namespace{"ipc", unix.CLONE_NEWIPC}
+var MountNamespace = Namespace{"mnt", unix.CLONE_NEWNS}
+var NetworkNamespace = Namespace{"net", unix.CLONE_NEWNET}
+var PIDNamespace = Namespace{"pid", unix.CLONE_NEWPID}
+var TimeNamespace = Namespace{"time", unix.CLONE_NEWTIME}
+var UserNamespace = Namespace{"user", unix.CLONE_NEWUSER}
+var UTSNamespace = Namespace{"uts", unix.CLONE_NEWUTS}
+
 // maps from CRIO namespace names to LXC names and clone flags
-var namespaceMap = map[specs.LinuxNamespaceType]namespace{
-	specs.CgroupNamespace:  namespace{"cgroup", unix.CLONE_NEWCGROUP},
-	specs.IPCNamespace:     namespace{"ipc", unix.CLONE_NEWIPC},
-	specs.MountNamespace:   namespace{"mnt", unix.CLONE_NEWNS},
-	specs.NetworkNamespace: namespace{"net", unix.CLONE_NEWNET},
-	specs.PIDNamespace:     namespace{"pid", unix.CLONE_NEWPID},
-	specs.UserNamespace:    namespace{"user", unix.CLONE_NEWUSER},
-	specs.UTSNamespace:     namespace{"uts", unix.CLONE_NEWUTS},
+var namespaceMap = map[specs.LinuxNamespaceType]Namespace{
+	specs.CgroupNamespace:  CgroupNamespace,
+	specs.IPCNamespace:     IPCNamespace,
+	specs.MountNamespace:   MountNamespace,
+	specs.NetworkNamespace: NetworkNamespace,
+	specs.PIDNamespace:     PIDNamespace,
+	// specs.TimeNamespace:     TimeNamespace,
+	specs.UserNamespace: UserNamespace,
+	specs.UTSNamespace:  UTSNamespace,
 }
 
 func cloneFlags(namespaces []specs.LinuxNamespace) (int, error) {
