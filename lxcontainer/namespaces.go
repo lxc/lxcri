@@ -51,37 +51,31 @@ func cloneFlags(namespaces []specs.LinuxNamespace) (int, error) {
 
 func configureNamespaces(clxc *Runtime, namespaces []specs.LinuxNamespace) error {
 	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
+	cloneNamespaces := make([]string, 0, len(namespaces))
+
 	for _, ns := range namespaces {
-		if _, ok := seenNamespaceTypes[ns.Type]; ok {
-			return fmt.Errorf("duplicate namespace type %s", ns.Type)
+		if _, seen := seenNamespaceTypes[ns.Type]; seen {
+			return fmt.Errorf("duplicate namespace %s", ns.Type)
 		}
 		seenNamespaceTypes[ns.Type] = true
-		if ns.Path == "" {
-			continue
-		}
 
 		n, supported := namespaceMap[ns.Type]
 		if !supported {
 			return fmt.Errorf("unsupported namespace %s", ns.Type)
 		}
+
+		if ns.Path == "" {
+			cloneNamespaces = append(cloneNamespaces, n.Name)
+			continue
+		}
+
 		configKey := fmt.Sprintf("lxc.namespace.share.%s", n.Name)
 		if err := clxc.setConfigItem(configKey, ns.Path); err != nil {
 			return err
 		}
 	}
 
-	// from `man lxc.container.conf` - user and network namespace must be inherited together
-	if !seenNamespaceTypes[specs.NetworkNamespace] && seenNamespaceTypes[specs.UserNamespace] {
-		return fmt.Errorf("to inherit the network namespace the user namespace must be inherited as well")
-	}
-
-	nsToKeep := make([]string, 0, len(namespaceMap))
-	for key, n := range namespaceMap {
-		if !seenNamespaceTypes[key] {
-			nsToKeep = append(nsToKeep, n.Name)
-		}
-	}
-	return clxc.setConfigItem("lxc.namespace.keep", strings.Join(nsToKeep, " "))
+	return clxc.setConfigItem("lxc.namespace.clone", strings.Join(cloneNamespaces, " "))
 }
 
 func isNamespaceEnabled(spec *specs.Spec, nsType specs.LinuxNamespaceType) bool {
