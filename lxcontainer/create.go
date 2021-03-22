@@ -17,6 +17,9 @@ import (
 )
 
 func (c *Runtime) Create(ctx context.Context, spec *specs.Spec) error {
+	ctx, cancel := context.WithTimeout(ctx, c.CreateTimeout)
+	defer cancel()
+
 	if c.runtimePathExists() {
 		return ErrExist
 	}

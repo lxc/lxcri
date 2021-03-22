@@ -26,11 +26,6 @@ var clxc struct {
 	Command           string
 	CreateHook        string
 	CreateHookTimeout time.Duration
-
-	CreateTimeout time.Duration
-	StartTimeout  time.Duration
-	KillTimeout   time.Duration
-	DeleteTimeout time.Duration
 }
 
 var version string
@@ -287,15 +282,12 @@ func doCreate(unused *cli.Context) error {
 }
 
 func doCreateInternal(unused *cli.Context) error {
-	ctx, cancel := context.WithTimeout(context.Background(), clxc.CreateTimeout)
-	defer cancel()
-
 	specPath := filepath.Join(clxc.BundlePath, "config.json")
 	spec, err := readSpec(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
-	return clxc.Create(ctx, spec)
+	return clxc.Create(context.Background(), spec)
 }
 
 func runCreateHook(err error) {
@@ -342,9 +334,7 @@ starts <containerID>
 }
 
 func doStart(unused *cli.Context) error {
-	ctx, cancel := context.WithTimeout(context.Background(), clxc.StartTimeout)
-	defer cancel()
-	return clxc.Start(ctx)
+	return clxc.Start(context.Background())
 }
 
 var stateCmd = cli.Command{
@@ -398,9 +388,7 @@ func doKill(ctx *cli.Context) error {
 	if signum == 0 {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
-	c, cancel := context.WithTimeout(context.Background(), clxc.KillTimeout)
-	defer cancel()
-	return clxc.Kill(c, signum)
+	return clxc.Kill(context.Background(), signum)
 }
 
 var deleteCmd = cli.Command{
@@ -427,9 +415,7 @@ var deleteCmd = cli.Command{
 }
 
 func doDelete(ctx *cli.Context) error {
-	c, cancel := context.WithTimeout(context.Background(), clxc.DeleteTimeout)
-	defer cancel()
-	err := clxc.Delete(c, ctx.Bool("force"))
+	err := clxc.Delete(context.Background(), ctx.Bool("force"))
 	if errors.Is(err, lxcontainer.ErrNotExist) {
 		clxc.Log.Warn().Msg("container does not exist")
 		return nil

@@ -22,10 +22,11 @@ var ErrExist = fmt.Errorf("container already exists")
 
 type Runtime struct {
 	Container *lxc.Container `json:"-"`
+	Log       zerolog.Logger `json:"-"`
+	LogFile   *os.File       `json:"-"`
+
 	ContainerInfo
 
-	// [ global settings ]
-	LogFile           *os.File `json:"-"`
 	LogFilePath       string
 	LogLevel          string
 	LogTimestamp      string
@@ -37,7 +38,10 @@ type Runtime struct {
 	InitCommand   string
 	ContainerHook string
 
-	Log zerolog.Logger `json:"-"`
+	CreateTimeout time.Duration
+	StartTimeout  time.Duration
+	KillTimeout   time.Duration
+	DeleteTimeout time.Duration
 
 	// runtime hooks (not OCI runtime hooks)
 
@@ -462,6 +466,9 @@ func (c *Runtime) saveConfig() error {
 }
 
 func (c *Runtime) Start(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, c.StartTimeout)
+	defer cancel()
+
 	c.Log.Info().Msg("notify init to start container process")
 
 	err := c.loadContainer()
@@ -520,6 +527,9 @@ func (c *Runtime) readFifo() error {
 }
 
 func (c *Runtime) Delete(ctx context.Context, force bool) error {
+	ctx, cancel := context.WithTimeout(ctx, c.DeleteTimeout)
+	defer cancel()
+
 	err := c.loadContainer()
 	if err == ErrNotExist {
 		c.Log.Info().Msg("container does not exist")
@@ -569,6 +579,9 @@ func (c *Runtime) State() (*specs.State, error) {
 }
 
 func (c *Runtime) Kill(ctx context.Context, signum unix.Signal) error {
+	ctx, cancel := context.WithTimeout(ctx, c.KillTimeout)
+	defer cancel()
+
 	err := c.loadContainer()
 	if err != nil {
 		return errorf("failed to load container: %w", err)
