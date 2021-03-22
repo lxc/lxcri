@@ -21,11 +21,11 @@ var ErrNotExist = fmt.Errorf("container does not exist")
 var ErrExist = fmt.Errorf("container already exists")
 
 type Runtime struct {
-	Container *lxc.Container
+	Container *lxc.Container `json:"-"`
 	ContainerInfo
 
 	// [ global settings ]
-	LogFile           *os.File
+	LogFile           *os.File `json:"-"`
 	LogFilePath       string
 	LogLevel          string
 	LogTimestamp      string
@@ -37,13 +37,13 @@ type Runtime struct {
 	InitCommand   string
 	ContainerHook string
 
-	Log zerolog.Logger
+	Log zerolog.Logger `json:"-"`
 
 	// runtime hooks (not OCI runtime hooks)
 
 	// AfterCreateContainer is called right after creating the container runtime directory and descriptor,
 	// and before creating the lxc 'config' file for the container.
-	AfterCreateContainer func(c *Runtime) error
+	AfterCreateContainer func(c *Runtime) error `json:"-"`
 }
 
 // createContainer creates a new container.
