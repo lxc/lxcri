@@ -187,8 +187,7 @@ func configureContainer(c *Runtime, spec *specs.Spec) error {
 	}
 
 	if c.Seccomp {
-		if spec.Linux.Seccomp == nil || len(spec.Linux.Seccomp.Syscalls) == 0 {
-		} else {
+		if spec.Linux.Seccomp != nil && len(spec.Linux.Seccomp.Syscalls) > 0 {
 			profilePath := c.RuntimePath("seccomp.conf")
 			if err := writeSeccompProfile(profilePath, spec.Linux.Seccomp); err != nil {
 				return err
@@ -323,7 +322,9 @@ func configureCapabilities(c *Runtime, spec *specs.Spec) error {
 			lcCapName := strings.TrimPrefix(strings.ToLower(c), "cap_")
 			caps = append(caps, lcCapName)
 		}
-		keepCaps = strings.Join(caps, " ")
+		if len(caps) > 0 {
+			keepCaps = strings.Join(caps, " ")
+		}
 	}
 
 	return c.setConfigItem("lxc.cap.keep", keepCaps)
