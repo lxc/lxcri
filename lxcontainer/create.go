@@ -181,15 +181,15 @@ func configureContainer(c *Runtime, spec *specs.Spec) error {
 		}
 	}
 
-	if c.Apparmor {
+	if c.Features.Apparmor {
 		if err := configureApparmor(c, spec); err != nil {
 			return fmt.Errorf("failed to configure apparmor: %w", err)
 		}
 	} else {
-		c.Log.Warn().Msg("apparmor is disabled (unconfined)")
+		c.Log.Warn().Msg("apparmor feature is disabled - profile is set to unconfined")
 	}
 
-	if c.Seccomp {
+	if c.Features.Seccomp {
 		if spec.Linux.Seccomp != nil && len(spec.Linux.Seccomp.Syscalls) > 0 {
 			profilePath := c.RuntimePath("seccomp.conf")
 			if err := writeSeccompProfile(profilePath, spec.Linux.Seccomp); err != nil {
@@ -200,15 +200,15 @@ func configureContainer(c *Runtime, spec *specs.Spec) error {
 			}
 		}
 	} else {
-		c.Log.Warn().Msg("seccomp is disabled")
+		c.Log.Warn().Msg("seccomp feature is disabled - all system calls are allowed")
 	}
 
-	if c.Capabilities {
+	if c.Features.Capabilities {
 		if err := configureCapabilities(c, spec); err != nil {
 			return fmt.Errorf("failed to configure capabilities: %w", err)
 		}
 	} else {
-		c.Log.Warn().Msg("capabilities are disabled")
+		c.Log.Warn().Msg("capabilities feature is disabled - running with full privileges")
 	}
 
 	if err := ensureDefaultDevices(c, spec); err != nil {

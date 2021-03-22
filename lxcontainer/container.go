@@ -28,12 +28,6 @@ type ContainerInfo struct {
 	// values derived from spec
 	CgroupDir string
 
-	// feature gates
-	Seccomp       bool
-	Capabilities  bool
-	Apparmor      bool
-	CgroupDevices bool
-
 	// values duplicated from bundle.json
 	// annotations are required for 'state'
 	Annotations map[string]string `json:",omitempty"`

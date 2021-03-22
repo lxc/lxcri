@@ -25,14 +25,15 @@ type Runtime struct {
 	Log       zerolog.Logger `json:"-"`
 	LogFile   *os.File       `json:"-"`
 
-	ContainerInfo
+	ContainerInfo `json:"-"`
 
 	LogFilePath       string
 	LogLevel          string
 	LogTimestamp      string
 	ContainerLogLevel string
-	SystemdCgroup     bool
-	MonitorCgroup     string
+
+	SystemdCgroup bool
+	MonitorCgroup string
 
 	StartCommand  string
 	InitCommand   string
@@ -42,6 +43,14 @@ type Runtime struct {
 	StartTimeout  time.Duration
 	KillTimeout   time.Duration
 	DeleteTimeout time.Duration
+
+	// feature gates
+	Features struct {
+		Seccomp       bool
+		Capabilities  bool
+		Apparmor      bool
+		CgroupDevices bool
+	}
 
 	// runtime hooks (not OCI runtime hooks)
 

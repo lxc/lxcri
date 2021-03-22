@@ -64,8 +64,8 @@ func configureDeviceController(clxc *Runtime, spec *specs.Spec) error {
 	devicesAllow := "lxc.cgroup2.devices.allow"
 	devicesDeny := "lxc.cgroup2.devices.deny"
 
-	if !clxc.CgroupDevices {
-		clxc.Log.Warn().Msg("cgroup device controller is disabled (access to all devices is granted)")
+	if !clxc.Features.CgroupDevices {
+		clxc.Log.Warn().Msg("cgroup device controller feature is disabled - access to all devices is granted")
 		return nil
 	}
 
