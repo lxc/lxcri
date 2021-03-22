@@ -17,14 +17,14 @@ import (
 )
 
 func (c *Runtime) Create(ctx context.Context, spec *specs.Spec) error {
-	ctx, cancel := context.WithTimeout(ctx, c.CreateTimeout)
+	ctx, cancel := context.WithTimeout(ctx, c.Timeouts.Create)
 	defer cancel()
 
 	if c.runtimePathExists() {
 		return ErrExist
 	}
 
-	err := canExecute(c.StartCommand, c.ContainerHook, c.InitCommand)
+	err := canExecute(c.Executables.Start, c.Executables.Hook, c.Executables.Init)
 	if err != nil {
 		return errorf("access check failed: %w", err)
 	}
@@ -82,7 +82,7 @@ func (c *Runtime) Create(ctx context.Context, spec *specs.Spec) error {
 
 func (c *Runtime) runStartCmd(ctx context.Context, spec *specs.Spec) (err error) {
 	// #nosec
-	cmd := exec.Command(c.StartCommand, c.Container.Name(), c.RuntimeRoot, c.ConfigFilePath())
+	cmd := exec.Command(c.Executables.Start, c.Container.Name(), c.RuntimeRoot, c.ConfigFilePath())
 	cmd.Env = []string{}
 	cmd.Dir = c.RuntimePath()
 
@@ -227,7 +227,7 @@ func configureContainer(c *Runtime, spec *specs.Spec) error {
 	if err := c.setConfigItem("lxc.hook.version", "1"); err != nil {
 		return err
 	}
-	if err := c.setConfigItem("lxc.hook.mount", c.ContainerHook); err != nil {
+	if err := c.setConfigItem("lxc.hook.mount", c.Executables.Hook); err != nil {
 		return err
 	}
 

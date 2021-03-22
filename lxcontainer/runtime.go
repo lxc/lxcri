@@ -35,14 +35,22 @@ type Runtime struct {
 	SystemdCgroup bool
 	MonitorCgroup string
 
-	StartCommand  string
-	InitCommand   string
-	ContainerHook string
+	// Executables contains names for all (external) executed commands.
+	// The excutable name is used as path if it contains a slash, otherwise
+	// the PATH environment variable is consulted to resolve the executable path.
+	Executables struct {
+		Start string
+		Init  string
+		Hook  string
+	}
 
-	CreateTimeout time.Duration
-	StartTimeout  time.Duration
-	KillTimeout   time.Duration
-	DeleteTimeout time.Duration
+	// Timeouts for API commands
+	Timeouts struct {
+		Create time.Duration
+		Start  time.Duration
+		Kill   time.Duration
+		Delete time.Duration
+	}
 
 	// feature gates
 	Features struct {
@@ -475,7 +483,7 @@ func (c *Runtime) saveConfig() error {
 }
 
 func (c *Runtime) Start(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, c.StartTimeout)
+	ctx, cancel := context.WithTimeout(ctx, c.Timeouts.Start)
 	defer cancel()
 
 	c.Log.Info().Msg("notify init to start container process")
@@ -536,7 +544,7 @@ func (c *Runtime) readFifo() error {
 }
 
 func (c *Runtime) Delete(ctx context.Context, force bool) error {
-	ctx, cancel := context.WithTimeout(ctx, c.DeleteTimeout)
+	ctx, cancel := context.WithTimeout(ctx, c.Timeouts.Delete)
 	defer cancel()
 
 	err := c.loadContainer()
@@ -588,7 +596,7 @@ func (c *Runtime) State() (*specs.State, error) {
 }
 
 func (c *Runtime) Kill(ctx context.Context, signum unix.Signal) error {
-	ctx, cancel := context.WithTimeout(ctx, c.KillTimeout)
+	ctx, cancel := context.WithTimeout(ctx, c.Timeouts.Kill)
 	defer cancel()
 
 	err := c.loadContainer()

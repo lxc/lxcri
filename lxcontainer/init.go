@@ -88,7 +88,7 @@ func configureInit(clxc *Runtime, spec *specs.Spec) error {
 	}
 	initCmd := filepath.Join(initDir, "init")
 	spec.Mounts = append(spec.Mounts, specs.Mount{
-		Source:      clxc.InitCommand,
+		Source:      clxc.Executables.Init,
 		Destination: strings.TrimLeft(initCmd, "/"),
 		Type:        "bind",
 		Options:     []string{"bind", "ro", "nosuid"},
