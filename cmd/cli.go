@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Drachenfels-GmbH/crio-lxc/lxcontainer"
+	"github.com/Drachenfels-GmbH/crio-lxc/lxcontainer/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -18,14 +19,50 @@ import (
 // Existing environment variables are preserved.
 var envFile = "/etc/default/crio-lxc"
 
-// The singelton that wraps the lxc.Container
-var clxc struct {
-	lxcontainer.Runtime
-	ContainerConfig lxcontainer.ContainerConfig
+const defaultLogFile = "/var/log/crio-lxc/crio-lxc.log"
 
-	Command           string
-	CreateHook        string
-	CreateHookTimeout time.Duration
+type app struct {
+	lxcontainer.Runtime
+	containerConfig lxcontainer.ContainerConfig
+
+	logConfig struct {
+		File      *os.File
+		FilePath  string
+		Level     string
+		Timestamp string
+	}
+
+	command           string
+	createHook        string
+	createHookTimeout time.Duration
+}
+
+var clxc = app{}
+
+func (app *app) configureLogger() error {
+	// TODO use console logger if filepath is /dev/stdout or /dev/stderr ?
+	l, err := log.OpenFile(app.logConfig.FilePath, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %w", err)
+	}
+	app.logConfig.File = l
+
+	level, err := log.ParseLevel(app.logConfig.Level)
+	if err != nil {
+		return fmt.Errorf("failed to parse log level: %w", err)
+	}
+	logCtx := log.NewLogger(app.logConfig.File, level)
+	app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.containerConfig.ContainerID).Logger()
+	app.containerConfig.Log = app.Runtime.Log
+
+	return nil
+}
+
+func (app *app) release() error {
+	if app.logConfig.File != nil {
+		return app.logConfig.File.Close()
+	}
+	return nil
 }
 
 var version string
@@ -48,7 +85,6 @@ func main() {
 		&deleteCmd,
 		&execCmd,
 		// TODO extend urfave/cli to render a default environment file.
-
 	}
 
 	app.Flags = []cli.Flag{
@@ -57,28 +93,34 @@ func main() {
 			Usage:       "set the runtime log level (trace|debug|info|warn|error)",
 			EnvVars:     []string{"CRIO_LXC_LOG_LEVEL"},
 			Value:       "info",
-			Destination: &clxc.Log.Level,
+			Destination: &clxc.logConfig.Level,
+		},
+		&cli.StringFlag{
+			Name:        "log-file",
+			Usage:       "path to the log file for runtime and container output",
+			EnvVars:     []string{"CRIO_LXC_LOG_FILE"},
+			Value:       defaultLogFile,
+			Destination: &clxc.logConfig.FilePath,
+		},
+		&cli.StringFlag{
+			Name:        "log-timestamp",
+			Usage:       "timestamp format for the runtime log (see golang time package), default matches liblxc timestamp",
+			EnvVars:     []string{"CRIO_LXC_LOG_TIMESTAMP"}, // e.g  '0102 15:04:05.000'
+			Destination: &clxc.logConfig.Timestamp,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-level",
 			Usage:       "set the container process (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
 			EnvVars:     []string{"CRIO_LXC_CONTAINER_LOG_LEVEL"},
 			Value:       "warn",
-			Destination: &clxc.Log.LevelContainer,
+			Destination: &clxc.containerConfig.LogLevel,
 		},
 		&cli.StringFlag{
-			Name:        "log-file",
+			Name:        "container-log-file",
 			Usage:       "path to the log file for runtime and container output",
-			EnvVars:     []string{"CRIO_LXC_LOG_FILE"},
-			Value:       "/var/log/crio-lxc/crio-lxc.log",
-			Destination: &clxc.Log.FilePath,
-		},
-		&cli.StringFlag{
-			Name:        "log-timestamp",
-			Usage:       "timestamp format for the runtime log (see golang time package), default matches liblxc timestamp",
-			EnvVars:     []string{"CRIO_LXC_LOG_TIMESTAMP"}, // e.g  '0102 15:04:05.000'
-			Value:       "20060102150405.000",
-			Destination: &clxc.Log.Timestamp,
+			EnvVars:     []string{"CRIO_LXC_CONTAINER_LOG_FILE"},
+			Value:       defaultLogFile,
+			Destination: &clxc.containerConfig.LogFile,
 		},
 		&cli.StringFlag{
 			Name:  "root",
@@ -185,7 +227,7 @@ func main() {
 	app.OnUsageError = errUsage
 
 	app.Before = func(ctx *cli.Context) error {
-		clxc.Command = ctx.Args().Get(0)
+		clxc.command = ctx.Args().Get(0)
 		return nil
 	}
 
@@ -194,8 +236,12 @@ func main() {
 		if len(containerID) == 0 {
 			return fmt.Errorf("missing container ID")
 		}
-		clxc.ContainerConfig.ContainerID = containerID
-		return clxc.Log.Open(ctx.Command.Name)
+		clxc.containerConfig.ContainerID = containerID
+
+		if err := clxc.configureLogger(); err != nil {
+			return fmt.Errorf("failed to configure logger: %w", err)
+		}
+		return nil
 	}
 
 	for _, cmd := range app.Commands {
@@ -209,7 +255,7 @@ func main() {
 
 	if err != nil {
 		clxc.Log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
-		clxc.Release()
+		clxc.release()
 		// write diagnostics message to stderr for crio/kubelet
 		println(err.Error())
 
@@ -222,7 +268,7 @@ func main() {
 	}
 
 	clxc.Log.Debug().Dur("duration", cmdDuration).Msg("cmd completed")
-	if clxc.Release(); err != nil {
+	if clxc.release(); err != nil {
 		println(err.Error())
 		os.Exit(1)
 	}
@@ -238,17 +284,17 @@ var createCmd = cli.Command{
 			Name:        "bundle",
 			Usage:       "set bundle directory",
 			Value:       ".",
-			Destination: &clxc.ContainerConfig.BundlePath,
+			Destination: &clxc.containerConfig.BundlePath,
 		},
 		&cli.StringFlag{
 			Name:        "console-socket",
 			Usage:       "send container pty master fd to this socket path",
-			Destination: &clxc.ContainerConfig.ConsoleSocket,
+			Destination: &clxc.containerConfig.ConsoleSocket,
 		},
 		&cli.StringFlag{
 			Name:        "pid-file",
 			Usage:       "path to write container PID",
-			Destination: &clxc.ContainerConfig.PidFile,
+			Destination: &clxc.containerConfig.PidFile,
 		},
 		&cli.DurationFlag{
 			Name:        "timeout",
@@ -262,25 +308,28 @@ var createCmd = cli.Command{
 			Name:        "create-hook",
 			Usage:       "absolute path to executable to run after create",
 			EnvVars:     []string{"CRIO_LXC_CREATE_HOOK"},
-			Destination: &clxc.CreateHook,
+			Destination: &clxc.createHook,
 		},
 		&cli.DurationFlag{
 			Name:        "hook-timeout",
 			Usage:       "maximum duration for hook to complete",
 			EnvVars:     []string{"CRIO_LXC_CREATE_HOOK_TIMEOUT"},
 			Value:       time.Second * 5,
-			Destination: &clxc.CreateHookTimeout,
+			Destination: &clxc.createHookTimeout,
 		},
 	},
 }
 
 func doCreate(unused *cli.Context) error {
-	specPath := filepath.Join(clxc.ContainerConfig.BundlePath, "config.json")
-	err := clxc.ContainerConfig.LoadSpecJson(specPath)
+	if err := clxc.CheckSystem(); err != nil {
+		return err
+	}
+	specPath := filepath.Join(clxc.containerConfig.BundlePath, "config.json")
+	err := clxc.containerConfig.LoadSpecJson(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
-	c, err := clxc.Create(context.Background(), &clxc.ContainerConfig)
+	c, err := clxc.Create(context.Background(), &clxc.containerConfig)
 	if err == nil {
 		defer c.Release()
 	}
@@ -290,25 +339,25 @@ func doCreate(unused *cli.Context) error {
 
 func runCreateHook(err error) {
 	env := []string{
-		"CONTAINER_ID=" + clxc.ContainerConfig.ContainerID,
-		"LXC_CONFIG=" + clxc.ContainerConfig.ConfigFilePath(),
-		"RUNTIME_CMD=" + clxc.Command,
-		"RUNTIME_PATH=" + clxc.ContainerConfig.RuntimePath(),
-		"BUNDLE_PATH=" + clxc.ContainerConfig.BundlePath,
-		"SPEC_PATH=" + clxc.ContainerConfig.SpecPath,
-		"LOG_FILE=" + clxc.Log.FilePath,
+		"CONTAINER_ID=" + clxc.containerConfig.ContainerID,
+		"LXC_CONFIG=" + clxc.containerConfig.ConfigFilePath(),
+		"RUNTIME_CMD=" + clxc.command,
+		"RUNTIME_PATH=" + clxc.containerConfig.RuntimePath(),
+		"BUNDLE_PATH=" + clxc.containerConfig.BundlePath,
+		"SPEC_PATH=" + clxc.containerConfig.SpecPath,
+		"LOG_FILE=" + clxc.logConfig.FilePath,
 	}
 	if err != nil {
 		env = append(env, "RUNTIME_ERROR="+err.Error())
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), clxc.CreateHookTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), clxc.createHookTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, clxc.CreateHook)
+	cmd := exec.CommandContext(ctx, clxc.createHook)
 	cmd.Env = env
 
-	clxc.Log.Debug().Str("file", clxc.CreateHook).Msg("execute create hook")
+	clxc.Log.Debug().Str("file", clxc.createHook).Msg("execute create hook")
 	if err := cmd.Run(); err != nil {
-		clxc.Log.Error().Err(err).Str("file", clxc.CreateHook).Msg("failed to execute create hook")
+		clxc.Log.Error().Err(err).Str("file", clxc.createHook).Msg("failed to execute create hook")
 	}
 }
 
@@ -332,7 +381,7 @@ starts <containerID>
 }
 
 func doStart(unused *cli.Context) error {
-	c, err := lxcontainer.LoadContainer(&clxc.ContainerConfig)
+	c, err := clxc.LoadContainer(&clxc.containerConfig)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -352,7 +401,7 @@ var stateCmd = cli.Command{
 }
 
 func doState(unused *cli.Context) error {
-	c, err := lxcontainer.LoadContainer(&clxc.ContainerConfig)
+	c, err := clxc.LoadContainer(&clxc.containerConfig)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -396,7 +445,7 @@ func doKill(ctx *cli.Context) error {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
 
-	c, err := lxcontainer.LoadContainer(&clxc.ContainerConfig)
+	c, err := clxc.LoadContainer(&clxc.containerConfig)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -427,7 +476,7 @@ var deleteCmd = cli.Command{
 }
 
 func doDelete(ctx *cli.Context) error {
-	c, err := lxcontainer.LoadContainer(&clxc.ContainerConfig)
+	c, err := clxc.LoadContainer(&clxc.containerConfig)
 	if err == lxcontainer.ErrNotExist {
 		clxc.Log.Info().Msg("container does not exist")
 		return nil
@@ -504,7 +553,7 @@ func doExec(ctx *cli.Context) error {
 		args = procSpec.Args
 	}
 
-	c, err := lxcontainer.LoadContainer(&clxc.ContainerConfig)
+	c, err := clxc.LoadContainer(&clxc.containerConfig)
 	if err != nil {
 		return err
 	}
