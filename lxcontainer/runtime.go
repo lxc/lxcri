@@ -61,9 +61,14 @@ type Runtime struct {
 	}
 }
 
-// Release releases/closes allocated resources (lxc.Container, LogFile)
-func (rt *Runtime) Close() error {
-	return rt.Log.File.Close()
+func (rt *Runtime) LoadContainer(cfg *ContainerConfig) (*Container, error) {
+	c := &Container{ContainerConfig: cfg}
+	c.RuntimeDir = filepath.Join(rt.Root, c.ContainerID)
+
+	if err := c.Load(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func (rt *Runtime) Start(ctx context.Context, c *Container) error {

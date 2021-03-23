@@ -16,21 +16,18 @@ import (
 	"gopkg.in/lxc/go-lxc.v2"
 )
 
-func (rt *Runtime) Create(ctx context.Context, config *ContainerConfig) (*Container, error) {
+func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container, error) {
 	ctx, cancel := context.WithTimeout(ctx, rt.Timeouts.Create)
 	defer cancel()
 
-	if err := rt.checkSystem(); err != nil {
+	if err := rt.checkConfig(cfg); err != nil {
 		return nil, err
 	}
 
-	if err := rt.checkConfig(config); err != nil {
-		return nil, err
-	}
+	c := &Container{ContainerConfig: cfg}
+	c.RuntimeDir = filepath.Join(rt.Root, c.ContainerID)
 
-	config.RuntimeDir = filepath.Join(rt.Root, config.ContainerID)
-	c, err := NewContainer(config)
-	if err != nil {
+	if err := c.Create(); err != nil {
 		return nil, errorf("failed to create container: %w", err)
 	}
 
@@ -48,7 +45,7 @@ func (rt *Runtime) Create(ctx context.Context, config *ContainerConfig) (*Contai
 	return c, nil
 }
 
-func (rt *Runtime) checkSystem() error {
+func (rt *Runtime) CheckSystem() error {
 	err := canExecute(rt.Executables.Start, rt.Executables.Hook, rt.Executables.Init)
 	if err != nil {
 		return errorf("access check failed: %w", err)

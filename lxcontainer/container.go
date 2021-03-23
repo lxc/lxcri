@@ -86,15 +86,12 @@ type Container struct {
 	*ContainerConfig
 }
 
-func NewContainer(config *ContainerConfig) (*Container, error) {
-	c := &Container{ContainerConfig: config}
-
+func (c *Container) Create() error {
 	if c.runtimeDirExists() {
-		return nil, ErrExist
+		return ErrExist
 	}
-
 	if err := os.MkdirAll(c.RuntimeDir, 0700); err != nil {
-		return nil, fmt.Errorf("failed to create container dir: %w", err)
+		return fmt.Errorf("failed to create container dir: %w", err)
 	}
 
 	// An empty tmpfile is created to ensure that createContainer can only succeed once.
@@ -102,38 +99,37 @@ func NewContainer(config *ContainerConfig) (*Container, error) {
 	// #nosec
 	f, err := os.OpenFile(c.RuntimePath(".config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if err := f.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close empty config tmpfile: %w", err)
+		return fmt.Errorf("failed to close empty config tmpfile: %w", err)
 	}
 
 	c.linuxcontainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.RuntimeDir))
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return c, nil
+
+	return nil
 }
 
-func LoadContainer(cfg *ContainerConfig) (*Container, error) {
-	c := &Container{ContainerConfig: cfg}
-
+func (c *Container) Load() error {
 	if !c.runtimeDirExists() {
-		return nil, ErrNotExist
+		return ErrNotExist
 	}
 
 	err := decodeFileJSON(&c.ContainerConfig, c.RuntimePath("container.json"))
 	if err != nil {
-		return nil, fmt.Errorf("failed to load container config: %w", err)
+		return fmt.Errorf("failed to load container config: %w", err)
 	}
 
 	_, err = os.Stat(c.ConfigFilePath())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load lxc config file: %w", err)
+		return fmt.Errorf("failed to load lxc config file: %w", err)
 	}
 	c.linuxcontainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.RuntimeDir))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create lxc container: %w", err)
+		return fmt.Errorf("failed to create lxc container: %w", err)
 	}
 
 	err = c.linuxcontainer.LoadConfigFile(c.ConfigFilePath())
