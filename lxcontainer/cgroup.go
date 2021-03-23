@@ -24,50 +24,111 @@ const (
 // https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md
 // TODO New spec will contain a property Unified for cgroupv2 properties
 // https://github.com/opencontainers/runtime-spec/blob/master/config-linux.md#unified
-func configureCgroup(clxc *Runtime, spec *specs.Spec) error {
-	if devices := spec.Linux.Resources.Devices; devices != nil {
-		if err := configureDeviceController(clxc, spec); err != nil {
+func configureCgroup(rt *Runtime, c *Container) error {
+	if err := configureCgroupPath(rt, c); err != nil {
+		return err
+	}
+
+	if devices := c.Linux.Resources.Devices; devices != nil {
+		if rt.Features.CgroupDevices {
+			if err := configureDeviceController(c); err != nil {
+				return err
+			}
+		} else {
+			c.Log.Warn().Msg("cgroup device controller feature is disabled - access to all devices is granted")
+		}
+
+	}
+
+	if mem := c.Linux.Resources.Memory; mem != nil {
+		rt.Log.Debug().Msg("TODO cgroup memory controller not implemented")
+	}
+
+	if cpu := c.Linux.Resources.CPU; cpu != nil {
+		if err := configureCPUController(rt, cpu); err != nil {
 			return err
 		}
 	}
 
-	if mem := spec.Linux.Resources.Memory; mem != nil {
-		clxc.Log.Debug().Msg("TODO cgroup memory controller not implemented")
-	}
-
-	if cpu := spec.Linux.Resources.CPU; cpu != nil {
-		if err := configureCPUController(clxc, cpu); err != nil {
+	if pids := c.Linux.Resources.Pids; pids != nil {
+		if err := c.SetConfigItem("lxc.cgroup2.pids.max", fmt.Sprintf("%d", pids.Limit)); err != nil {
 			return err
 		}
 	}
-
-	if pids := spec.Linux.Resources.Pids; pids != nil {
-		if err := clxc.setConfigItem("lxc.cgroup2.pids.max", fmt.Sprintf("%d", pids.Limit)); err != nil {
-			return err
-		}
-	}
-	if blockio := spec.Linux.Resources.BlockIO; blockio != nil {
-		clxc.Log.Debug().Msg("TODO cgroup blockio controller not implemented")
+	if blockio := c.Linux.Resources.BlockIO; blockio != nil {
+		rt.Log.Debug().Msg("TODO cgroup blockio controller not implemented")
 	}
 
-	if hugetlb := spec.Linux.Resources.HugepageLimits; hugetlb != nil {
+	if hugetlb := c.Linux.Resources.HugepageLimits; hugetlb != nil {
 		// set Hugetlb limit (in bytes)
-		clxc.Log.Debug().Msg("TODO cgroup hugetlb controller not implemented")
+		rt.Log.Debug().Msg("TODO cgroup hugetlb controller not implemented")
 	}
-	if net := spec.Linux.Resources.Network; net != nil {
-		clxc.Log.Debug().Msg("TODO cgroup network controller not implemented")
+	if net := c.Linux.Resources.Network; net != nil {
+		rt.Log.Debug().Msg("TODO cgroup network controller not implemented")
 	}
 	return nil
 }
 
-func configureDeviceController(clxc *Runtime, spec *specs.Spec) error {
+func configureCgroupPath(rt *Runtime, c *Container) error {
+	if c.Linux.CgroupsPath == "" {
+		//return fmt.Errorf("empty cgroups path in spec")
+		c.Linux.CgroupsPath = "foo.slice"
+	}
+	if rt.SystemdCgroup {
+		c.CgroupDir = parseSystemdCgroupPath(c.Linux.CgroupsPath)
+	} else {
+		c.CgroupDir = c.Linux.CgroupsPath
+	}
+
+	c.MonitorCgroupDir = filepath.Join(rt.MonitorCgroup, c.ContainerID+".scope")
+
+	if err := createCgroup(filepath.Dir(c.CgroupDir), allControllers); err != nil {
+		return err
+	}
+
+	if err := c.SetConfigItem("lxc.cgroup.relative", "0"); err != nil {
+		return err
+	}
+
+	if err := c.SetConfigItem("lxc.cgroup.dir", c.CgroupDir); err != nil {
+		return err
+	}
+
+	/*
+		if c.supportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
+			if err := c.SetConfigItem("lxc.cgroup.dir.monitor.pivot", c.MonitorCgroup); err != nil {
+				return err
+			}
+		}
+	*/
+
+	/*
+		// @since lxc @a900cbaf257c6a7ee9aa73b09c6d3397581d38fb
+		// checking for on of the config items shuld be enough, because they were introduced together ...
+		if supportsConfigItem("lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor") {
+			if err := c.SetConfigItem("lxc.cgroup.dir.container", c.CgroupDir); err != nil {
+				return err
+			}
+			if err := c.SetConfigItem("lxc.cgroup.dir.monitor", c.MonitorCgroupDir); err != nil {
+				return err
+			}
+		} else {
+			if err := c.SetConfigItem("lxc.cgroup.dir", c.CgroupDir); err != nil {
+				return err
+			}
+		}
+		if supportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
+			if err := c.SetConfigItem("lxc.cgroup.dir.monitor.pivot", c.MonitorCgroup); err != nil {
+				return err
+			}
+		}
+	*/
+	return nil
+}
+
+func configureDeviceController(c *Container) error {
 	devicesAllow := "lxc.cgroup2.devices.allow"
 	devicesDeny := "lxc.cgroup2.devices.deny"
-
-	if !clxc.Features.CgroupDevices {
-		clxc.Log.Warn().Msg("cgroup device controller feature is disabled - access to all devices is granted")
-		return nil
-	}
 
 	// Set cgroup device permissions from spec.
 	// Device rule parsing in LXC is not well documented in lxc.container.conf
@@ -79,7 +140,7 @@ func configureDeviceController(clxc *Runtime, spec *specs.Spec) error {
 	blockDevice := "b"
 	charDevice := "c"
 
-	for _, dev := range spec.Linux.Resources.Devices {
+	for _, dev := range c.Linux.Resources.Devices {
 		key := devicesDeny
 		if dev.Allow {
 			key = devicesAllow
@@ -103,16 +164,16 @@ func configureDeviceController(clxc *Runtime, spec *specs.Spec) error {
 			}
 			// decompose
 			val := fmt.Sprintf("%s %s:%s %s", blockDevice, maj, min, dev.Access)
-			if err := clxc.setConfigItem(key, val); err != nil {
+			if err := c.SetConfigItem(key, val); err != nil {
 				return err
 			}
 			val = fmt.Sprintf("%s %s:%s %s", charDevice, maj, min, dev.Access)
-			if err := clxc.setConfigItem(key, val); err != nil {
+			if err := c.SetConfigItem(key, val); err != nil {
 				return err
 			}
 		case blockDevice, charDevice:
 			val := fmt.Sprintf("%s %s:%s %s", dev.Type, maj, min, dev.Access)
-			if err := clxc.setConfigItem(key, val); err != nil {
+			if err := c.SetConfigItem(key, val); err != nil {
 				return err
 			}
 		default:
@@ -128,32 +189,32 @@ func configureCPUController(clxc *Runtime, slinux *specs.LinuxCPU) error {
 	clxc.Log.Debug().Msg("TODO configure cgroup cpu controller")
 	/*
 		if cpu.Shares != nil && *cpu.Shares > 0 {
-				if err := clxc.setConfigItem("lxc.cgroup2.cpu.shares", fmt.Sprintf("%d", *cpu.Shares)); err != nil {
+				if err := clxc.SetConfigItem("lxc.cgroup2.cpu.shares", fmt.Sprintf("%d", *cpu.Shares)); err != nil {
 					return err
 				}
 		}
 		if cpu.Quota != nil && *cpu.Quota > 0 {
-			if err := clxc.setConfigItem("lxc.cgroup2.cpu.cfs_quota_us", fmt.Sprintf("%d", *cpu.Quota)); err != nil {
+			if err := clxc.SetConfigItem("lxc.cgroup2.cpu.cfs_quota_us", fmt.Sprintf("%d", *cpu.Quota)); err != nil {
 				return err
 			}
 		}
 			if cpu.Period != nil && *cpu.Period != 0 {
-				if err := clxc.setConfigItem("lxc.cgroup2.cpu.cfs_period_us", fmt.Sprintf("%d", *cpu.Period)); err != nil {
+				if err := clxc.SetConfigItem("lxc.cgroup2.cpu.cfs_period_us", fmt.Sprintf("%d", *cpu.Period)); err != nil {
 					return err
 				}
 			}
 		if cpu.Cpus != "" {
-			if err := clxc.setConfigItem("lxc.cgroup2.cpuset.cpus", cpu.Cpus); err != nil {
+			if err := clxc.SetConfigItem("lxc.cgroup2.cpuset.cpus", cpu.Cpus); err != nil {
 				return err
 			}
 		}
 		if cpu.RealtimePeriod != nil && *cpu.RealtimePeriod > 0 {
-			if err := clxc.setConfigItem("lxc.cgroup2.cpu.rt_period_us", fmt.Sprintf("%d", *cpu.RealtimePeriod)); err != nil {
+			if err := clxc.SetConfigItem("lxc.cgroup2.cpu.rt_period_us", fmt.Sprintf("%d", *cpu.RealtimePeriod)); err != nil {
 				return err
 			}
 		}
 		if cpu.RealtimeRuntime != nil && *cpu.RealtimeRuntime > 0 {
-			if err := clxc.setConfigItem("lxc.cgroup2.cpu.rt_runtime_us", fmt.Sprintf("%d", *cpu.RealtimeRuntime)); err != nil {
+			if err := clxc.SetConfigItem("lxc.cgroup2.cpu.rt_runtime_us", fmt.Sprintf("%d", *cpu.RealtimeRuntime)); err != nil {
 				return err
 			}
 		}

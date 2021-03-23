@@ -9,7 +9,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func removeMountOptions(clxc *Runtime, fs string, opts []string, unsupported ...string) []string {
+func removeMountOptions(c *Container, fs string, opts []string, unsupported ...string) []string {
 	supported := make([]string, 0, len(opts))
 	for _, opt := range opts {
 		addOption := true
@@ -22,34 +22,34 @@ func removeMountOptions(clxc *Runtime, fs string, opts []string, unsupported ...
 		if addOption {
 			supported = append(supported, opt)
 		} else {
-			clxc.Log.Info().Str("fs", fs).Str("option", opt).Msg("removed mount option")
+			c.Log.Info().Str("fs", fs).Str("option", opt).Msg("removed mount option")
 		}
 	}
 	return supported
 }
 
-func filterMountOptions(clxc *Runtime, fs string, opts []string) []string {
+func filterMountOptions(c *Container, fs string, opts []string) []string {
 	switch fs {
 	case "sysfs":
-		return removeMountOptions(clxc, fs, opts, "rslave")
+		return removeMountOptions(c, fs, opts, "rslave")
 	case "tmpfs":
 		// TODO make this configurable per filesystem
-		return removeMountOptions(clxc, fs, opts, "rprivate", "tmpcopyup")
+		return removeMountOptions(c, fs, opts, "rprivate", "tmpcopyup")
 	case "cgroup2":
 		// TODO make this configurable per filesystem
-		return removeMountOptions(clxc, fs, opts, "private", "rslave")
+		return removeMountOptions(c, fs, opts, "private", "rslave")
 	}
 	return opts
 }
 
-func configureMounts(clxc *Runtime, spec *specs.Spec) error {
+func configureMounts(c *Container) error {
 	// excplicitly disable auto-mounting
-	if err := clxc.setConfigItem("lxc.mount.auto", ""); err != nil {
+	if err := c.SetConfigItem("lxc.mount.auto", ""); err != nil {
 		return err
 	}
 
-	for i := range spec.Mounts {
-		ms := spec.Mounts[i]
+	for i := range c.Mounts {
+		ms := c.Mounts[i]
 		if ms.Type == "cgroup" {
 			// TODO check if hieararchy is cgroup v2 only (unified mode)
 			ms.Type = "cgroup2"
@@ -62,28 +62,28 @@ func configureMounts(clxc *Runtime, spec *specs.Spec) error {
 
 		// TODO replace with symlink.FollowSymlinkInScope(filepath.Join(rootfs, "/etc/passwd"), rootfs) ?
 		// "github.com/docker/docker/pkg/symlink"
-		mountDest, err := resolveMountDestination(spec.Root.Path, ms.Destination)
+		mountDest, err := resolveMountDestination(c.Root.Path, ms.Destination)
 		// Intermediate path resolution failed. This is not an error, since
 		// the remaining directories / files are automatically created (create=dir|file)
-		clxc.Log.Trace().Err(err).Str("file", ms.Destination).Str("target", mountDest).Msg("resolve mount destination")
+		c.Log.Trace().Err(err).Str("file", ms.Destination).Str("target", mountDest).Msg("resolve mount destination")
 
 		// Check whether the resolved destination of the target link escapes the rootfs.
-		if !filepath.HasPrefix(mountDest, spec.Root.Path) {
+		if !filepath.HasPrefix(mountDest, c.Root.Path) {
 			// refuses mount destinations that escape from rootfs
-			return fmt.Errorf("resolved mount target path %s escapes from container root %s", mountDest, spec.Root.Path)
+			return fmt.Errorf("resolved mount target path %s escapes from container root %s", mountDest, c.Root.Path)
 		}
 		ms.Destination = mountDest
 
-		err = createMountDestination(spec, &ms)
+		err = createMountDestination(c, &ms)
 		if err != nil {
 			return fmt.Errorf("failed to create mount target %s: %w", ms.Destination, err)
 		}
 
-		ms.Options = filterMountOptions(clxc, ms.Type, ms.Options)
+		ms.Options = filterMountOptions(c, ms.Type, ms.Options)
 
 		mnt := fmt.Sprintf("%s %s %s %s", ms.Source, ms.Destination, ms.Type, strings.Join(ms.Options, ","))
 
-		if err := clxc.setConfigItem("lxc.mount.entry", mnt); err != nil {
+		if err := c.SetConfigItem("lxc.mount.entry", mnt); err != nil {
 			return err
 		}
 	}
@@ -99,7 +99,7 @@ func configureMounts(clxc *Runtime, spec *specs.Spec) error {
 // TODO check whether this is  desired behaviour in lxc ?
 // Shouldn't the rootfs should be mounted readonly after all mounts destination directories have been created ?
 // https://github.com/lxc/lxc/issues/1702
-func createMountDestination(spec *specs.Spec, ms *specs.Mount) error {
+func createMountDestination(spec *Container, ms *specs.Mount) error {
 	info, err := os.Stat(ms.Source)
 	if err != nil && ms.Type == "bind" {
 		// check if mountpoint is optional ?

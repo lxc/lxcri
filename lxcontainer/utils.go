@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -74,7 +75,7 @@ func isFilesystem(dir string, fsName string) error {
 	return nil
 }
 
-func DecodeFileJSON(obj interface{}, src string) error {
+func decodeFileJSON(obj interface{}, src string) error {
 	// #nosec
 	f, err := os.Open(src)
 	if err != nil {
@@ -165,4 +166,16 @@ func mkdirAll(path string, perm os.FileMode, uid int, gid int) error {
 		return err
 	}
 	return unix.Chown(path, uid, gid)
+}
+
+func setenv(env []string, key, val string, overwrite bool) []string {
+	for i, kv := range env {
+		if strings.HasPrefix(kv, key+"=") {
+			if overwrite {
+				env[i] = key + "=" + val
+			}
+			return env
+		}
+	}
+	return append(env, key+"="+val)
 }

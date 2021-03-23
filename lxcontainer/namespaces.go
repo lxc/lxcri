@@ -49,11 +49,11 @@ func cloneFlags(namespaces []specs.LinuxNamespace) (int, error) {
 	return flags, nil
 }
 
-func configureNamespaces(clxc *Runtime, namespaces []specs.LinuxNamespace) error {
+func configureNamespaces(c *Container) error {
 	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
-	cloneNamespaces := make([]string, 0, len(namespaces))
+	cloneNamespaces := make([]string, 0, len(c.Linux.Namespaces))
 
-	for _, ns := range namespaces {
+	for _, ns := range c.Linux.Namespaces {
 		if _, seen := seenNamespaceTypes[ns.Type]; seen {
 			return fmt.Errorf("duplicate namespace %s", ns.Type)
 		}
@@ -70,12 +70,12 @@ func configureNamespaces(clxc *Runtime, namespaces []specs.LinuxNamespace) error
 		}
 
 		configKey := fmt.Sprintf("lxc.namespace.share.%s", n.Name)
-		if err := clxc.setConfigItem(configKey, ns.Path); err != nil {
+		if err := c.SetConfigItem(configKey, ns.Path); err != nil {
 			return err
 		}
 	}
 
-	return clxc.setConfigItem("lxc.namespace.clone", strings.Join(cloneNamespaces, " "))
+	return c.SetConfigItem("lxc.namespace.clone", strings.Join(cloneNamespaces, " "))
 }
 
 func isNamespaceEnabled(spec *specs.Spec, nsType specs.LinuxNamespaceType) bool {

@@ -24,9 +24,9 @@ func createFifo(dst string, uid int, gid int, mode uint32) error {
 	return unix.Chown(dst, uid, gid)
 }
 
-func configureInit(clxc *Runtime, spec *specs.Spec) error {
-	runtimeInitDir := clxc.RuntimePath(initDir)
-	rootfsInitDir := filepath.Join(spec.Root.Path, initDir)
+func configureInit(rt *Runtime, c *Container) error {
+	runtimeInitDir := c.RuntimePath(initDir)
+	rootfsInitDir := filepath.Join(c.Root.Path, initDir)
 
 	err := os.MkdirAll(rootfsInitDir, 0)
 	if err != nil {
@@ -38,37 +38,37 @@ func configureInit(clxc *Runtime, spec *specs.Spec) error {
 		return fmt.Errorf("failed to create runtime init dir %q: %w", runtimeInitDir, err)
 	}
 
-	spec.Mounts = append(spec.Mounts, specs.Mount{
+	c.Mounts = append(c.Mounts, specs.Mount{
 		Source:      runtimeInitDir,
 		Destination: strings.TrimLeft(initDir, "/"),
 		Type:        "bind",
 		Options:     []string{"bind", "ro", "nodev", "nosuid"},
 	})
 
-	if err := clxc.setConfigItem("lxc.init.cwd", initDir); err != nil {
+	if err := c.SetConfigItem("lxc.init.cwd", initDir); err != nil {
 		return err
 	}
 
-	uid := int(spec.Process.User.UID)
-	gid := int(spec.Process.User.GID)
+	uid := int(c.Process.User.UID)
+	gid := int(c.Process.User.GID)
 
 	// create files required for crio-lxc-init
-	if err := createFifo(clxc.syncFifoPath(), uid, gid, 0600); err != nil {
+	if err := createFifo(c.syncFifoPath(), uid, gid, 0600); err != nil {
 		return fmt.Errorf("failed to create sync fifo: %w", err)
 	}
 
-	if err := createList(filepath.Join(runtimeInitDir, "cmdline"), spec.Process.Args, uid, gid, 0400); err != nil {
+	if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Process.Args, uid, gid, 0400); err != nil {
 		return err
 	}
-	if err := createList(filepath.Join(runtimeInitDir, "environ"), spec.Process.Env, uid, gid, 0400); err != nil {
+	if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Process.Env, uid, gid, 0400); err != nil {
 		return err
 	}
-	if err := os.Symlink(spec.Process.Cwd, filepath.Join(runtimeInitDir, "cwd")); err != nil {
+	if err := os.Symlink(c.Process.Cwd, filepath.Join(runtimeInitDir, "cwd")); err != nil {
 		return err
 	}
 
-	if spec.Annotations != nil {
-		msgPath := spec.Annotations["io.kubernetes.container.terminationMessagePath"]
+	if c.Annotations != nil {
+		msgPath := c.Annotations["io.kubernetes.container.terminationMessagePath"]
 		if msgPath != "" {
 			if err := os.Symlink(msgPath, filepath.Join(runtimeInitDir, "error.log")); err != nil {
 				return err
@@ -76,7 +76,7 @@ func configureInit(clxc *Runtime, spec *specs.Spec) error {
 		}
 	}
 
-	if err := configureInitUser(clxc, spec); err != nil {
+	if err := configureInitUser(c); err != nil {
 		return err
 	}
 
@@ -87,13 +87,13 @@ func configureInit(clxc *Runtime, spec *specs.Spec) error {
 		return fmt.Errorf("failed to create %s: %w", initCmdPath, err)
 	}
 	initCmd := filepath.Join(initDir, "init")
-	spec.Mounts = append(spec.Mounts, specs.Mount{
-		Source:      clxc.Executables.Init,
+	c.Mounts = append(c.Mounts, specs.Mount{
+		Source:      rt.Executables.Init,
 		Destination: strings.TrimLeft(initCmd, "/"),
 		Type:        "bind",
 		Options:     []string{"bind", "ro", "nosuid"},
 	})
-	return clxc.setConfigItem("lxc.init.cmd", initCmd+" "+clxc.ContainerID)
+	return c.SetConfigItem("lxc.init.cmd", initCmd+" "+c.ContainerID)
 }
 
 func touchFile(filePath string, perm os.FileMode) error {
@@ -133,37 +133,37 @@ func createList(dst string, entries []string, uid int, gid int, mode uint32) err
 	return unix.Chmod(dst, mode)
 }
 
-func configureInitUser(clxc *Runtime, spec *specs.Spec) error {
+func configureInitUser(c *Container) error {
 	// TODO ensure that the user namespace is enabled
 	// See `man lxc.container.conf` lxc.idmap.
-	for _, m := range spec.Linux.UIDMappings {
-		if err := clxc.setConfigItem("lxc.idmap", fmt.Sprintf("u %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
+	for _, m := range c.Linux.UIDMappings {
+		if err := c.SetConfigItem("lxc.idmap", fmt.Sprintf("u %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
 			return err
 		}
 	}
 
-	for _, m := range spec.Linux.GIDMappings {
-		if err := clxc.setConfigItem("lxc.idmap", fmt.Sprintf("g %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
+	for _, m := range c.Linux.GIDMappings {
+		if err := c.SetConfigItem("lxc.idmap", fmt.Sprintf("g %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
 			return err
 		}
 	}
 
-	if err := clxc.setConfigItem("lxc.init.uid", fmt.Sprintf("%d", spec.Process.User.UID)); err != nil {
+	if err := c.SetConfigItem("lxc.init.uid", fmt.Sprintf("%d", c.Process.User.UID)); err != nil {
 		return err
 	}
-	if err := clxc.setConfigItem("lxc.init.gid", fmt.Sprintf("%d", spec.Process.User.GID)); err != nil {
+	if err := c.SetConfigItem("lxc.init.gid", fmt.Sprintf("%d", c.Process.User.GID)); err != nil {
 		return err
 	}
 
-	if len(spec.Process.User.AdditionalGids) > 0 && clxc.supportsConfigItem("lxc.init.groups") {
+	if len(c.Process.User.AdditionalGids) > 0 && c.SupportsConfigItem("lxc.init.groups") {
 		var b strings.Builder
-		for i, gid := range spec.Process.User.AdditionalGids {
+		for i, gid := range c.Process.User.AdditionalGids {
 			if i > 0 {
 				b.WriteByte(',')
 			}
 			fmt.Fprintf(&b, "%d", gid)
 		}
-		if err := clxc.setConfigItem("lxc.init.groups", b.String()); err != nil {
+		if err := c.SetConfigItem("lxc.init.groups", b.String()); err != nil {
 			return err
 		}
 	}
