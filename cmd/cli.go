@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Drachenfels-GmbH/crio-lxc/lxcontainer"
-	"github.com/Drachenfels-GmbH/crio-lxc/lxcontainer/log"
+	"github.com/drachenfels-de/lxcri"
+	"github.com/drachenfels-de/lxcri/log"
 	"github.com/urfave/cli/v2"
 )
 
@@ -22,8 +22,8 @@ var envFile = "/etc/default/crio-lxc"
 const defaultLogFile = "/var/log/crio-lxc/crio-lxc.log"
 
 type app struct {
-	lxcontainer.Runtime
-	containerConfig lxcontainer.ContainerConfig
+	lxcri.Runtime
+	containerConfig lxcri.ContainerConfig
 
 	logConfig struct {
 		File      *os.File
@@ -477,7 +477,7 @@ var deleteCmd = cli.Command{
 
 func doDelete(ctx *cli.Context) error {
 	c, err := clxc.Load(&clxc.containerConfig)
-	if err == lxcontainer.ErrNotExist {
+	if err == lxcri.ErrNotExist {
 		clxc.Log.Info().Msg("container does not exist")
 		return nil
 	}
@@ -545,7 +545,7 @@ func doExec(ctx *cli.Context) error {
 		clxc.Log.Warn().Msg("detaching process but pid-file value is unset")
 	}
 
-	procSpec, err := lxcontainer.ReadSpecProcessJSON(ctx.String("process"))
+	procSpec, err := lxcri.ReadSpecProcessJSON(ctx.String("process"))
 	if err != nil {
 		return err
 	}
@@ -564,7 +564,7 @@ func doExec(ctx *cli.Context) error {
 			return err
 		}
 		if pidFile != "" {
-			return lxcontainer.CreatePidFile(pidFile, pid)
+			return lxcri.CreatePidFile(pidFile, pid)
 		}
 	} else {
 		status, err := c.Exec(args, procSpec)

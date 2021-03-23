@@ -1,4 +1,4 @@
-package lxcontainer
+package lxcri
 
 import (
 	"io/ioutil"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Drachenfels-GmbH/crio-lxc/lxcontainer/log"
+	"github.com/drachenfels-de/lxcri/log"
 	"github.com/stretchr/testify/require"
 )
 

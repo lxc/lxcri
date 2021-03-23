@@ -1,4 +1,4 @@
-package lxcontainer
+package lxcri
 
 import (
 	"fmt"
