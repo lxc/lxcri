@@ -17,7 +17,7 @@
 
 #define ERROR(format, ...)                                                  \
 	{                                                                   \
-		fprintf(stderr, "[crio-lxc-start] " format, ##__VA_ARGS__); \
+		fprintf(stderr, "[lxcri-start] " format, ##__VA_ARGS__); \
 		ret = EXIT_FAILURE;                                         \
 		goto out;                                                   \
 	}

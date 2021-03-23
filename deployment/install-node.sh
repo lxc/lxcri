@@ -57,12 +57,12 @@ install_crio() {
 
 	# configure cri-o
 	PREFIX=/usr/local
-	CRIO_LXC_ROOT=/run/crio-lxc
+	CRIO_LXC_ROOT=/run/lxcri
 	# environment for `crio config`
 	export CONTAINER_CONMON=${PREFIX}/bin/conmon
 	export CONTAINER_PINNS_PATH=${PREFIX}/bin/pinns
-	export CONTAINER_DEFAULT_RUNTIME=crio-lxc
-	export CONTAINER_RUNTIMES=crio-lxc:${PREFIX}/bin/crio-lxc:$CRIO_LXC_ROOT
+	export CONTAINER_DEFAULT_RUNTIME=lxcri
+	export CONTAINER_RUNTIMES=lxcri:${PREFIX}/bin/lxcri:$CRIO_LXC_ROOT
 	export CONTAINER_CNI_PLUGIN_DIR=$CNI_PLUGIN_DIR
 
 	crio config >/etc/crio/crio.conf

@@ -11,10 +11,10 @@ For the installation and initialization of a kubernetes cluster see [K8S.md](K8S
 
 ## Glossary
 
-* `runtime` the crio-lxc binary and the command set that implement the [OCI runtime spec](https://github.com/opencontainers/runtime-spec/releases/download/v1.0.2/oci-runtime-spec-v1.0.2.html)
-* `container process`  the process that starts and runs the container using liblxc (crio-lxc-start)
+* `runtime` the lxcri binary and the command set that implement the [OCI runtime spec](https://github.com/opencontainers/runtime-spec/releases/download/v1.0.2/oci-runtime-spec-v1.0.2.html)
+* `container process`  the process that starts and runs the container using liblxc (lxcri-start)
 * `container config` the LXC config file
-* `bundle config` the crio-lxc container state (bundle path, pidfile ....)
+* `bundle config` the lxcri container state (bundle path, pidfile ....)
 * `runtime spec` the OCI runtime spec from the bundle
 
 ## Bugs
@@ -28,15 +28,15 @@ For the installation and initialization of a kubernetes cluster see [K8S.md](K8S
 
 ### Unimplemented features
 
-* [runtime: Implement POSIX platform hooks](https://github.com/Drachenfels-GmbH/crio-lxc/issues/10)
-* [runtime: Implement cgroup2 resource limits](https://github.com/Drachenfels-GmbH/crio-lxc/issues/11)
+* [runtime: Implement POSIX platform hooks](https://github.com/Drachenfels-GmbH/lxcri/issues/10)
+* [runtime: Implement cgroup2 resource limits](https://github.com/Drachenfels-GmbH/lxcri/issues/11)
 
 ## Configuration
 
 The runtime binary implements flags that are required by the `OCI runtime spec`,</br>
 and flags that are runtime specific (timeouts, hooks, logging ...).
 
-Most of the runtime specific flags have corresponding environment variables. See `crio-lxc --help`.</br>
+Most of the runtime specific flags have corresponding environment variables. See `lxcri --help`.</br>
 The runtime evaluates the flag value in the following order (lower order takes precedence).
 
 1. cmdline flag from process arguments (overwrites process environment)
@@ -50,46 +50,46 @@ Currently you have to compile to environment file yourself.</br>
 To list  all available variables:
 
 ```
-grep EnvVars cmd/cli.go | grep -o CRIO_LXC_[A-Za-z_]* | xargs -n1 -I'{}' echo "#{}="
+grep EnvVars cmd/cli.go | grep -o LXCRI_[A-Za-z_]* | xargs -n1 -I'{}' echo "#{}="
 ```
 
 ###  Environment file
 
-The default path to the environment file is `/etc/defaults/crio-lxc`.</br>
-It is loaded on every start of the `crio-lxc` binary, so changes take immediate effect.</br>
+The default path to the environment file is `/etc/defaults/lxcri`.</br>
+It is loaded on every start of the `lxcri` binary, so changes take immediate effect.</br>
 Empty lines and those commented with a leading *#* are ignored.</br>
 
 A malformed environment will let the next runtime call fail.</br>
 In production it's recommended that you replace the environment file atomically.</br>
 
-E.g the environment file `/etc/default/crio-lxc` could look like this:
+E.g the environment file `/etc/default/lxcri` could look like this:
 
 ```sh
-CRIO_LXC_LOG_LEVEL=debug
-CRIO_LXC_CONTAINER_LOG_LEVEL=debug
-#CRIO_LXC_LOG_FILE=
-#CRIO_LXC_LOG_TIMESTAMP=
-#CRIO_LXC_MONITOR_CGROUP=
-#CRIO_LXC_INIT_CMD=
-#CRIO_LXC_START_CMD=
-#CRIO_LXC_CONTAINER_HOOK=
-#CRIO_LXC_APPARMOR=
-#CRIO_LXC_CAPABILITIES=
-#CRIO_LXC_CGROUP_DEVICES=
-#CRIO_LXC_SECCOMP=
-#CRIO_LXC_CREATE_TIMEOUT=
-#CRIO_LXC_CREATE_HOOK=/usr/local/bin/crio-lxc-backup.sh
-#CRIO_LXC_CREATE_HOOK_TIMEOUT=
-#CRIO_LXC_START_TIMEOUT=
-#CRIO_LXC_KILL_TIMEOUT=
-#CRIO_LXC_DELETE_TIMEOUT=
+LXCRI_LOG_LEVEL=debug
+LXCRI_CONTAINER_LOG_LEVEL=debug
+#LXCRI_LOG_FILE=
+#LXCRI_LOG_TIMESTAMP=
+#LXCRI_MONITOR_CGROUP=
+#LXCRI_INIT_CMD=
+#LXCRI_START_CMD=
+#LXCRI_CONTAINER_HOOK=
+#LXCRI_APPARMOR=
+#LXCRI_CAPABILITIES=
+#LXCRI_CGROUP_DEVICES=
+#LXCRI_SECCOMP=
+#LXCRI_CREATE_TIMEOUT=
+#LXCRI_CREATE_HOOK=/usr/local/bin/lxcri-backup.sh
+#LXCRI_CREATE_HOOK_TIMEOUT=
+#LXCRI_START_TIMEOUT=
+#LXCRI_KILL_TIMEOUT=
+#LXCRI_DELETE_TIMEOUT=
 ```
 
 ### Runtime (security) features
 
 All supported runtime security features are enabled by default.</br>
 The following runtime (security) features can optionally be disabled.</br>
-Details see `crio-lxc --help`
+Details see `lxcri --help`
 
 * apparmor
 * capabilities
@@ -115,7 +115,7 @@ For filtering with  `jq` you must strip the container process logs with `grep -v
 E.g Filter show only errors and warnings for runtime `create` command:
 
 ```sh
- grep -v '^lxc ' /var/log/crio-lxc.log |\
+ grep -v '^lxc ' /var/log/lxcri.log |\
   jq -c 'select(.cmd == "create" and ( .l == "error or .l == "warn")'
 ```
 
@@ -153,7 +153,7 @@ You can use it to backup the runtime spec and container process config for furth
 The create hook executable must
 
 * not use the standard file descriptors (stdin/stdout/stderr) although they are nulled.
-* not exceed `CRIO_LXC_CREATE_HOOK_TIMEOUT` or it is killed.
+* not exceed `LXCRI_CREATE_HOOK_TIMEOUT` or it is killed.
 * not modify/delete any resources created by the runtime or container process
 
 The process environment contains the following variables:
@@ -167,7 +167,7 @@ The process environment contains the following variables:
 * `LOG_FILE` the path to the log file
 * `RUNTIME_ERROR` (optional) the error message if the runtime cmd return with error
 
-Example script `crio-lxc-backup.sh` that backs up any container runtime directory:
+Example script `lxcri-backup.sh` that backs up any container runtime directory:
 
 ```sh
 #!/bin/sh
@@ -181,7 +181,7 @@ cp -r $RUNTIME_PATH $OUT
 cp $SPEC_PATH $OUT/spec.json
 
 # remove non `grep` friendly runtime files (symlinks, binaries, fifos)
-rm $OUT/.crio-lxc/cwd
-rm $OUT/.crio-lxc/init
-rm $OUT/.crio-lxc/syncfifo
+rm $OUT/.lxcri/cwd
+rm $OUT/.lxcri/init
+rm $OUT/.lxcri/syncfifo
 ```

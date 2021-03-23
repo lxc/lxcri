@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	// initDir is the working directory for crio-lxc-init.
+	// initDir is the working directory for lxcri-init.
 	// It contains the init binary itself and all files required for it.
-	initDir = "/.crio-lxc"
+	initDir = "/.lxcri"
 )
 
 func createFifo(dst string, uid int, gid int, mode uint32) error {
@@ -52,7 +52,7 @@ func configureInit(rt *Runtime, c *Container) error {
 	uid := int(c.Process.User.UID)
 	gid := int(c.Process.User.GID)
 
-	// create files required for crio-lxc-init
+	// create files required for lxcri-init
 	if err := createFifo(c.syncFifoPath(), uid, gid, 0600); err != nil {
 		return fmt.Errorf("failed to create sync fifo: %w", err)
 	}
@@ -80,7 +80,7 @@ func configureInit(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	// bind mount crio-lxc-init into the container
+	// bind mount lxcri-init into the container
 	initCmdPath := filepath.Join(runtimeInitDir, "init")
 	err = touchFile(initCmdPath, 0)
 	if err != nil {

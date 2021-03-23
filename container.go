@@ -29,7 +29,7 @@ type ContainerConfig struct {
 	BundlePath    string
 	ConsoleSocket string `json:",omitempty"`
 
-	// PidFile is the absolute path to the PID file of the container monitor process (crio-lxc-start)
+	// PidFile is the absolute path to the PID file of the container monitor process (lxcri-start)
 	PidFile          string
 	MonitorCgroupDir string
 
@@ -247,7 +247,7 @@ func (c *Container) getContainerInitState() (specs.ContainerState, error) {
 		return specs.StateStopped, err
 	}
 
-	initCmdline := fmt.Sprintf("/.crio-lxc/init\000%s\000", c.ContainerID)
+	initCmdline := fmt.Sprintf("/.lxcri/init\000%s\000", c.ContainerID)
 	if string(cmdline) == initCmdline {
 		return specs.StateCreated, nil
 	}

@@ -32,7 +32,7 @@ const char *error_log = "error.log";
 
 #define ERROR(format, ...)                                                \
 	{                                                                 \
-		dprintf(errfd, "[crio-lxc-init] " format, ##__VA_ARGS__); \
+		dprintf(errfd, "[lxcri-init] " format, ##__VA_ARGS__); \
 		exit(EXIT_FAILURE);                                       \
 	}
 

@@ -1,11 +1,9 @@
 *~
-crio-lxc
-crio-lxc-start
-crio-lxc-init
-crio-lxc-container-hook
+lxcri
+lxcri-start
+lxcri-init
+lxcri-container-hook
 oci/
 roots/
 .stacker/
 .keeptempdirs
-cmd/container-hook/musl-1.2.1.tar.gz
-cmd/container-hook/musl-1.2.1/

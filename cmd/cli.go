@@ -17,9 +17,9 @@ import (
 
 // Environment variables are populated by default from this environment file.
 // Existing environment variables are preserved.
-var envFile = "/etc/default/crio-lxc"
+var envFile = "/etc/default/lxcri"
 
-const defaultLogFile = "/var/log/crio-lxc/crio-lxc.log"
+const defaultLogFile = "/var/log/lxcri/lxcri.log"
 
 type app struct {
 	lxcri.Runtime
@@ -69,8 +69,8 @@ var version string
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "crio-lxc"
-	app.Usage = "crio-lxc is a CRI compliant runtime wrapper for lxc"
+	app.Name = "lxcri"
+	app.Usage = "lxcri is a CRI compliant runtime wrapper for lxc"
 	app.Version = version
 
 	// Disable the default ExitErrHandler.
@@ -91,34 +91,34 @@ func main() {
 		&cli.StringFlag{
 			Name:        "log-level",
 			Usage:       "set the runtime log level (trace|debug|info|warn|error)",
-			EnvVars:     []string{"CRIO_LXC_LOG_LEVEL"},
+			EnvVars:     []string{"LXCRI_LOG_LEVEL"},
 			Value:       "info",
 			Destination: &clxc.logConfig.Level,
 		},
 		&cli.StringFlag{
 			Name:        "log-file",
 			Usage:       "path to the log file for runtime and container output",
-			EnvVars:     []string{"CRIO_LXC_LOG_FILE"},
+			EnvVars:     []string{"LXCRI_LOG_FILE"},
 			Value:       defaultLogFile,
 			Destination: &clxc.logConfig.FilePath,
 		},
 		&cli.StringFlag{
 			Name:        "log-timestamp",
 			Usage:       "timestamp format for the runtime log (see golang time package), default matches liblxc timestamp",
-			EnvVars:     []string{"CRIO_LXC_LOG_TIMESTAMP"}, // e.g  '0102 15:04:05.000'
+			EnvVars:     []string{"LXCRI_LOG_TIMESTAMP"}, // e.g  '0102 15:04:05.000'
 			Destination: &clxc.logConfig.Timestamp,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-level",
 			Usage:       "set the container process (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
-			EnvVars:     []string{"CRIO_LXC_CONTAINER_LOG_LEVEL"},
+			EnvVars:     []string{"LXCRI_CONTAINER_LOG_LEVEL"},
 			Value:       "warn",
 			Destination: &clxc.containerConfig.LogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-file",
 			Usage:       "path to the log file for runtime and container output",
-			EnvVars:     []string{"CRIO_LXC_CONTAINER_LOG_FILE"},
+			EnvVars:     []string{"LXCRI_CONTAINER_LOG_FILE"},
 			Value:       defaultLogFile,
 			Destination: &clxc.containerConfig.LogFile,
 		},
@@ -126,7 +126,7 @@ func main() {
 			Name:  "root",
 			Usage: "container runtime root where (logs, init and hook scripts). tmpfs is recommended.",
 			// exec permissions are not required because init is bind mounted into the root
-			Value:       "/run/crio-lxc",
+			Value:       "/run/lxcri",
 			Destination: &clxc.Root,
 		},
 		&cli.BoolFlag{
@@ -138,56 +138,56 @@ func main() {
 			Name:        "monitor-cgroup",
 			Usage:       "cgroup slice for liblxc monitor process and pivot path",
 			Destination: &clxc.MonitorCgroup,
-			EnvVars:     []string{"CRIO_LXC_MONITOR_CGROUP"},
-			Value:       "crio-lxc-monitor.slice",
+			EnvVars:     []string{"LXCRI_MONITOR_CGROUP"},
+			Value:       "lxcri-monitor.slice",
 		},
 		&cli.StringFlag{
 			Name:        "cmd-init",
 			Usage:       "absolute path to container init executable",
-			EnvVars:     []string{"CRIO_LXC_INIT_CMD"},
-			Value:       "/usr/local/bin/crio-lxc-init",
+			EnvVars:     []string{"LXCRI_INIT_CMD"},
+			Value:       "/usr/local/bin/lxcri-init",
 			Destination: &clxc.Executables.Init,
 		},
 		&cli.StringFlag{
 			Name:        "cmd-start",
 			Usage:       "absolute path to container start executable",
-			EnvVars:     []string{"CRIO_LXC_START_CMD"},
-			Value:       "/usr/local/bin/crio-lxc-start",
+			EnvVars:     []string{"LXCRI_START_CMD"},
+			Value:       "/usr/local/bin/lxcri-start",
 			Destination: &clxc.Executables.Start,
 		},
 		&cli.StringFlag{
 			Name:        "container-hook",
 			Usage:       "absolute path to container hook executable",
-			EnvVars:     []string{"CRIO_LXC_CONTAINER_HOOK"},
-			Value:       "/usr/local/bin/crio-lxc-container-hook",
+			EnvVars:     []string{"LXCRI_CONTAINER_HOOK"},
+			Value:       "/usr/local/bin/lxcri-container-hook",
 			Destination: &clxc.Executables.Hook,
 		},
 		&cli.BoolFlag{
 			Name:        "apparmor",
 			Usage:       "set apparmor profile defined in container spec",
 			Destination: &clxc.Features.Apparmor,
-			EnvVars:     []string{"CRIO_LXC_APPARMOR"},
+			EnvVars:     []string{"LXCRI_APPARMOR"},
 			Value:       true,
 		},
 		&cli.BoolFlag{
 			Name:        "capabilities",
 			Usage:       "keep capabilities defined in container spec",
 			Destination: &clxc.Features.Capabilities,
-			EnvVars:     []string{"CRIO_LXC_CAPABILITIES"},
+			EnvVars:     []string{"LXCRI_CAPABILITIES"},
 			Value:       true,
 		},
 		&cli.BoolFlag{
 			Name:        "cgroup-devices",
 			Usage:       "allow only devices permitted by container spec",
 			Destination: &clxc.Features.CgroupDevices,
-			EnvVars:     []string{"CRIO_LXC_CGROUP_DEVICES"},
+			EnvVars:     []string{"LXCRI_CGROUP_DEVICES"},
 			Value:       true,
 		},
 		&cli.BoolFlag{
 			Name:        "seccomp",
 			Usage:       "Generate and apply seccomp profile for lxc from container spec",
 			Destination: &clxc.Features.Seccomp,
-			EnvVars:     []string{"CRIO_LXC_SECCOMP"},
+			EnvVars:     []string{"LXCRI_SECCOMP"},
 			Value:       true,
 		},
 	}
@@ -299,7 +299,7 @@ var createCmd = cli.Command{
 		&cli.DurationFlag{
 			Name:        "timeout",
 			Usage:       "maximum duration for create to complete",
-			EnvVars:     []string{"CRIO_LXC_CREATE_TIMEOUT"},
+			EnvVars:     []string{"LXCRI_CREATE_TIMEOUT"},
 			Value:       time.Second * 60,
 			Destination: &clxc.Timeouts.Create,
 		},
@@ -307,13 +307,13 @@ var createCmd = cli.Command{
 		&cli.StringFlag{
 			Name:        "create-hook",
 			Usage:       "absolute path to executable to run after create",
-			EnvVars:     []string{"CRIO_LXC_CREATE_HOOK"},
+			EnvVars:     []string{"LXCRI_CREATE_HOOK"},
 			Destination: &clxc.createHook,
 		},
 		&cli.DurationFlag{
 			Name:        "hook-timeout",
 			Usage:       "maximum duration for hook to complete",
-			EnvVars:     []string{"CRIO_LXC_CREATE_HOOK_TIMEOUT"},
+			EnvVars:     []string{"LXCRI_CREATE_HOOK_TIMEOUT"},
 			Value:       time.Second * 5,
 			Destination: &clxc.createHookTimeout,
 		},
@@ -373,7 +373,7 @@ starts <containerID>
 		&cli.DurationFlag{
 			Name:        "timeout",
 			Usage:       "start timeout",
-			EnvVars:     []string{"CRIO_LXC_START_TIMEOUT"},
+			EnvVars:     []string{"LXCRI_START_TIMEOUT"},
 			Value:       time.Second * 30,
 			Destination: &clxc.Timeouts.Start,
 		},
@@ -431,7 +431,7 @@ var killCmd = cli.Command{
 		&cli.DurationFlag{
 			Name:        "timeout",
 			Usage:       "timeout for killing all processes in container cgroup",
-			EnvVars:     []string{"CRIO_LXC_KILL_TIMEOUT"},
+			EnvVars:     []string{"LXCRI_KILL_TIMEOUT"},
 			Value:       time.Second * 10,
 			Destination: &clxc.Timeouts.Kill,
 		},
@@ -468,7 +468,7 @@ var deleteCmd = cli.Command{
 		&cli.DurationFlag{
 			Name:        "timeout",
 			Usage:       "timeout for deleting container",
-			EnvVars:     []string{"CRIO_LXC_DELETE_TIMEOUT"},
+			EnvVars:     []string{"LXCRI_DELETE_TIMEOUT"},
 			Value:       time.Second * 10,
 			Destination: &clxc.Timeouts.Delete,
 		},

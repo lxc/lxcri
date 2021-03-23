@@ -1,6 +1,6 @@
 COMMIT_HASH=$(shell git describe --always --tags --long)
 COMMIT=$(if $(shell git status --porcelain --untracked-files=no),$(COMMIT_HASH)-dirty,$(COMMIT_HASH))
-BINS := crio-lxc-start crio-lxc-init crio-lxc-container-hook crio-lxc
+BINS := lxcri-start lxcri-init lxcri-container-hook lxcri
 # Installation prefix for BINS
 PREFIX ?= /usr/local
 # Note: The default pkg-config directory is search after PKG_CONFIG_PATH
@@ -27,18 +27,18 @@ test:
 lint:
 	golangci-lint run -c ./lint.yaml ./...
 
-crio-lxc: go.mod **/*.go
+lxcri: go.mod **/*.go
 	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd
 
-crio-lxc-start: cmd/start/crio-lxc-start.c
+lxcri-start: cmd/start/lxcri-start.c
 	$(CC) -Werror -Wpedantic -o $@ $? $(LIBLXC_LDFLAGS)
 
-crio-lxc-init: cmd/init/crio-lxc-init.c
+lxcri-init: cmd/init/lxcri-init.c
 	$(MUSL_CC) -Werror -Wpedantic -static -o $@ $?
 	# this is paranoia - but ensure it is statically compiled
 	! ldd $@  2>/dev/null
 
-crio-lxc-container-hook: cmd/container-hook/hook.c
+lxcri-container-hook: cmd/container-hook/hook.c
 	$(MUSL_CC) -Werror -Wpedantic -static -o $@ $?
 
 fmt:

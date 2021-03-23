@@ -124,7 +124,7 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	defer cancel()
 
 	go func() {
-		// NOTE this goroutine may leak until crio-lxc is terminated
+		// NOTE this goroutine may leak until lxcri-start is terminated
 		ps, err := cmd.Process.Wait()
 		if err != nil {
 			rt.Log.Error().Err(err).Msg("failed to wait for start process")

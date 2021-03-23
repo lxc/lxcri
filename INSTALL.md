@@ -59,7 +59,7 @@ echo /usr/local/lib > /etc/ld.so.conf.d/local.conf
 ldconfig
 ```
 
-### crio-lxc
+### lxcri
 
 ```
 make install
@@ -95,13 +95,13 @@ git reset --hard origin/release-1.20
 make install
 
 PREFIX=/usr/local
-CRIO_LXC_ROOT=/run/crio-lxc
+CRIO_LXC_ROOT=/run/lxcri
 
 # environment for `crio config`
 export CONTAINER_CONMON=${PREFIX}/bin/conmon
 export CONTAINER_PINNS_PATH=${PREFIX}/bin/pinns
-export CONTAINER_DEFAULT_RUNTIME=crio-lxc
-export CONTAINER_RUNTIMES=crio-lxc:${PREFIX}/bin/crio-lxc:$CRIO_LXC_ROOT
+export CONTAINER_DEFAULT_RUNTIME=lxcri
+export CONTAINER_RUNTIMES=lxcri:${PREFIX}/bin/lxcri:$CRIO_LXC_ROOT
 
 crio config > /etc/crio/crio.conf
 ```
