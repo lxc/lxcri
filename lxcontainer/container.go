@@ -18,6 +18,7 @@ import (
 
 type ContainerConfig struct {
 	*specs.Spec
+
 	SpecPath string
 
 	RuntimeDir string
@@ -27,11 +28,18 @@ type ContainerConfig struct {
 
 	BundlePath    string
 	ConsoleSocket string `json:",omitempty"`
+
 	// PidFile is the absolute path to the PID file of the container monitor process (crio-lxc-start)
 	PidFile          string
 	MonitorCgroupDir string
 
 	CgroupDir string
+
+	// lxc log file and level
+	LogLevel string
+	LogFile  string
+
+	Log zerolog.Logger `json:"-"`
 }
 
 func (cfg ContainerConfig) ConfigFilePath() string {
@@ -76,7 +84,6 @@ func (c *ContainerConfig) LoadSpecJson(p string) error {
 type Container struct {
 	linuxcontainer *lxc.Container `json:"-"`
 	*ContainerConfig
-	Log zerolog.Logger `json:"-"`
 }
 
 func NewContainer(config *ContainerConfig) (*Container, error) {
@@ -131,49 +138,9 @@ func LoadContainer(cfg *ContainerConfig) (*Container, error) {
 
 	err = c.linuxcontainer.LoadConfigFile(c.ConfigFilePath())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load config file: %w", err)
-	}
-	return c, nil
-}
-
-func (c *Container) SetLog(logFile string, level string) error {
-	// Never let lxc write to stdout, stdout belongs to the container init process.
-	// Explicitly disable it - allthough it is currently the default.
-	c.linuxcontainer.SetVerbosity(lxc.Quiet)
-	// The log level for a running container is set, and may change, per runtime call.
-	err := c.linuxcontainer.SetLogLevel(parseContainerLogLevel(level))
-	if err != nil {
-		return fmt.Errorf("failed to set container loglevel: %w", err)
-	}
-	if err := c.linuxcontainer.SetLogFile(logFile); err != nil {
-		return fmt.Errorf("failed to set container log file: %w", err)
+		return fmt.Errorf("failed to load config file: %w", err)
 	}
 	return nil
-}
-
-func parseContainerLogLevel(level string) lxc.LogLevel {
-	switch strings.ToLower(level) {
-	case "trace":
-		return lxc.TRACE
-	case "debug":
-		return lxc.DEBUG
-	case "info":
-		return lxc.INFO
-	case "notice":
-		return lxc.NOTICE
-	case "warn":
-		return lxc.WARN
-	case "error":
-		return lxc.ERROR
-	case "crit":
-		return lxc.CRIT
-	case "alert":
-		return lxc.ALERT
-	case "fatal":
-		return lxc.FATAL
-	default:
-		return lxc.WARN
-	}
 }
 
 func (c *Container) waitCreated(ctx context.Context) error {

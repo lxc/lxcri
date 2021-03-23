@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Drachenfels-GmbH/crio-lxc/lxcontainer/log"
 	"github.com/stretchr/testify/require"
 )
 

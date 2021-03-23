@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/rs/zerolog"
 	"golang.org/x/sys/unix"
 )
 
@@ -15,7 +17,7 @@ var ErrNotExist = fmt.Errorf("container does not exist")
 var ErrExist = fmt.Errorf("container already exists")
 
 type Runtime struct {
-	Log
+	Log zerolog.Logger
 
 	Root string
 	// Use systemd encoded cgroup path (from crio-o/conmon)
@@ -171,10 +173,6 @@ func (rt *Runtime) Delete(ctx context.Context, c *Container, force bool) error {
 		return errorf("failed to destroy container: %w", err)
 	}
 	return nil
-}
-
-func (rt *Runtime) Release() error {
-	return rt.Log.Close()
 }
 
 func ReadSpecProcessJSON(src string) (*specs.Process, error) {
