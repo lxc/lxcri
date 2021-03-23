@@ -381,7 +381,7 @@ starts <containerID>
 }
 
 func doStart(unused *cli.Context) error {
-	c, err := clxc.LoadContainer(&clxc.containerConfig)
+	c, err := clxc.Load(&clxc.containerConfig)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -401,7 +401,7 @@ var stateCmd = cli.Command{
 }
 
 func doState(unused *cli.Context) error {
-	c, err := clxc.LoadContainer(&clxc.containerConfig)
+	c, err := clxc.Load(&clxc.containerConfig)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -445,7 +445,7 @@ func doKill(ctx *cli.Context) error {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
 
-	c, err := clxc.LoadContainer(&clxc.containerConfig)
+	c, err := clxc.Load(&clxc.containerConfig)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -476,7 +476,7 @@ var deleteCmd = cli.Command{
 }
 
 func doDelete(ctx *cli.Context) error {
-	c, err := clxc.LoadContainer(&clxc.containerConfig)
+	c, err := clxc.Load(&clxc.containerConfig)
 	if err == lxcontainer.ErrNotExist {
 		clxc.Log.Info().Msg("container does not exist")
 		return nil
@@ -553,7 +553,7 @@ func doExec(ctx *cli.Context) error {
 		args = procSpec.Args
 	}
 
-	c, err := clxc.LoadContainer(&clxc.containerConfig)
+	c, err := clxc.Load(&clxc.containerConfig)
 	if err != nil {
 		return err
 	}

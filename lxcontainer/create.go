@@ -27,7 +27,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	c := &Container{ContainerConfig: cfg}
 	c.RuntimeDir = filepath.Join(rt.Root, c.ContainerID)
 
-	if err := c.Create(); err != nil {
+	if err := c.create(); err != nil {
 		return nil, errorf("failed to create container: %w", err)
 	}
 

@@ -61,11 +61,11 @@ type Runtime struct {
 	}
 }
 
-func (rt *Runtime) LoadContainer(cfg *ContainerConfig) (*Container, error) {
+func (rt *Runtime) Load(cfg *ContainerConfig) (*Container, error) {
 	c := &Container{ContainerConfig: cfg}
 	c.RuntimeDir = filepath.Join(rt.Root, c.ContainerID)
 
-	if err := c.Load(); err != nil {
+	if err := c.load(); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -85,7 +85,7 @@ func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 		return fmt.Errorf("invalid container state. expected %q, but was %q", specs.StateCreated, state.Status)
 	}
 
-	return c.Start(ctx)
+	return c.start(ctx)
 }
 
 func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
@@ -105,7 +105,7 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 		cmd.Stderr = os.Stderr
 	}
 
-	if err := c.SaveConfig(); err != nil {
+	if err := c.saveConfig(); err != nil {
 		return err
 	}
 
@@ -154,7 +154,7 @@ func (rt *Runtime) Kill(ctx context.Context, c *Container, signum unix.Signal) e
 	if state == specs.StateStopped {
 		return errorf("container already stopped")
 	}
-	return c.Kill(ctx, signum)
+	return c.kill(ctx, signum)
 }
 
 func (rt *Runtime) Delete(ctx context.Context, c *Container, force bool) error {
@@ -170,11 +170,11 @@ func (rt *Runtime) Delete(ctx context.Context, c *Container, force bool) error {
 		if !force {
 			return errorf("container is not not stopped (current state %s)", state)
 		}
-		if err := c.Kill(ctx, unix.SIGKILL); err != nil {
+		if err := c.kill(ctx, unix.SIGKILL); err != nil {
 			return errorf("failed to kill container: %w", err)
 		}
 	}
-	if err := c.Destroy(); err != nil {
+	if err := c.destroy(); err != nil {
 		return errorf("failed to destroy container: %w", err)
 	}
 	return nil

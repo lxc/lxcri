@@ -86,7 +86,7 @@ type Container struct {
 	*ContainerConfig
 }
 
-func (c *Container) Create() error {
+func (c *Container) create() error {
 	if c.runtimeDirExists() {
 		return ErrExist
 	}
@@ -113,7 +113,7 @@ func (c *Container) Create() error {
 	return nil
 }
 
-func (c *Container) Load() error {
+func (c *Container) load() error {
 	if !c.runtimeDirExists() {
 		return ErrNotExist
 	}
@@ -254,7 +254,7 @@ func (c *Container) getContainerInitState() (specs.ContainerState, error) {
 	return specs.StateRunning, nil
 }
 
-func (c *Container) Kill(ctx context.Context, signum unix.Signal) error {
+func (c *Container) kill(ctx context.Context, signum unix.Signal) error {
 	c.Log.Info().Int("signum", int(signum)).Msg("killing container process")
 	if signum == unix.SIGKILL || signum == unix.SIGTERM {
 		if err := c.SetConfigItem("lxc.signal.stop", strconv.Itoa(int(signum))); err != nil {
@@ -301,7 +301,7 @@ func (c *Container) Kill(ctx context.Context, signum unix.Signal) error {
 // It must be called only once. It is automatically called by Runtime#Create.
 // Any config changes via clxc.setConfigItem must be done before calling SaveConfig.
 // FIXME revise the config file mechanism
-func (c *Container) SaveConfig() error {
+func (c *Container) saveConfig() error {
 	// createContainer creates the tmpfile
 	tmpFile := c.RuntimePath(".config")
 	if _, err := os.Stat(tmpFile); err != nil {
@@ -370,7 +370,7 @@ func (c *Container) Release() error {
 // but not created by this container, MUST NOT be deleted."
 // TODO - because we set rootfs.managed=0, Destroy() doesn't
 // delete the /var/lib/lxc/$containerID/config file:
-func (c *Container) Destroy() error {
+func (c *Container) destroy() error {
 	if err := c.linuxcontainer.Destroy(); err != nil {
 		return fmt.Errorf("failed to destroy container: %w", err)
 	}
@@ -383,7 +383,7 @@ func (c *Container) Destroy() error {
 	return os.RemoveAll(c.RuntimePath())
 }
 
-func (c *Container) Start(ctx context.Context) error {
+func (c *Container) start(ctx context.Context) error {
 	done := make(chan error)
 	go func() {
 		// FIXME fifo must be unblocked otherwise
