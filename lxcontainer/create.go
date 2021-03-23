@@ -38,10 +38,6 @@ func (rt *Runtime) Create(ctx context.Context, config *ContainerConfig) (*Contai
 		return nil, errorf("failed to configure container: %w", err)
 	}
 
-	if err := c.SaveConfig(); err != nil {
-		return nil, errorf("failed to save container descriptor: %w", err)
-	}
-
 	if err := rt.runStartCmd(ctx, c); err != nil {
 		return nil, errorf("failed to run container process: %w", err)
 	}

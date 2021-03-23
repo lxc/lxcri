@@ -281,7 +281,9 @@ func doCreate(unused *cli.Context) error {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
 	c, err := clxc.Create(context.Background(), &clxc.ContainerConfig)
-	defer c.Release()
+	if err == nil {
+		defer c.Release()
+	}
 	runCreateHook(err)
 	return err
 }

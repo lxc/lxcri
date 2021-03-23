@@ -66,6 +66,7 @@ func (cfg ContainerConfig) Pid() (int, error) {
 
 func (c *ContainerConfig) LoadSpecJson(p string) error {
 	c.SpecPath = p
+	c.Spec = &specs.Spec{}
 	return decodeFileJSON(c.Spec, p)
 }
 
@@ -334,9 +335,8 @@ func (c *Container) Kill(ctx context.Context, signum unix.Signal) error {
 }
 
 // SaveConfig creates and atomically enables the lxc config file.
-// It must be called after #createContainer and only once.
-// Any config changes via clxc.setConfigItem must be done
-// before calling SaveConfig.
+// It must be called only once. It is automatically called by Runtime#Create.
+// Any config changes via clxc.setConfigItem must be done before calling SaveConfig.
 // FIXME revise the config file mechanism
 func (c *Container) SaveConfig() error {
 	// createContainer creates the tmpfile
