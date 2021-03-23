@@ -41,7 +41,7 @@ func configureCgroup(rt *Runtime, c *Container) error {
 	}
 
 	if mem := c.Linux.Resources.Memory; mem != nil {
-		rt.Log.Debug().Msg("TODO cgroup memory controller not implemented")
+		c.Log.Debug().Msg("TODO cgroup memory controller not implemented")
 	}
 
 	if cpu := c.Linux.Resources.CPU; cpu != nil {
@@ -56,15 +56,15 @@ func configureCgroup(rt *Runtime, c *Container) error {
 		}
 	}
 	if blockio := c.Linux.Resources.BlockIO; blockio != nil {
-		rt.Log.Debug().Msg("TODO cgroup blockio controller not implemented")
+		c.Log.Debug().Msg("TODO cgroup blockio controller not implemented")
 	}
 
 	if hugetlb := c.Linux.Resources.HugepageLimits; hugetlb != nil {
 		// set Hugetlb limit (in bytes)
-		rt.Log.Debug().Msg("TODO cgroup hugetlb controller not implemented")
+		c.Log.Debug().Msg("TODO cgroup hugetlb controller not implemented")
 	}
 	if net := c.Linux.Resources.Network; net != nil {
-		rt.Log.Debug().Msg("TODO cgroup network controller not implemented")
+		c.Log.Debug().Msg("TODO cgroup network controller not implemented")
 	}
 	return nil
 }

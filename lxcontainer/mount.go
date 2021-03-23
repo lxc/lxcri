@@ -9,7 +9,7 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func removeMountOptions(c *Container, fs string, opts []string, unsupported ...string) []string {
+func removeMountOptions(rt *Runtime, fs string, opts []string, unsupported ...string) []string {
 	supported := make([]string, 0, len(opts))
 	for _, opt := range opts {
 		addOption := true
@@ -22,27 +22,27 @@ func removeMountOptions(c *Container, fs string, opts []string, unsupported ...s
 		if addOption {
 			supported = append(supported, opt)
 		} else {
-			c.Log.Info().Str("fs", fs).Str("option", opt).Msg("removed mount option")
+			rt.Log.Info().Str("fs", fs).Str("option", opt).Msg("removed mount option")
 		}
 	}
 	return supported
 }
 
-func filterMountOptions(c *Container, fs string, opts []string) []string {
+func filterMountOptions(rt *Runtime, fs string, opts []string) []string {
 	switch fs {
 	case "sysfs":
-		return removeMountOptions(c, fs, opts, "rslave")
+		return removeMountOptions(rt, fs, opts, "rslave")
 	case "tmpfs":
 		// TODO make this configurable per filesystem
-		return removeMountOptions(c, fs, opts, "rprivate", "tmpcopyup")
+		return removeMountOptions(rt, fs, opts, "rprivate", "tmpcopyup")
 	case "cgroup2":
 		// TODO make this configurable per filesystem
-		return removeMountOptions(c, fs, opts, "private", "rslave")
+		return removeMountOptions(rt, fs, opts, "private", "rslave")
 	}
 	return opts
 }
 
-func configureMounts(c *Container) error {
+func configureMounts(rt *Runtime, c *Container) error {
 	// excplicitly disable auto-mounting
 	if err := c.SetConfigItem("lxc.mount.auto", ""); err != nil {
 		return err
@@ -65,7 +65,7 @@ func configureMounts(c *Container) error {
 		mountDest, err := resolveMountDestination(c.Root.Path, ms.Destination)
 		// Intermediate path resolution failed. This is not an error, since
 		// the remaining directories / files are automatically created (create=dir|file)
-		c.Log.Trace().Err(err).Str("file", ms.Destination).Str("target", mountDest).Msg("resolve mount destination")
+		rt.Log.Trace().Err(err).Str("file", ms.Destination).Str("target", mountDest).Msg("resolve mount destination")
 
 		// Check whether the resolved destination of the target link escapes the rootfs.
 		if !filepath.HasPrefix(mountDest, c.Root.Path) {
@@ -79,7 +79,7 @@ func configureMounts(c *Container) error {
 			return fmt.Errorf("failed to create mount target %s: %w", ms.Destination, err)
 		}
 
-		ms.Options = filterMountOptions(c, ms.Type, ms.Options)
+		ms.Options = filterMountOptions(rt, ms.Type, ms.Options)
 
 		mnt := fmt.Sprintf("%s %s %s %s", ms.Source, ms.Destination, ms.Type, strings.Join(ms.Options, ","))
 

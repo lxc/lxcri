@@ -7,8 +7,8 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-func isDeviceEnabled(spec *Container, dev specs.LinuxDevice) bool {
-	for _, specDev := range spec.Linux.Devices {
+func isDeviceEnabled(c *Container, dev specs.LinuxDevice) bool {
+	for _, specDev := range c.Linux.Devices {
 		if specDev.Path == dev.Path {
 			return true
 		}
@@ -16,18 +16,18 @@ func isDeviceEnabled(spec *Container, dev specs.LinuxDevice) bool {
 	return false
 }
 
-func addDevice(spec *Container, dev specs.LinuxDevice, mode os.FileMode, uid uint32, gid uint32, access string) {
+func addDevice(c *Container, dev specs.LinuxDevice, mode os.FileMode, uid uint32, gid uint32, access string) {
 	dev.FileMode = &mode
 	dev.UID = &uid
 	dev.GID = &gid
-	spec.Linux.Devices = append(spec.Linux.Devices, dev)
+	c.Linux.Devices = append(c.Linux.Devices, dev)
 
-	addDevicePerms(spec, dev.Type, &dev.Major, &dev.Minor, access)
+	addDevicePerms(c, dev.Type, &dev.Major, &dev.Minor, access)
 }
 
-func addDevicePerms(spec *Container, devType string, major *int64, minor *int64, access string) {
+func addDevicePerms(c *Container, devType string, major *int64, minor *int64, access string) {
 	devCgroup := specs.LinuxDeviceCgroup{Allow: true, Type: devType, Major: major, Minor: minor, Access: access}
-	spec.Linux.Resources.Devices = append(spec.Linux.Resources.Devices, devCgroup)
+	c.Linux.Resources.Devices = append(c.Linux.Resources.Devices, devCgroup)
 }
 
 // ensureDefaultDevices adds the mandatory devices defined by the [runtime spec](https://github.com/opencontainers/runtime-spec/blob/master/config-linux.md#default-devices)
@@ -35,9 +35,9 @@ func addDevicePerms(spec *Container, devType string, major *int64, minor *int64,
 // crio can add devices to containers, but this does not work for privileged containers.
 // See https://github.com/cri-o/cri-o/blob/a705db4c6d04d7c14a4d59170a0ebb4b30850675/server/container_create_linux.go#L45
 // TODO file an issue on cri-o (at least for support)
-func ensureDefaultDevices(c *Runtime, spec *Container) error {
+func ensureDefaultDevices(c *Container) error {
 	mode := os.FileMode(0666)
-	var uid, gid uint32 = spec.Process.User.UID, spec.Process.User.GID
+	var uid, gid uint32 = c.Process.User.UID, c.Process.User.GID
 
 	devices := []specs.LinuxDevice{
 		specs.LinuxDevice{Path: "/dev/null", Type: "c", Major: 1, Minor: 3},
@@ -53,38 +53,38 @@ func ensureDefaultDevices(c *Runtime, spec *Container) error {
 	}
 
 	ptmx := specs.LinuxDevice{Path: "/dev/ptmx", Type: "c", Major: 5, Minor: 2}
-	addDevicePerms(spec, "c", &ptmx.Major, &ptmx.Minor, "rwm") // /dev/ptmx, /dev/pts/ptmx
+	addDevicePerms(c, "c", &ptmx.Major, &ptmx.Minor, "rwm") // /dev/ptmx, /dev/pts/ptmx
 
 	pts0 := specs.LinuxDevice{Path: "/dev/pts/0", Type: "c", Major: 88, Minor: 0}
-	addDevicePerms(spec, "c", &pts0.Major, nil, "rwm") // dev/pts/[0..9]
+	addDevicePerms(c, "c", &pts0.Major, nil, "rwm") // dev/pts/[0..9]
 
-	if spec.Linux.Resources == nil {
-		spec.Linux.Resources = &specs.LinuxResources{}
+	if c.Linux.Resources == nil {
+		c.Linux.Resources = &specs.LinuxResources{}
 	}
 
 	// add missing default devices
 	for _, dev := range devices {
-		if !isDeviceEnabled(spec, dev) {
-			addDevice(spec, dev, mode, uid, gid, "rwm")
+		if !isDeviceEnabled(c, dev) {
+			addDevice(c, dev, mode, uid, gid, "rwm")
 		}
 	}
 	return nil
 }
 
-func writeDevices(dst string, spec *Container) error {
-	if spec.Linux.Devices == nil {
+func writeDevices(dst string, c *Container) error {
+	if c.Linux.Devices == nil {
 		return nil
 	}
 	f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}
-	for _, d := range spec.Linux.Devices {
-		uid := spec.Process.User.UID
+	for _, d := range c.Linux.Devices {
+		uid := c.Process.User.UID
 		if d.UID != nil {
 			uid = *d.UID
 		}
-		gid := spec.Process.User.GID
+		gid := c.Process.User.GID
 		if d.GID != nil {
 			gid = *d.GID
 		}

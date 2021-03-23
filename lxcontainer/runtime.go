@@ -68,7 +68,7 @@ func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 	ctx, cancel := context.WithTimeout(ctx, rt.Timeouts.Start)
 	defer cancel()
 
-	c.Log.Info().Msg("notify init to start container process")
+	rt.Log.Info().Msg("notify init to start container process")
 
 	state, err := c.State()
 	if err != nil {
@@ -102,7 +102,7 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 		return err
 	}
 
-	c.Log.Debug().Msg("starting lxc monitor process")
+	rt.Log.Debug().Msg("starting lxc monitor process")
 	if c.ConsoleSocket != "" {
 		err = runStartCmdConsole(ctx, cmd, c.ConsoleSocket)
 	} else {
@@ -120,19 +120,19 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 		// NOTE this goroutine may leak until crio-lxc is terminated
 		ps, err := cmd.Process.Wait()
 		if err != nil {
-			c.Log.Error().Err(err).Msg("failed to wait for start process")
+			rt.Log.Error().Err(err).Msg("failed to wait for start process")
 		} else {
-			c.Log.Warn().Int("pid", cmd.Process.Pid).Stringer("status", ps).Msg("start process terminated")
+			rt.Log.Warn().Int("pid", cmd.Process.Pid).Stringer("status", ps).Msg("start process terminated")
 		}
 		cancel()
 	}()
 
-	c.Log.Debug().Msg("waiting for init")
+	rt.Log.Debug().Msg("waiting for init")
 	if err := c.waitCreated(ctx); err != nil {
 		return err
 	}
 
-	c.Log.Info().Int("pid", cmd.Process.Pid).Msg("init process is running, container is created")
+	rt.Log.Info().Int("pid", cmd.Process.Pid).Msg("init process is running, container is created")
 	return CreatePidFile(c.PidFile, cmd.Process.Pid)
 }
 

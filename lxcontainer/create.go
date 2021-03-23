@@ -118,7 +118,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	if err := configureMounts(c); err != nil {
+	if err := configureMounts(rt, c); err != nil {
 		return err
 	}
 
@@ -161,7 +161,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 			}
 		}
 	} else {
-		c.Log.Warn().Msg("seccomp feature is disabled - all system calls are allowed")
+		rt.Log.Warn().Msg("seccomp feature is disabled - all system calls are allowed")
 	}
 
 	if rt.Features.Capabilities {
@@ -176,7 +176,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 	if err := c.SetConfigItem("lxc.autodev", "0"); err != nil {
 		return err
 	}
-	if err := ensureDefaultDevices(rt, c); err != nil {
+	if err := ensureDefaultDevices(c); err != nil {
 		return fmt.Errorf("failed to add default devices: %w", err)
 	}
 
@@ -294,16 +294,16 @@ func configureCapabilities(c *Container) error {
 	return c.SetConfigItem("lxc.cap.keep", keepCaps)
 }
 
-func writeMasked(dst string, spec *Container) error {
+func writeMasked(dst string, c *Container) error {
 	// #nosec
-	if spec.Linux.MaskedPaths == nil {
+	if c.Linux.MaskedPaths == nil {
 		return nil
 	}
 	f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}
-	for _, p := range spec.Linux.MaskedPaths {
+	for _, p := range c.Linux.MaskedPaths {
 		_, err = fmt.Fprintln(f, p)
 		if err != nil {
 			f.Close()

@@ -74,13 +74,13 @@ func TestResolveMountDestination_relative(t *testing.T) {
 }
 
 func TestFilterMountOptions(t *testing.T) {
-	c := &Container{Log: testLogger()}
+	rt := Runtime{Log: log.NewTestLogger(true)}
 
 	opts := strings.Split("rw,rprivate,noexec,nosuid,nodev,tmpcopyup,create=dir", ",")
 
-	out := filterMountOptions(c, "tmpfs", opts)
+	out := filterMountOptions(&rt, "tmpfs", opts)
 	require.Equal(t, []string{"rw", "noexec", "nosuid", "nodev", "create=dir"}, out)
 
-	out = filterMountOptions(c, "nosuchfs", opts)
+	out = filterMountOptions(&rt, "nosuchfs", opts)
 	require.Equal(t, opts, out)
 }
