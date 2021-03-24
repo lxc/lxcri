@@ -1,5 +1,6 @@
 ---
-name: Build project with default make target
+# see https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions
+name: Static check and build project
 on:
   - push
   - pull_request
@@ -16,10 +17,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Check format
+      - name: Check format of go sources
         run: |
           go fmt ./...
-          git diff-files --quiet
+          git diff --exit-code
+
+      - name: Check format of shell scripts
+        run: |
+          GO111MODULE=off go get -u mvdan.cc/sh/v3/cmd/shfmt
+          find . -name \*.sh | xargs shfmt -d
+
+      - name: Lint go sources
+        run: |
+          GO111MODULE=off go get -u golang.org/x/lint/golint
+          golint -set_exit_status ./...
+
 
       - name: Install dependencies
         run: |

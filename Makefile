@@ -1,5 +1,5 @@
-COMMIT_HASH=$(shell git describe --always --tags --long)
-COMMIT=$(if $(shell git status --porcelain --untracked-files=no),$(COMMIT_HASH)-dirty,$(COMMIT_HASH))
+COMMIT_HASH = $(shell git describe --always --tags --long)
+COMMIT = $(if $(shell git status --porcelain --untracked-files=no),$(COMMIT_HASH)-dirty,$(COMMIT_HASH))
 BINS := lxcri-start lxcri-init lxcri-container-hook lxcri
 # Installation prefix for BINS
 PREFIX ?= /usr/local
@@ -10,22 +10,24 @@ LIBLXC_LDFLAGS = $(shell pkg-config --libs --cflags lxc)
 LDFLAGS=-X main.version=$(COMMIT)
 CC ?= cc
 MUSL_CC ?= musl-gcc
+SHELL_SCRIPTS = $(wildcard **/*.sh) 
 
-all: fmt test $(BINS)
+all: fmt test build
 
-install: $(BINS)
-	cp -v $(BINS) $(PREFIX)/bin
+update-tools:
+	GO111MODULE=off go get -u mvdan.cc/sh/v3/cmd/shfmt
+	GO111MODULE=off go get -u golang.org/x/lint/golint
 
-.PHONY: clean
-clean:
-	-rm -f $(BINS)
+fmt:
+	go fmt ./...
+	shfmt -w $(SHELL_SCRIPTS)
+	golint ./...
 
 .PHONY: test
 test:
 	go test -v ./...
 
-lint:
-	golangci-lint run -c ./lint.yaml ./...
+build: $(BINS)
 
 lxcri: go.mod **/*.go
 	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd
@@ -41,5 +43,10 @@ lxcri-init: cmd/init/lxcri-init.c
 lxcri-container-hook: cmd/container-hook/hook.c
 	$(MUSL_CC) -Werror -Wpedantic -static -o $@ $?
 
-fmt:
-	go fmt ./...
+install: $(BINS)
+	cp -v $(BINS) $(PREFIX)/bin
+
+.PHONY: clean
+clean:
+	-rm -f $(BINS)
+
