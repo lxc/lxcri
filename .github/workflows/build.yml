@@ -16,6 +16,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Check format
+        run: |
+          go fmt ./...
+          git diff-files --quiet
+
       - name: Install dependencies
         run: |
           sudo add-apt-repository ppa:ubuntu-lxc/daily -y
