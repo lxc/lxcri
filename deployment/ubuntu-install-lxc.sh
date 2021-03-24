@@ -1,8 +1,4 @@
-#!/bin/sh
-# enable debug logging
-set -x
-# abort if subshell command exits non-zero
-set -e
+#!/bin/sh -eux
 
 # see `man 5 os-release` and http://0pointer.de/blog/projects/os-release
 . /etc/os-release

@@ -1,8 +1,4 @@
-#!/bin/sh
-# enable debug logging
-set -x
-# abort if subshell command exits non-zero
-set -e
+#!/bin/sh -eux
 
 . $(dirname $(readlink -f $0))/utils.sh
 
