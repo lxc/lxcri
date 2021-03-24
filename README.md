@@ -1,8 +1,16 @@
 # About
 
-This is a wrapper around [LXC](https://github.com/lxc/lxc) which can be used as
-a drop-in container runtime replacement for use by
-[CRI-O](https://github.com/kubernetes-sigs/cri-o).
+`lxcri` is a wrapper around [LXC](https://github.com/lxc/lxc) which can be used as
+a drop-in container runtime replacement for use by [CRI-O](https://github.com/kubernetes-sigs/cri-o).
+
+### History
+
+The project started as a fork of lxc/crio-lxc but has undergone several refactorings
+and yet shares very little code with lxc/crio-lxc and was therefore renamed to `lxcri`
+
+### OCI compliance
+
+With liblxc >= https://github.com/lxc/lxc/commit/b5daeddc5afce1cad4915aef3e71fdfe0f428709  it passes all sonobuoy conformance tests.
 
 ## Installation
 
