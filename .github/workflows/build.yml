@@ -31,7 +31,7 @@ jobs:
         run: |
           GO111MODULE=off go get -u golang.org/x/lint/golint
           golint -set_exit_status ./...
-
+        continue-on-error: true
 
       - name: Install dependencies
         run: |
