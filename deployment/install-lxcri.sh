@@ -15,7 +15,7 @@ install_crio_lxc() {
 	git clone $LXCRI_GIT_REPO $tmpdir
 	cd $tmpdir
 	git reset --hard $LXCRI_GIT_VERSION
-	# lxc installed from source with dafault installation prefix is prefered
+	# lxc installed from source with default installation prefix is prefered
 	export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
 	make install
 	cd
