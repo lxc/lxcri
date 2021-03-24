@@ -39,7 +39,7 @@ jobs:
           sudo apt-get install -qq lxc-dev musl musl-tools libc6-dev pkg-config make
 
       - name: Build
-        run: make
+        run: make build
 
       - name: Run tests
         run: make test
