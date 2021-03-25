@@ -169,7 +169,6 @@ The process environment contains the following variables:
 * `RUNTIME_CMD` the runtime command which executed the runtime hook
 * `RUNTIME_PATH` the path to the container runtime directory
 * `BUNDLE_PATH` the absolute path to the container bundle
-* `SPEC_PATH` the absolute path to the the JSON runtime spec
 * `LOG_FILE` the path to the log file
 * `RUNTIME_ERROR` (optional) the error message if the runtime cmd return with error
 
@@ -184,7 +183,6 @@ OUT=$LOGDIR/$CONTAINER_ID
 # backup container runtime directory to log directory
 cp -r $RUNTIME_PATH $OUT
 # copy OCI runtime spec to container runtime directory
-cp $SPEC_PATH $OUT/spec.json
 
 # remove non `grep` friendly runtime files (symlinks, binaries, fifos)
 rm $OUT/.lxcri/cwd

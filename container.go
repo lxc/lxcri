@@ -20,8 +20,6 @@ import (
 type ContainerConfig struct {
 	*specs.Spec
 
-	SpecPath string
-
 	RuntimeDir string
 
 	ContainerID string
@@ -76,9 +74,13 @@ func (cfg ContainerConfig) Pid() (int, error) {
 }
 
 func (c *ContainerConfig) LoadSpecJson(p string) error {
-	c.SpecPath = p
-	c.Spec = &specs.Spec{}
-	return decodeFileJSON(c.Spec, p)
+	spec := &specs.Spec{}
+	if err := decodeFileJSON(spec, p); err != nil {
+		return err
+	}
+	c.Spec = spec
+	return nil
+
 }
 
 // Container is the runtime state of a container instance.

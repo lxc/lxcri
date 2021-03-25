@@ -331,7 +331,6 @@ func runCreateHook(err error) {
 		"RUNTIME_CMD=" + clxc.command,
 		"RUNTIME_PATH=" + clxc.containerConfig.RuntimePath(),
 		"BUNDLE_PATH=" + clxc.containerConfig.BundlePath,
-		"SPEC_PATH=" + clxc.containerConfig.SpecPath,
 		"LOG_FILE=" + clxc.logConfig.FilePath,
 	}
 	if err != nil {
