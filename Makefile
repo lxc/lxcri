@@ -22,6 +22,7 @@ fmt:
 	go fmt ./...
 	shfmt -w $(SHELL_SCRIPTS)
 	golint ./...
+	go mod tidy
 
 .PHONY: test
 test:
