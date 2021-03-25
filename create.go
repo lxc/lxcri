@@ -9,13 +9,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/creack/pty"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"golang.org/x/sys/unix"
 	"gopkg.in/lxc/go-lxc.v2"
 )
 
+// Create creates a single container instance from the given ContainerConfig.
+// Create is the first runtime method to call within the lifecycle of a container.
+// You may have to call Runtime.Delete to cleanup container runtime state,
+// if Create returns with an error.
 func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container, error) {
 	ctx, cancel := context.WithTimeout(ctx, rt.Timeouts.Create)
 	defer cancel()
@@ -49,6 +52,9 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	return c, nil
 }
 
+// CheckSystem checks the hosts system configuration.
+// Unsupported runtime features are disabled and a warning message is logged.
+// CheckSystem should be called (once) before using the Runtime.
 func (rt *Runtime) CheckSystem() error {
 	err := canExecute(rt.Executables.Start, rt.Executables.Hook, rt.Executables.Init)
 	if err != nil {

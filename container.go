@@ -16,6 +16,7 @@ import (
 	"gopkg.in/lxc/go-lxc.v2"
 )
 
+// ContainerConfig is the configuration for a single Container instance.
 type ContainerConfig struct {
 	*specs.Spec
 
@@ -80,9 +81,7 @@ func (c *ContainerConfig) LoadSpecJson(p string) error {
 	return decodeFileJSON(c.Spec, p)
 }
 
-// ContainerInfo holds the information about a single container.
-// It is created at 'create' within the container runtime dir and not changed afterwards.
-// It is removed when the container is deleted.
+// Container is the runtime state of a container instance.
 type Container struct {
 	linuxcontainer *lxc.Container `json:"-"`
 	*ContainerConfig

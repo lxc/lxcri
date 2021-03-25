@@ -13,8 +13,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var ErrNotExist = fmt.Errorf("container does not exist")
-var ErrExist = fmt.Errorf("container already exists")
+var (
+	ErrNotExist = fmt.Errorf("container does not exist")
+	ErrExist    = fmt.Errorf("container already exists")
+)
 
 type RuntimeHook func(ctx context.Context, c *Container) error
 
@@ -28,8 +30,12 @@ type Hooks struct {
 }
 
 type Runtime struct {
+	// Log is the logger used by the runtime.
 	Log zerolog.Logger
 
+	// Root is the file path to the runtime directory.
+	// Directories for containers created by the runtime
+	// are created within this directory.
 	Root string
 	// Use systemd encoded cgroup path (from crio-o/conmon)
 	// is true if /etc/crio/crio.conf#cgroup_manager = "systemd"

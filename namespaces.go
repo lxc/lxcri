@@ -16,26 +16,27 @@ type Namespace struct {
 	CloneFlag int
 }
 
-var CgroupNamespace = Namespace{"cgroup", unix.CLONE_NEWCGROUP}
-var IPCNamespace = Namespace{"ipc", unix.CLONE_NEWIPC}
-var MountNamespace = Namespace{"mnt", unix.CLONE_NEWNS}
-var NetworkNamespace = Namespace{"net", unix.CLONE_NEWNET}
-var PIDNamespace = Namespace{"pid", unix.CLONE_NEWPID}
-var TimeNamespace = Namespace{"time", unix.CLONE_NEWTIME}
-var UserNamespace = Namespace{"user", unix.CLONE_NEWUSER}
-var UTSNamespace = Namespace{"uts", unix.CLONE_NEWUTS}
+var (
+	CgroupNamespace  = Namespace{"cgroup", unix.CLONE_NEWCGROUP}
+	IPCNamespace     = Namespace{"ipc", unix.CLONE_NEWIPC}
+	MountNamespace   = Namespace{"mnt", unix.CLONE_NEWNS}
+	NetworkNamespace = Namespace{"net", unix.CLONE_NEWNET}
+	PIDNamespace     = Namespace{"pid", unix.CLONE_NEWPID}
+	TimeNamespace    = Namespace{"time", unix.CLONE_NEWTIME}
+	UserNamespace    = Namespace{"user", unix.CLONE_NEWUSER}
+	UTSNamespace     = Namespace{"uts", unix.CLONE_NEWUTS}
 
-// maps from CRIO namespace names to LXC names and clone flags
-var namespaceMap = map[specs.LinuxNamespaceType]Namespace{
-	specs.CgroupNamespace:  CgroupNamespace,
-	specs.IPCNamespace:     IPCNamespace,
-	specs.MountNamespace:   MountNamespace,
-	specs.NetworkNamespace: NetworkNamespace,
-	specs.PIDNamespace:     PIDNamespace,
-	// specs.TimeNamespace:     TimeNamespace,
-	specs.UserNamespace: UserNamespace,
-	specs.UTSNamespace:  UTSNamespace,
-}
+	namespaceMap = map[specs.LinuxNamespaceType]Namespace{
+		specs.CgroupNamespace:  CgroupNamespace,
+		specs.IPCNamespace:     IPCNamespace,
+		specs.MountNamespace:   MountNamespace,
+		specs.NetworkNamespace: NetworkNamespace,
+		specs.PIDNamespace:     PIDNamespace,
+		// specs.TimeNamespace:     TimeNamespace,
+		specs.UserNamespace: UserNamespace,
+		specs.UTSNamespace:  UTSNamespace,
+	}
+)
 
 func cloneFlags(namespaces []specs.LinuxNamespace) (int, error) {
 	flags := 0
