@@ -10,7 +10,8 @@ LIBLXC_LDFLAGS = $(shell pkg-config --libs --cflags lxc)
 LDFLAGS=-X main.version=$(COMMIT)
 CC ?= cc
 MUSL_CC ?= musl-gcc
-SHELL_SCRIPTS = $(wildcard **/*.sh)
+SHELL_SCRIPTS = $(shell find . -name \*.sh)
+GO_SRC = $(shell find . -name \*.go)
 
 all: fmt test build
 
@@ -30,7 +31,7 @@ test:
 
 build: $(BINS)
 
-lxcri: go.mod **/*.go
+lxcri: go.mod $(GO_SRC)
 	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd/lxcri
 
 lxcri-start: cmd/lxcri-start/lxcri-start.c
@@ -44,7 +45,7 @@ lxcri-init: cmd/lxcri-init/lxcri-init.c
 lxcri-hook: cmd/lxcri-hook/lxcri-hook.c
 	$(MUSL_CC) -Werror -Wpedantic -static -o $@ $?
 
-install: $(BINS)
+install: build
 	cp -v $(BINS) $(PREFIX)/bin
 
 .PHONY: clean
