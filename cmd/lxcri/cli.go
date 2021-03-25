@@ -132,7 +132,7 @@ func main() {
 		},
 		&cli.BoolFlag{
 			Name:        "systemd-cgroup",
-			Usage:       "enable systemd cgroup",
+			Usage:       "enable support for systemd encoded cgroup path",
 			Destination: &clxc.SystemdCgroup,
 		},
 		&cli.StringFlag{

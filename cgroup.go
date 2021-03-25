@@ -229,6 +229,7 @@ func configureCPUController(clxc *Runtime, slinux *specs.LinuxCPU) error {
 // kubepods.slice/kubepods-besteffort.slice/kubepods-besteffort-pod87f8bc68_7c18_4a1d_af9f_54eff815f688.slice
 // kubepods-burstable-pod9da3b2a14682e1fb23be3c2492753207.slice:crio:fe018d944f87b227b3b7f86226962639020e99eac8991463bf7126ef8e929589
 // https://github.com/cri-o/cri-o/issues/2632
+// TODO Where is the systemd cgroup path encoding officially documented?
 func parseSystemdCgroupPath(s string) string {
 	parts := strings.Split(s, ":")
 
