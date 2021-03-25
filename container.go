@@ -486,3 +486,43 @@ func attachOptions(procSpec *specs.Process, ns []specs.LinuxNamespace) (lxc.Atta
 	}
 	return opts, nil
 }
+
+func setLog(c *Container) error {
+	// Never let lxc write to stdout, stdout belongs to the container init process.
+	// Explicitly disable it - allthough it is currently the default.
+	c.linuxcontainer.SetVerbosity(lxc.Quiet)
+	// The log level for a running container is set, and may change, per runtime call.
+	err := c.linuxcontainer.SetLogLevel(parseContainerLogLevel(c.LogLevel))
+	if err != nil {
+		return fmt.Errorf("failed to set container loglevel: %w", err)
+	}
+	if err := c.linuxcontainer.SetLogFile(c.LogFile); err != nil {
+		return fmt.Errorf("failed to set container log file: %w", err)
+	}
+	return nil
+}
+
+func parseContainerLogLevel(level string) lxc.LogLevel {
+	switch strings.ToLower(level) {
+	case "trace":
+		return lxc.TRACE
+	case "debug":
+		return lxc.DEBUG
+	case "info":
+		return lxc.INFO
+	case "notice":
+		return lxc.NOTICE
+	case "warn":
+		return lxc.WARN
+	case "error":
+		return lxc.ERROR
+	case "crit":
+		return lxc.CRIT
+	case "alert":
+		return lxc.ALERT
+	case "fatal":
+		return lxc.FATAL
+	default:
+		return lxc.WARN
+	}
+}
