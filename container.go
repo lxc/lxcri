@@ -40,6 +40,8 @@ type ContainerConfig struct {
 	LogFile  string
 
 	Log zerolog.Logger `json:"-"`
+
+	Hooks `json:"-"`
 }
 
 func (cfg ContainerConfig) ConfigFilePath() string {

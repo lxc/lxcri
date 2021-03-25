@@ -31,6 +31,13 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return nil, errorf("failed to create container: %w", err)
 	}
 
+	if rt.OnCreate != nil {
+		rt.OnCreate(ctx, c)
+	}
+	if c.OnCreate != nil {
+		c.OnCreate(ctx, c)
+	}
+
 	if err := configureContainer(rt, c); err != nil {
 		return nil, errorf("failed to configure container: %w", err)
 	}
@@ -39,9 +46,6 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return nil, errorf("failed to run container process: %w", err)
 	}
 
-	if rt.Hooks.AfterCreate != nil {
-		defer rt.Hooks.AfterCreate(ctx, c)
-	}
 	return c, nil
 }
 

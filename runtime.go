@@ -16,6 +16,17 @@ import (
 var ErrNotExist = fmt.Errorf("container does not exist")
 var ErrExist = fmt.Errorf("container already exists")
 
+type RuntimeHook func(ctx context.Context, c *Container) error
+
+// RuntimeHooks are callback functions executed within the container lifecycle.
+type Hooks struct {
+	// OnCreate is called right after creation of container runtime directory
+	// and descriptor, but before the liblxc 'config' file is written.
+	// At this point it's possible to add files to the container runtime directory
+	// and modify the ContainerConfig.
+	OnCreate RuntimeHook
+}
+
 type Runtime struct {
 	Log zerolog.Logger
 
@@ -54,11 +65,6 @@ type Runtime struct {
 
 	// runtime hooks (not OCI runtime hooks)
 
-	Hooks struct {
-		// AfterCreateContainer is called right after creating the container runtime directory and descriptor,
-		// and before creating the lxc 'config' file for the container.
-		AfterCreate func(ctx context.Context, c *Container) error `json:"-"`
-	}
 }
 
 func (rt *Runtime) Load(cfg *ContainerConfig) (*Container, error) {
