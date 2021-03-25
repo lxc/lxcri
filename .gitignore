@@ -1,9 +1,6 @@
 *~
-lxcri
-lxcri-start
-lxcri-init
-lxcri-container-hook
-oci/
-roots/
+/lxcri
+/lxcri-start
+/lxcri-init
+/lxcri-hook
 .stacker/
-.keeptempdirs
