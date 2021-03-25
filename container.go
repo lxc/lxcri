@@ -28,16 +28,19 @@ type ContainerConfig struct {
 	BundlePath    string
 	ConsoleSocket string `json:",omitempty"`
 
-	// PidFile is the absolute path to the PID file of the container monitor process (lxcri-start)
+	// PidFile is the absolute PID file path
+	// for the container monitor process (ExecStart)
 	PidFile          string
 	MonitorCgroupDir string
 
 	CgroupDir string
 
-	// lxc log file and level
+	// LogFile is the liblxc log file path
+	LogFile string
+	// LogLevel is the liblxc log level
 	LogLevel string
-	LogFile  string
 
+	// Log is the container Logger
 	Log zerolog.Logger `json:"-"`
 
 	Hooks `json:"-"`
@@ -51,7 +54,7 @@ func (cfg ContainerConfig) syncFifoPath() string {
 	return cfg.RuntimePath(initDir, "syncfifo")
 }
 
-// RuntimePath returns the absolute path witin the container root
+// RuntimePath returns the absolute path within the container root.
 func (cfg ContainerConfig) RuntimePath(subPath ...string) string {
 	return filepath.Join(cfg.RuntimeDir, filepath.Join(subPath...))
 }
