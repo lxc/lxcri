@@ -1,13 +1,15 @@
 COMMIT_HASH = $(shell git describe --always --tags --long)
 COMMIT = $(if $(shell git status --porcelain --untracked-files=no),$(COMMIT_HASH)-dirty,$(COMMIT_HASH))
-BINS := lxcri-start lxcri-init lxcri-hook lxcri
+BINS := lxcri
+LIBEXEC_BINS := lxcri-start lxcri-init lxcri-hook
 # Installation prefix for BINS
 PREFIX ?= /usr/local
+LIBEXEC_DIR = $(PREFIX)/libexec/lxcri
 # Note: The default pkg-config directory is search after PKG_CONFIG_PATH
 PKG_CONFIG_PATH ?= /usr/local/lib/pkgconfig
 export PKG_CONFIG_PATH
 LIBLXC_LDFLAGS = $(shell pkg-config --libs --cflags lxc)
-LDFLAGS=-X main.version=$(COMMIT)
+LDFLAGS=-X main.version=$(COMMIT) -X main.libexecDir=$(LIBEXEC_DIR)
 CC ?= cc
 MUSL_CC ?= musl-gcc
 SHELL_SCRIPTS = $(shell find . -name \*.sh)
@@ -29,7 +31,7 @@ fmt:
 test:
 	go test -v ./...
 
-build: $(BINS)
+build: $(BINS) $(LIBEXEC_BINS)
 
 lxcri: go.mod $(GO_SRC)
 	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd/lxcri
@@ -46,9 +48,12 @@ lxcri-hook: cmd/lxcri-hook/lxcri-hook.c
 	$(MUSL_CC) -Werror -Wpedantic -static -o $@ $?
 
 install: build
+	mkdir -p $(PREFIX)/bin
 	cp -v $(BINS) $(PREFIX)/bin
+	mkdir -p $(LIBEXEC_DIR)
+	cp -v $(LIBEXEC_BINS) $(LIBEXEC_DIR)
 
 .PHONY: clean
 clean:
-	-rm -f $(BINS)
+	-rm -f $(BINS) $(LIBEXEC_BINS)
 

@@ -15,24 +15,20 @@ import (
 	"github.com/drachenfels-de/lxcri/log"
 )
 
+// Required runtime executables loaded from Runtime.LibexecDir
 const (
-	// DefaultRuntimeRoot is the path to the default runtime directory.
-	DefaultRuntimeRoot = "/var/lib/lxcri"
+	// ExecStart starts the liblxc monitor process, similar to lxc-start
+	ExecStart = "lxcri-start"
+	// ExecHook is run as liblxc hook and creates additional devices and remounts masked paths.
+	ExecHook = "lxcri-hook"
+	// ExecInit is the container init process that execs the container process.
+	ExecInit = "lxcri-init"
 )
 
 var (
 	ErrNotExist = fmt.Errorf("container does not exist")
 	ErrExist    = fmt.Errorf("container already exists")
 )
-
-// RuntimeExecutables contains names for all (external) executed commands.
-// The excutable name is used as path if it contains a slash, otherwise
-// the PATH environment variable is consulted to resolve the executable path.
-type RuntimeExecutables struct {
-	Start string
-	Init  string
-	Hook  string
-}
 
 // RuntimeTimeouts are timeouts for Runtime API calls.
 type RuntimeTimeouts struct {
@@ -66,7 +62,6 @@ type Hooks struct {
 type Runtime struct {
 	// Log is the logger used by the runtime.
 	Log zerolog.Logger
-
 	// Root is the file path to the runtime directory.
 	// Directories for containers created by the runtime
 	// are created within this directory.
@@ -77,23 +72,22 @@ type Runtime struct {
 	// Path for lxc monitor cgroup (lxc specific feature)
 	// similar to /etc/crio/crio.conf#conmon_cgroup
 	MonitorCgroup string
-
-	Executables RuntimeExecutables
-	Timeouts    RuntimeTimeouts
-	Features    RuntimeFeatures
+	// LibexecDir is the the directory that contains the runtime executables.
+	LibexecDir string
+	// Timeouts are the runtime API command timeouts.
+	Timeouts RuntimeTimeouts
+	//
+	Features RuntimeFeatures
 
 	Hooks `json:"-"`
 }
 
 var DefaultRuntime = &Runtime{
 	Log:           log.ConsoleLogger(true),
-	Root:          DefaultRuntimeRoot,
+	Root:          "/var/run/lxcri",
 	SystemdCgroup: true,
-	Executables: RuntimeExecutables{
-		Start: "lxcri-start",
-		Init:  "lxcri-init",
-		Hook:  "lxcri-hook",
-	},
+	LibexecDir:    "/usr/libexec/lxcri",
+
 	Timeouts: RuntimeTimeouts{
 		Create: time.Second * 60,
 		Start:  time.Second * 30,
@@ -106,6 +100,10 @@ var DefaultRuntime = &Runtime{
 		Apparmor:      true,
 		CgroupDevices: true,
 	},
+}
+
+func (rt *Runtime) libexec(name string) string {
+	return filepath.Join(rt.LibexecDir, name)
 }
 
 // CheckSystem is a wrapper around DefaultRuntime.CheckSystem
@@ -167,7 +165,7 @@ func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 
 func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	// #nosec
-	cmd := exec.Command(rt.Executables.Start, c.linuxcontainer.Name(), rt.Root, c.ConfigFilePath())
+	cmd := exec.Command(rt.libexec(ExecStart), c.linuxcontainer.Name(), rt.Root, c.ConfigFilePath())
 	cmd.Env = []string{}
 	cmd.Dir = c.RuntimePath()
 

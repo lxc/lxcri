@@ -88,7 +88,7 @@ func configureInit(rt *Runtime, c *Container) error {
 	}
 	initCmd := filepath.Join(initDir, "init")
 	c.Mounts = append(c.Mounts, specs.Mount{
-		Source:      rt.Executables.Init,
+		Source:      rt.libexec(ExecInit),
 		Destination: strings.TrimLeft(initCmd, "/"),
 		Type:        "bind",
 		Options:     []string{"bind", "ro", "nosuid"},

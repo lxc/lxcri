@@ -56,7 +56,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 // Unsupported runtime features are disabled and a warning message is logged.
 // CheckSystem should be called (once) before using the Runtime.
 func (rt *Runtime) CheckSystem() error {
-	err := canExecute(rt.Executables.Start, rt.Executables.Hook, rt.Executables.Init)
+	err := canExecute(rt.libexec(ExecStart), rt.libexec(ExecHook), rt.libexec(ExecInit))
 	if err != nil {
 		return errorf("access check failed: %w", err)
 	}
@@ -199,7 +199,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 	if err := c.SetConfigItem("lxc.hook.version", "1"); err != nil {
 		return err
 	}
-	if err := c.SetConfigItem("lxc.hook.mount", rt.Executables.Hook); err != nil {
+	if err := c.SetConfigItem("lxc.hook.mount", rt.libexec(ExecHook)); err != nil {
 		return err
 	}
 

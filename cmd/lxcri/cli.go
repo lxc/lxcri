@@ -15,11 +15,14 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-// Environment variables are populated by default from this environment file.
-// Existing environment variables are preserved.
-var envFile = "/etc/default/lxcri"
-
-const defaultLogFile = "/var/log/lxcri/lxcri.log"
+var (
+	// Environment variables are populated by default from this environment file.
+	// Existing environment variables are preserved.
+	envFile        = "/etc/default/lxcri"
+	defaultLogFile = "/var/log/lxcri/lxcri.log"
+	version        = "undefined"
+	libexecDir     = "/usr/libexec/lxcri"
+)
 
 type app struct {
 	lxcri.Runtime
@@ -64,8 +67,6 @@ func (app *app) release() error {
 	}
 	return nil
 }
-
-var version string
 
 func main() {
 	app := cli.NewApp()
@@ -142,25 +143,11 @@ func main() {
 			Value:       "lxcri-monitor.slice",
 		},
 		&cli.StringFlag{
-			Name:        "exec-init",
-			Usage:       "path to container init executable",
-			EnvVars:     []string{"LXCRI_INIT_EXEC"},
-			Value:       "lxcri-init",
-			Destination: &clxc.Executables.Init,
-		},
-		&cli.StringFlag{
-			Name:        "exec-start",
-			Usage:       "absolute path to container start executable",
-			EnvVars:     []string{"LXCRI_START_EXEC"},
-			Value:       "lxcri-start",
-			Destination: &clxc.Executables.Start,
-		},
-		&cli.StringFlag{
-			Name:        "exec-hook",
-			Usage:       "absolute path to container hook executable",
-			EnvVars:     []string{"LXCRI_HOOK_EXEC"},
-			Value:       "lxcri-hook",
-			Destination: &clxc.Executables.Hook,
+			Name:        "libexec",
+			Usage:       "directory to load runtime executables from",
+			EnvVars:     []string{"LXCRI_LIBEXEC"},
+			Value:       libexecDir,
+			Destination: &clxc.LibexecDir,
 		},
 		&cli.BoolFlag{
 			Name:        "apparmor",
