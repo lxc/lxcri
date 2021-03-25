@@ -31,7 +31,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	c.RuntimeDir = filepath.Join(rt.Root, c.ContainerID)
 
 	if err := c.create(); err != nil {
-		return nil, errorf("failed to create container: %w", err)
+		return c, errorf("failed to create container: %w", err)
 	}
 
 	if rt.OnCreate != nil {
@@ -42,11 +42,11 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	}
 
 	if err := configureContainer(rt, c); err != nil {
-		return nil, errorf("failed to configure container: %w", err)
+		return c, errorf("failed to configure container: %w", err)
 	}
 
 	if err := rt.runStartCmd(ctx, c); err != nil {
-		return nil, errorf("failed to run container process: %w", err)
+		return c, errorf("failed to run container process: %w", err)
 	}
 
 	return c, nil

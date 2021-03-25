@@ -11,12 +11,46 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sys/unix"
+
+	"github.com/drachenfels-de/lxcri/log"
+)
+
+const (
+	// DefaultRuntimeRoot is the path to the default runtime directory.
+	DefaultRuntimeRoot = "/var/lib/lxcri"
 )
 
 var (
 	ErrNotExist = fmt.Errorf("container does not exist")
 	ErrExist    = fmt.Errorf("container already exists")
 )
+
+// RuntimeExecutables contains names for all (external) executed commands.
+// The excutable name is used as path if it contains a slash, otherwise
+// the PATH environment variable is consulted to resolve the executable path.
+type RuntimeExecutables struct {
+	Start string
+	Init  string
+	Hook  string
+}
+
+// RuntimeTimeouts are timeouts for Runtime API calls.
+type RuntimeTimeouts struct {
+	Create time.Duration
+	Start  time.Duration
+	Kill   time.Duration
+	Delete time.Duration
+}
+
+// RuntimeFeatures are (security) features supported by the Runtime.
+// The supported features are enabled on any Container instance
+// created by Runtime.Create.
+type RuntimeFeatures struct {
+	Seccomp       bool
+	Capabilities  bool
+	Apparmor      bool
+	CgroupDevices bool
+}
 
 type RuntimeHook func(ctx context.Context, c *Container) error
 
@@ -44,33 +78,64 @@ type Runtime struct {
 	// similar to /etc/crio/crio.conf#conmon_cgroup
 	MonitorCgroup string
 
-	// Executables contains names for all (external) executed commands.
-	// The excutable name is used as path if it contains a slash, otherwise
-	// the PATH environment variable is consulted to resolve the executable path.
-	Executables struct {
-		Start string
-		Init  string
-		Hook  string
-	}
+	Executables RuntimeExecutables
+	Timeouts    RuntimeTimeouts
+	Features    RuntimeFeatures
 
-	// Timeouts for API commands
-	Timeouts struct {
-		Create time.Duration
-		Start  time.Duration
-		Kill   time.Duration
-		Delete time.Duration
-	}
+	Hooks `json:"-"`
+}
 
-	// feature gates
-	Features struct {
-		Seccomp       bool
-		Capabilities  bool
-		Apparmor      bool
-		CgroupDevices bool
-	}
+var DefaultRuntime = &Runtime{
+	Log:           log.ConsoleLogger(true),
+	Root:          DefaultRuntimeRoot,
+	SystemdCgroup: true,
+	Executables: RuntimeExecutables{
+		Start: "lxcri-start",
+		Init:  "lxcri-init",
+		Hook:  "lxcri-hook",
+	},
+	Timeouts: RuntimeTimeouts{
+		Create: time.Second * 60,
+		Start:  time.Second * 30,
+		Kill:   time.Second * 30,
+		Delete: time.Second * 60,
+	},
+	Features: RuntimeFeatures{
+		Seccomp:       true,
+		Capabilities:  true,
+		Apparmor:      true,
+		CgroupDevices: true,
+	},
+}
 
-	// runtime hooks (not OCI runtime hooks)
+// CheckSystem is a wrapper around DefaultRuntime.CheckSystem
+func CheckSystem() error {
+	return DefaultRuntime.CheckSystem()
+}
 
+// Create is a wrapper around DefaultRuntime.Create
+func Create(ctx context.Context, cfg *ContainerConfig) (*Container, error) {
+	return DefaultRuntime.Create(ctx, cfg)
+}
+
+// Load is a wrapper around DefaultRuntime.Load
+func Load(cfg *ContainerConfig) (*Container, error) {
+	return DefaultRuntime.Load(cfg)
+}
+
+// Start is a wrapper around DefaultRuntime.Start
+func Start(ctx context.Context, c *Container) error {
+	return DefaultRuntime.Start(ctx, c)
+}
+
+// Kill is a wrapper around DefaultRuntime.Kill
+func Kill(ctx context.Context, c *Container, signum unix.Signal) error {
+	return DefaultRuntime.Kill(ctx, c, signum)
+}
+
+// Delete is a wrapper around DefaultRuntime.Delete
+func Delete(ctx context.Context, c *Container, force bool) error {
+	return DefaultRuntime.Delete(ctx, c, force)
 }
 
 func (rt *Runtime) Load(cfg *ContainerConfig) (*Container, error) {

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/drachenfels-de/lxcri/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -75,13 +74,11 @@ func TestResolveMountDestination_relative(t *testing.T) {
 }
 
 func TestFilterMountOptions(t *testing.T) {
-	rt := Runtime{Log: log.NewTestLogger(true)}
-
 	opts := strings.Split("rw,rprivate,noexec,nosuid,nodev,tmpcopyup,create=dir", ",")
 
-	out := filterMountOptions(&rt, "tmpfs", opts)
+	out := filterMountOptions(DefaultRuntime, "tmpfs", opts)
 	require.Equal(t, []string{"rw", "noexec", "nosuid", "nodev", "create=dir"}, out)
 
-	out = filterMountOptions(&rt, "nosuchfs", opts)
+	out = filterMountOptions(DefaultRuntime, "nosuchfs", opts)
 	require.Equal(t, opts, out)
 }

@@ -52,6 +52,6 @@ func NewLogger(out io.Writer, level zerolog.Level) zerolog.Context {
 	return zerolog.New(out).Level(level).With().Timestamp().Caller()
 }
 
-func NewTestLogger(color bool) zerolog.Logger {
+func ConsoleLogger(color bool) zerolog.Logger {
 	return zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: !color}).Level(zerolog.DebugLevel).With().Timestamp().Caller().Logger()
 }
