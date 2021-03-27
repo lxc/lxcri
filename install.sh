@@ -179,38 +179,6 @@ add_kubernetes() {
 	tar -x -z -f $archive -C $INSTALL_PREFIX/bin --strip-components=3 \
 		kubernetes/server/bin/kubectl kubernetes/server/bin/kubeadm kubernetes/server/bin/kubelet
 	rm $archive
-
-	cat >/etc/systemd/system/kubelet.service <<-EOF
-		[Unit]
-		Description=kubelet: The Kubernetes Node Agent
-		Documentation=http://kubernetes.io/docs/
-
-		[Service]
-		ExecStart=${INSTALL_PREFIX}/kubelet
-		Restart=always
-		StartLimitInterval=0
-		RestartSec=10
-
-		[Install]
-		WantedBy=multi-user.target
-	EOF
-
-	mkdir -p /etc/systemd/system/kubelet.service.d
-	cat >/etc/systemd/system/kubelet.service.d/10-kubeadm.conf <<-EOF
-		[Service]
-		Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
-		Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
-		# This is a file that "kubeadm init" and "kubeadm join" generate at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
-		EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
-		# This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
-		# the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
-		EnvironmentFile=-/etc/default/kubelet
-		ExecStart=
-		ExecStart=${INSTALL_PREFIX}/kubelet \$KUBELET_KUBECONFIG_ARGS \$KUBELET_CONFIG_ARGS \$KUBELET_KUBEADM_ARGS \$KUBELET_EXTRA_ARGS
-	EOF
-
-	#systemctl daemon-reload
-	systemctl enable kubelet.service
 }
 
 LXC_INSTALL_TOOLS=${LXC_INSTALL_TOOLS:-no}
@@ -253,20 +221,6 @@ add_lxcri() {
 
 	cd
 	rm -rf $tmpdir
-}
-
-configure_runtime() {
-	# TODO configure runtime using 'lxcri {flags} config'
-	CRIO_LXC_ROOT=/run/lxcri
-	# configure cri-o
-	# environment for `crio config`
-	export CONTAINER_CONMON=${INSTALL_PREFIX}/bin/conmon
-	export CONTAINER_PINNS_PATH=${INSTALL_PREFIX}/bin/pinns
-	export CONTAINER_DEFAULT_RUNTIME=lxcri
-	export CONTAINER_RUNTIMES=lxcri:${INSTALL_PREFIX}/bin/lxcri:$CRIO_LXC_ROOT
-	export CONTAINER_CNI_PLUGIN_DIR=$CNI_PLUGIN_DIR
-
-	crio config >/etc/crio/crio.conf
 }
 
 install_all_noclean() {
