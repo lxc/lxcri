@@ -86,7 +86,7 @@ add_golang() {
 
 	cd ${INSTALL_PREFIX}
 	wget --quiet $src
-	echo "$checksum $archive" | sha256sum -c
+	echo "$checksum  $archive" | sha256sum -c
 	tar -xzf $archive
 	rm ${INSTALL_PREFIX}/$archive
 }
@@ -163,7 +163,7 @@ add_crictl() {
 
 	cd ${TMPDIR}
 	wget --quiet $url
-	echo "$checksum $archive" | sha256sum -c
+	echo "$checksum  $archive" | sha256sum -c
 	tar -x -z -f $archive -C ${INSTALL_PREFIX}/bin
 	rm $archive
 }
@@ -175,7 +175,7 @@ add_kubernetes() {
 
 	cd ${TMPDIR}
 	wget --quiet $url
-	echo "$checksum $archive" | sha512sum -c
+	echo "$checksum  $archive" | sha512sum -c
 	tar -x -z -f $archive -C $INSTALL_PREFIX/bin --strip-components=3 \
 		kubernetes/server/bin/kubectl kubernetes/server/bin/kubeadm kubernetes/server/bin/kubelet
 	rm $archive
