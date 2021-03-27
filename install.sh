@@ -259,13 +259,13 @@ add_lxcri() {
 
 install_all_noclean() {
 	setup $PKGS_BUILD $PKGS
-	add_crictl
-	add_kubernetes
-	add_cni
-	add_conmon
-	add_crio
 	add_lxc
 	add_lxcri
+	add_conmon
+	add_crio
+	add_cni
+	add_crictl
+	add_kubernetes
 }
 
 install_all() {
@@ -291,6 +291,12 @@ update_runtime() {
 }
 
 update_lxcri() {
+	setup $PKGS_BUILD $PKGS_RUNTIME
+	add_lxcri
+	clean
+}
+
+update_lxcri_dev() {
 	add_lxcri
 	clean
 }
