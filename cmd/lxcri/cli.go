@@ -467,6 +467,9 @@ func doDelete(ctx *cli.Context) error {
 		clxc.Log.Info().Msg("container does not exist")
 		return nil
 	}
+	if err != nil {
+		return err
+	}
 
 	return clxc.Delete(context.Background(), c, ctx.Bool("force"))
 }
