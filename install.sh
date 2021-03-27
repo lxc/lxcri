@@ -37,6 +37,20 @@ case "$DISTRIBUTION" in
 	PKGS="$PKGS "
 	PKGS="$PKGS $PKGS_RUNTIME"
 	;;
+"alpine")
+	INSTALL_PKGS=apk_install
+	CLEAN_PKGS=apk_clean
+
+	PKGS_BUILD="build-base wget git libtool m4 automake autoconf"
+	PKGS_BUILD="$PKGS_BUILD btrfs-progs-dev glib-dev libseccomp-dev libcap-dev libapparmor-dev"
+
+	PKGS_RUNTIME="libapparmor btrfs-progs libcap lvm2-dev libseccomp libc6-compat libgcc"
+	PKGS="conntrack-tools ebtables ethtool iproute2 iptables ip6tables socat"
+	PKGS="$PKGS ca-certificates glib runit tzdata"
+	PKGS="$PKGS $PKGS_RUNTIME"
+
+	export MUSL_CC="cc"
+	;;
 *)
 	echo "unsupported distribution '$DISTRIBUTION'"
 	exit 1
@@ -77,6 +91,27 @@ pacman_install() {
 pacman_clean() {
 	echo "not implemented"
 	exit 1
+}
+
+apk_install() {
+	echo http://nl.alpinelinux.org/alpine/edge/testing >>/etc/apk/repositories
+	echo http://nl.alpinelinux.org/alpine/edge/community >>/etc/apk/repositories
+	apk add --no-cache --update $@
+}
+
+apk_clean() {
+	apk del $@
+}
+
+ldconfig_add() {
+	if $(which ldconfig 1>/dev/null 2>&1); then
+		echo $1 >>/etc/ld.so.conf.d/local.conf
+		ldconfig
+	fi
+	# alpine uses musl libc
+	# /etc/ld-musl-x86_64.path (shared library search path, with components delimited by newlines or colons)
+	#  default "/lib:/usr/local/lib:/usr/lib"
+	# see  musl-libc.org/doc/1.0.0/manual.html
 }
 
 add_golang() {
@@ -201,9 +236,8 @@ add_lxc() {
 		--enable-doc=$LXC_INSTALL_DOC --enable-api-docs=$LXC_INSTALL_API_DOCS
 	make install
 	git describe --tags >${INSTALL_PREFIX}/lib/liblxc.version.txt
-	echo ${INSTALL_PREFIX}/lib >>/etc/ld.so.conf.d/local.conf
-	ldconfig
 
+	ldconfig_add ${INSTALL_PREFIX}/lib
 	cd
 	rm -rf $tmpdir
 }
