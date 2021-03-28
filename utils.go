@@ -12,31 +12,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// createPidFile atomically creates a pid file for the given pid at the given path
-func CreatePidFile(path string, pid int) error {
-	tmpDir := filepath.Dir(path)
-	tmpName := filepath.Join(tmpDir, fmt.Sprintf(".%s", filepath.Base(path)))
-
-	// #nosec
-	f, err := os.OpenFile(tmpName, os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to create temporary PID file %q: %w", tmpName, err)
-	}
-	_, err = fmt.Fprintf(f, "%d", pid)
-	if err != nil {
-		return fmt.Errorf("failed to write to temporary PID file %q: %w", tmpName, err)
-	}
-	err = f.Close()
-	if err != nil {
-		return fmt.Errorf("failed to close temporary PID file %q: %w", tmpName, err)
-	}
-	err = os.Rename(tmpName, path)
-	if err != nil {
-		return fmt.Errorf("failed to rename temporary PID file %q to %q: %w", tmpName, path, err)
-	}
-	return nil
-}
-
 func canExecute(cmds ...string) error {
 	for _, c := range cmds {
 		if err := unix.Access(c, unix.X_OK); err != nil {

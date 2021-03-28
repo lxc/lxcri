@@ -279,9 +279,8 @@ var createCmd = cli.Command{
 			Destination: &clxc.containerConfig.ConsoleSocket,
 		},
 		&cli.StringFlag{
-			Name:        "pid-file",
-			Usage:       "path to write container PID",
-			Destination: &clxc.containerConfig.PidFile,
+			Name:  "pid-file",
+			Usage: "path to write container PID",
 		},
 		&cli.DurationFlag{
 			Name:        "timeout",
@@ -307,7 +306,7 @@ var createCmd = cli.Command{
 	},
 }
 
-func doCreate(unused *cli.Context) error {
+func doCreate(ctx *cli.Context) error {
 	if err := clxc.CheckSystem(); err != nil {
 		return err
 	}
@@ -316,9 +315,16 @@ func doCreate(unused *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
+	pidFile := ctx.String("pid-file")
 	c, err := clxc.Create(context.Background(), &clxc.containerConfig)
 	if err == nil {
 		defer c.Release()
+	}
+	if err == nil && pidFile != "" {
+		err = createPidFile(pidFile, c.Pid)
+		if err != nil {
+			return err
+		}
 	}
 	runCreateHook(err)
 	return err
@@ -553,7 +559,7 @@ func doExec(ctx *cli.Context) error {
 			return err
 		}
 		if pidFile != "" {
-			return lxcri.CreatePidFile(pidFile, pid)
+			return createPidFile(pidFile, pid)
 		}
 	} else {
 		status, err := c.Exec(args, procSpec)

@@ -45,7 +45,9 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return c, errorf("failed to run container process: %w", err)
 	}
 
-	return c, nil
+	p := c.RuntimePath("container.json")
+	err := encodeFileJSON(p, c, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
+	return c, err
 }
 
 // CheckSystem checks the hosts system configuration.

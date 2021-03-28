@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -95,3 +96,38 @@ func logEnv(log *zerolog.Log)
 
   }
 */
+
+// createPidFile atomically creates a pid file for the given pid at the given path
+func createPidFile(path string, pid int) error {
+	tmpDir := filepath.Dir(path)
+	tmpName := filepath.Join(tmpDir, fmt.Sprintf(".%s", filepath.Base(path)))
+
+	// #nosec
+	f, err := os.OpenFile(tmpName, os.O_RDWR|os.O_CREATE|os.O_EXCL|os.O_SYNC, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to create temporary PID file %q: %w", tmpName, err)
+	}
+	_, err = fmt.Fprintf(f, "%d", pid)
+	if err != nil {
+		return fmt.Errorf("failed to write to temporary PID file %q: %w", tmpName, err)
+	}
+	err = f.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close temporary PID file %q: %w", tmpName, err)
+	}
+	err = os.Rename(tmpName, path)
+	if err != nil {
+		return fmt.Errorf("failed to rename temporary PID file %q to %q: %w", tmpName, path, err)
+	}
+	return nil
+}
+
+func readPidFile(path string) (int, error) {
+	// #nosec
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return 0, err
+	}
+	s := strings.TrimSpace(string(data))
+	return strconv.Atoi(s)
+}
