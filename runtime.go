@@ -3,11 +3,13 @@ package lxcri
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
 
+	"github.com/creack/pty"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sys/unix"
@@ -216,6 +218,48 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 
 	rt.Log.Info().Int("pid", cmd.Process.Pid).Msg("init process is running, container is created")
 	return CreatePidFile(c.PidFile, cmd.Process.Pid)
+}
+
+func runStartCmdConsole(ctx context.Context, cmd *exec.Cmd, consoleSocket string) error {
+	dialer := net.Dialer{}
+	c, err := dialer.DialContext(ctx, "unix", consoleSocket)
+	if err != nil {
+		return fmt.Errorf("connecting to console socket failed: %w", err)
+	}
+	defer c.Close()
+
+	conn, ok := c.(*net.UnixConn)
+	if !ok {
+		return fmt.Errorf("expected a unix connection but was %T", conn)
+	}
+
+	if deadline, ok := ctx.Deadline(); ok {
+		err = conn.SetDeadline(deadline)
+		if err != nil {
+			return fmt.Errorf("failed to set connection deadline: %w", err)
+		}
+	}
+
+	sockFile, err := conn.File()
+	if err != nil {
+		return fmt.Errorf("failed to get file from unix connection: %w", err)
+	}
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		return fmt.Errorf("failed to start with pty: %w", err)
+	}
+
+	// Send the pty file descriptor over the console socket (to the 'conmon' process)
+	// For technical backgrounds see:
+	// * `man sendmsg 2`, `man unix 3`, `man cmsg 1`
+	// * https://blog.cloudflare.com/know-your-scm_rights/
+	oob := unix.UnixRights(int(ptmx.Fd()))
+	// Don't know whether 'terminal' is the right data to send, but conmon doesn't care anyway.
+	err = unix.Sendmsg(int(sockFile.Fd()), []byte("terminal"), oob, nil, 0)
+	if err != nil {
+		return fmt.Errorf("failed to send console fd: %w", err)
+	}
+	return ptmx.Close()
 }
 
 func (rt *Runtime) Kill(ctx context.Context, c *Container, signum unix.Signal) error {
