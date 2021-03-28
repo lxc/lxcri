@@ -167,7 +167,7 @@ func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 
 func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	// #nosec
-	cmd := exec.Command(rt.libexec(ExecStart), c.linuxcontainer.Name(), rt.Root, c.ConfigFilePath())
+	cmd := exec.Command(rt.libexec(ExecStart), c.LinuxContainer.Name(), rt.Root, c.ConfigFilePath())
 	cmd.Env = []string{}
 	cmd.Dir = c.RuntimePath()
 

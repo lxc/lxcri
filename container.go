@@ -76,7 +76,7 @@ func (c *ContainerConfig) LoadSpecJson(p string) error {
 
 // Container is the runtime state of a container instance.
 type Container struct {
-	linuxcontainer *lxc.Container `json:"-"`
+	LinuxContainer *lxc.Container `json:"-"`
 	*ContainerConfig
 
 	CreatedAt time.Time
@@ -102,7 +102,7 @@ func (c *Container) create() error {
 		return fmt.Errorf("failed to close empty config tmpfile: %w", err)
 	}
 
-	c.linuxcontainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.RuntimeDir))
+	c.LinuxContainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.RuntimeDir))
 	if err != nil {
 		return err
 	}
@@ -124,12 +124,12 @@ func (c *Container) load() error {
 	if err != nil {
 		return fmt.Errorf("failed to load lxc config file: %w", err)
 	}
-	c.linuxcontainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.RuntimeDir))
+	c.LinuxContainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.RuntimeDir))
 	if err != nil {
 		return fmt.Errorf("failed to create lxc container: %w", err)
 	}
 
-	err = c.linuxcontainer.LoadConfigFile(c.ConfigFilePath())
+	err = c.LinuxContainer.LoadConfigFile(c.ConfigFilePath())
 	if err != nil {
 		return fmt.Errorf("failed to load config file: %w", err)
 	}
@@ -142,7 +142,7 @@ func (c *Container) waitCreated(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			state := c.linuxcontainer.State()
+			state := c.LinuxContainer.State()
 			if !(state == lxc.RUNNING) {
 				c.Log.Debug().Stringer("state", state).Msg("wait for state lxc.RUNNING")
 				time.Sleep(time.Millisecond * 100)
@@ -181,7 +181,7 @@ func (c *Container) wait(ctx context.Context, state lxc.State) bool {
 		case <-ctx.Done():
 			return false
 		default:
-			if c.linuxcontainer.State() == state {
+			if c.LinuxContainer.State() == state {
 				return true
 			}
 			time.Sleep(time.Millisecond * 100)
@@ -207,7 +207,7 @@ func (c *Container) State() (*specs.State, error) {
 }
 
 func (c *Container) ContainerState() (specs.ContainerState, error) {
-	state := c.linuxcontainer.State()
+	state := c.LinuxContainer.State()
 	switch state {
 	case lxc.STOPPED:
 		return specs.StateStopped, nil
@@ -224,7 +224,7 @@ func (c *Container) ContainerState() (specs.ContainerState, error) {
 // This should be called if the container is in state lxc.RUNNING.
 // On error the caller should call getContainerState() again
 func (c *Container) getContainerInitState() (specs.ContainerState, error) {
-	initPid := c.linuxcontainer.InitPid()
+	initPid := c.LinuxContainer.InitPid()
 	if initPid < 1 {
 		return specs.StateStopped, nil
 	}
@@ -273,7 +273,7 @@ func (c *Container) stop(ctx context.Context, signum unix.Signal) error {
 	if err := c.SetConfigItem("lxc.signal.stop", strconv.Itoa(int(signum))); err != nil {
 		return err
 	}
-	if err := c.linuxcontainer.Stop(); err != nil {
+	if err := c.LinuxContainer.Stop(); err != nil {
 		return err
 	}
 
@@ -308,7 +308,7 @@ func (c *Container) saveConfig() error {
 	if _, err := os.Stat(cfgFile); err == nil {
 		return fmt.Errorf("config file %s already exists", cfgFile)
 	}
-	err := c.linuxcontainer.SaveConfigFile(tmpFile)
+	err := c.LinuxContainer.SaveConfigFile(tmpFile)
 	if err != nil {
 		return fmt.Errorf("failed to save config file to %q: %w", tmpFile, err)
 	}
@@ -319,7 +319,7 @@ func (c *Container) saveConfig() error {
 }
 
 func (c *Container) GetConfigItem(key string) string {
-	vals := c.linuxcontainer.ConfigItem(key)
+	vals := c.LinuxContainer.ConfigItem(key)
 	if len(vals) > 0 {
 		first := vals[0]
 		// some lxc config values are set to '(null)' if unset
@@ -332,7 +332,7 @@ func (c *Container) GetConfigItem(key string) string {
 }
 
 func (c *Container) SetConfigItem(key, value string) error {
-	err := c.linuxcontainer.SetConfigItem(key, value)
+	err := c.LinuxContainer.SetConfigItem(key, value)
 	if err != nil {
 		return fmt.Errorf("failed to set config item '%s=%s': %w", key, value, err)
 	}
@@ -356,7 +356,7 @@ func (c *Container) SupportsConfigItem(keys ...string) bool {
 }
 
 func (c *Container) Release() error {
-	return c.linuxcontainer.Release()
+	return c.LinuxContainer.Release()
 }
 
 // "Note that resources associated with the container,
@@ -364,7 +364,7 @@ func (c *Container) Release() error {
 // TODO - because we set rootfs.managed=0, Destroy() doesn't
 // delete the /var/lib/lxc/$containerID/config file:
 func (c *Container) destroy() error {
-	if err := c.linuxcontainer.Destroy(); err != nil {
+	if err := c.LinuxContainer.Destroy(); err != nil {
 		return fmt.Errorf("failed to destroy container: %w", err)
 	}
 	if c.CgroupDir != "" {
@@ -428,7 +428,7 @@ func (c *Container) ExecDetached(args []string, proc *specs.Process) (pid int, e
 		Int("uid", opts.UID).Int("gid", opts.GID).
 		Ints("groups", opts.Groups).Msg("execute cmd")
 
-	pid, err = c.linuxcontainer.RunCommandNoWait(args, opts)
+	pid, err = c.LinuxContainer.RunCommandNoWait(args, opts)
 	if err != nil {
 		return pid, errorf("failed to run exec cmd detached: %w", err)
 	}
@@ -440,7 +440,7 @@ func (c *Container) Exec(args []string, proc *specs.Process) (exitStatus int, er
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}
-	exitStatus, err = c.linuxcontainer.RunCommandStatus(args, opts)
+	exitStatus, err = c.LinuxContainer.RunCommandStatus(args, opts)
 	if err != nil {
 		return exitStatus, errorf("failed to run exec cmd: %w", err)
 	}
@@ -481,13 +481,13 @@ func attachOptions(procSpec *specs.Process, ns []specs.LinuxNamespace) (lxc.Atta
 func setLog(c *Container) error {
 	// Never let lxc write to stdout, stdout belongs to the container init process.
 	// Explicitly disable it - allthough it is currently the default.
-	c.linuxcontainer.SetVerbosity(lxc.Quiet)
+	c.LinuxContainer.SetVerbosity(lxc.Quiet)
 	// The log level for a running container is set, and may change, per runtime call.
-	err := c.linuxcontainer.SetLogLevel(parseContainerLogLevel(c.LogLevel))
+	err := c.LinuxContainer.SetLogLevel(parseContainerLogLevel(c.LogLevel))
 	if err != nil {
 		return fmt.Errorf("failed to set container loglevel: %w", err)
 	}
-	if err := c.linuxcontainer.SetLogFile(c.LogFile); err != nil {
+	if err := c.LinuxContainer.SetLogFile(c.LogFile); err != nil {
 		return fmt.Errorf("failed to set container log file: %w", err)
 	}
 	return nil
