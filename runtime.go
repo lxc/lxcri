@@ -55,7 +55,7 @@ type Hooks struct {
 
 type Runtime struct {
 	// Log is the logger used by the runtime.
-	Log zerolog.Logger
+	Log zerolog.Logger `json:"-"`
 	// Root is the file path to the runtime directory.
 	// Directories for containers created by the runtime
 	// are created within this directory.
