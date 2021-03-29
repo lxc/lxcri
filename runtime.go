@@ -32,14 +32,6 @@ var (
 	ErrExist    = fmt.Errorf("container already exists")
 )
 
-// RuntimeTimeouts are timeouts for Runtime API calls.
-type RuntimeTimeouts struct {
-	Create time.Duration
-	Start  time.Duration
-	Kill   time.Duration
-	Delete time.Duration
-}
-
 // RuntimeFeatures are (security) features supported by the Runtime.
 // The supported features are enabled on any Container instance
 // created by Runtime.Create.
@@ -76,8 +68,6 @@ type Runtime struct {
 	MonitorCgroup string
 	// LibexecDir is the the directory that contains the runtime executables.
 	LibexecDir string
-	// Timeouts are the runtime API command timeouts.
-	Timeouts RuntimeTimeouts
 	//
 	Features RuntimeFeatures
 
@@ -90,12 +80,6 @@ var DefaultRuntime = &Runtime{
 	SystemdCgroup: true,
 	LibexecDir:    "/usr/libexec/lxcri",
 
-	Timeouts: RuntimeTimeouts{
-		Create: time.Second * 60,
-		Start:  time.Second * 30,
-		Kill:   time.Second * 30,
-		Delete: time.Second * 60,
-	},
 	Features: RuntimeFeatures{
 		Seccomp:       true,
 		Capabilities:  true,
@@ -149,9 +133,6 @@ func (rt *Runtime) Load(cfg *ContainerConfig) (*Container, error) {
 }
 
 func (rt *Runtime) Start(ctx context.Context, c *Container) error {
-	ctx, cancel := context.WithTimeout(ctx, rt.Timeouts.Start)
-	defer cancel()
-
 	rt.Log.Info().Msg("notify init to start container process")
 
 	state, err := c.State()
@@ -268,9 +249,6 @@ func runStartCmdConsole(ctx context.Context, cmd *exec.Cmd, consoleSocket string
 }
 
 func (rt *Runtime) Kill(ctx context.Context, c *Container, signum unix.Signal) error {
-	ctx, cancel := context.WithTimeout(ctx, rt.Timeouts.Kill)
-	defer cancel()
-
 	state, err := c.ContainerState()
 	if err != nil {
 		return err
@@ -282,9 +260,6 @@ func (rt *Runtime) Kill(ctx context.Context, c *Container, signum unix.Signal) e
 }
 
 func (rt *Runtime) Delete(ctx context.Context, c *Container, force bool) error {
-	ctx, cancel := context.WithTimeout(ctx, rt.Timeouts.Delete)
-	defer cancel()
-
 	rt.Log.Info().Bool("force", force).Msg("delete container")
 	state, err := c.ContainerState()
 	if err != nil {

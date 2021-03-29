@@ -35,9 +35,8 @@ type app struct {
 		Timestamp string
 	}
 
-	command           string
-	createHook        string
-	createHookTimeout time.Duration
+	command    string
+	createHook string
 }
 
 var clxc = app{}
@@ -282,31 +281,28 @@ var createCmd = cli.Command{
 			Name:  "pid-file",
 			Usage: "path to write container PID",
 		},
-		&cli.DurationFlag{
-			Name:        "timeout",
-			Usage:       "maximum duration for create to complete",
-			EnvVars:     []string{"LXCRI_CREATE_TIMEOUT"},
-			Value:       time.Second * 60,
-			Destination: &clxc.Timeouts.Create,
+		&cli.UintFlag{
+			Name:    "timeout",
+			Usage:   "maximum duration in seconds for create to complete",
+			EnvVars: []string{"LXCRI_CREATE_TIMEOUT"},
+			Value:   60,
 		},
-		// TODO implement OCI hooks and move to Runtime.Hooks
 		&cli.StringFlag{
 			Name:        "create-hook",
-			Usage:       "absolute path to executable to run after create",
+			Usage:       "path to executable to run after create (runs even if create fails)",
 			EnvVars:     []string{"LXCRI_CREATE_HOOK"},
 			Destination: &clxc.createHook,
 		},
-		&cli.DurationFlag{
-			Name:        "hook-timeout",
-			Usage:       "maximum duration for hook to complete",
-			EnvVars:     []string{"LXCRI_CREATE_HOOK_TIMEOUT"},
-			Value:       time.Second * 5,
-			Destination: &clxc.createHookTimeout,
+		&cli.UintFlag{
+			Name:    "hook-timeout",
+			Usage:   "maximum duration in seconds for hook to complete",
+			EnvVars: []string{"LXCRI_CREATE_HOOK_TIMEOUT"},
+			Value:   5,
 		},
 	},
 }
 
-func doCreate(ctx *cli.Context) error {
+func doCreate(ctxcli *cli.Context) error {
 	if err := clxc.CheckSystem(); err != nil {
 		return err
 	}
@@ -315,8 +311,13 @@ func doCreate(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
-	pidFile := ctx.String("pid-file")
-	c, err := clxc.Create(context.Background(), &clxc.containerConfig)
+	pidFile := ctxcli.String("pid-file")
+
+	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	c, err := clxc.Create(ctx, &clxc.containerConfig)
 	if err == nil {
 		defer c.Release()
 	}
@@ -326,11 +327,11 @@ func doCreate(ctx *cli.Context) error {
 			return err
 		}
 	}
-	runCreateHook(err)
+	runCreateHook(ctxcli, err)
 	return err
 }
 
-func runCreateHook(err error) {
+func runCreateHook(ctxcli *cli.Context, err error) {
 	env := []string{
 		"CONTAINER_ID=" + clxc.containerConfig.ContainerID,
 		"LXC_CONFIG=" + clxc.containerConfig.ConfigFilePath(),
@@ -342,8 +343,10 @@ func runCreateHook(err error) {
 	if err != nil {
 		env = append(env, "RUNTIME_ERROR="+err.Error())
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), clxc.createHookTimeout)
+	timeout := time.Duration(ctxcli.Uint("hook-timeout")) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
 	cmd := exec.CommandContext(ctx, clxc.createHook)
 	cmd.Env = env
 
@@ -362,23 +365,26 @@ var startCmd = cli.Command{
 starts <containerID>
 `,
 	Flags: []cli.Flag{
-		&cli.DurationFlag{
-			Name:        "timeout",
-			Usage:       "start timeout",
-			EnvVars:     []string{"LXCRI_START_TIMEOUT"},
-			Value:       time.Second * 30,
-			Destination: &clxc.Timeouts.Start,
+		&cli.UintFlag{
+			Name:    "timeout",
+			Usage:   "maximum duration in seconds for start to complete",
+			EnvVars: []string{"LXCRI_START_TIMEOUT"},
+			Value:   30,
 		},
 	},
 }
 
-func doStart(unused *cli.Context) error {
+func doStart(ctxcli *cli.Context) error {
 	c, err := clxc.Load(&clxc.containerConfig)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
 
-	return clxc.Start(context.Background(), c)
+	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	return clxc.Start(ctx, c)
 }
 
 var stateCmd = cli.Command{
@@ -420,18 +426,17 @@ var killCmd = cli.Command{
 [signal] signal name or numerical value (e.g [9|kill|KILL|sigkill|SIGKILL])
 `,
 	Flags: []cli.Flag{
-		&cli.DurationFlag{
-			Name:        "timeout",
-			Usage:       "timeout for killing all processes in container cgroup",
-			EnvVars:     []string{"LXCRI_KILL_TIMEOUT"},
-			Value:       time.Second * 10,
-			Destination: &clxc.Timeouts.Kill,
+		&cli.UintFlag{
+			Name:    "timeout",
+			Usage:   "timeout for killing all processes in container cgroup",
+			EnvVars: []string{"LXCRI_KILL_TIMEOUT"},
+			Value:   10,
 		},
 	},
 }
 
-func doKill(ctx *cli.Context) error {
-	sig := ctx.Args().Get(1)
+func doKill(ctxcli *cli.Context) error {
+	sig := ctxcli.Args().Get(1)
 	signum := parseSignal(sig)
 	if signum == 0 {
 		return fmt.Errorf("invalid signal param %q", sig)
@@ -441,7 +446,12 @@ func doKill(ctx *cli.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
-	return clxc.Kill(context.Background(), c, signum)
+
+	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	return clxc.Kill(ctx, c, signum)
 }
 
 var deleteCmd = cli.Command{
@@ -458,16 +468,15 @@ var deleteCmd = cli.Command{
 			Usage: "force deletion",
 		},
 		&cli.DurationFlag{
-			Name:        "timeout",
-			Usage:       "timeout for deleting container",
-			EnvVars:     []string{"LXCRI_DELETE_TIMEOUT"},
-			Value:       time.Second * 10,
-			Destination: &clxc.Timeouts.Delete,
+			Name:    "timeout",
+			Usage:   "maximum duration in seconds for delete to complete",
+			EnvVars: []string{"LXCRI_DELETE_TIMEOUT"},
+			Value:   10,
 		},
 	},
 }
 
-func doDelete(ctx *cli.Context) error {
+func doDelete(ctxcli *cli.Context) error {
 	c, err := clxc.Load(&clxc.containerConfig)
 	if err == lxcri.ErrNotExist {
 		clxc.Log.Info().Msg("container does not exist")
@@ -477,7 +486,11 @@ func doDelete(ctx *cli.Context) error {
 		return err
 	}
 
-	return clxc.Delete(context.Background(), c, ctx.Bool("force"))
+	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	return clxc.Delete(ctx, c, ctxcli.Bool("force"))
 }
 
 var execCmd = cli.Command{
@@ -527,20 +540,20 @@ func (e execError) Error() string {
 	}
 }
 
-func doExec(ctx *cli.Context) error {
+func doExec(ctxcli *cli.Context) error {
 	var args []string
-	if ctx.Args().Len() > 1 {
-		args = ctx.Args().Slice()[1:]
+	if ctxcli.Args().Len() > 1 {
+		args = ctxcli.Args().Slice()[1:]
 	}
 
-	pidFile := ctx.String("pid-file")
-	detach := ctx.Bool("detach")
+	pidFile := ctxcli.String("pid-file")
+	detach := ctxcli.Bool("detach")
 
 	if detach && pidFile == "" {
 		clxc.Log.Warn().Msg("detaching process but pid-file value is unset")
 	}
 
-	procSpec, err := lxcri.ReadSpecProcessJSON(ctx.String("process"))
+	procSpec, err := lxcri.ReadSpecProcessJSON(ctxcli.String("process"))
 	if err != nil {
 		return err
 	}
