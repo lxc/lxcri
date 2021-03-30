@@ -44,6 +44,7 @@ type ContainerConfig struct {
 	Hooks `json:"-"`
 }
 
+// ConfigFilePath returns the path to the liblxc config file.
 func (cfg ContainerConfig) ConfigFilePath() string {
 	return cfg.RuntimePath("config")
 }
@@ -52,7 +53,8 @@ func (cfg ContainerConfig) syncFifoPath() string {
 	return cfg.RuntimePath(initDir, "syncfifo")
 }
 
-// RuntimePath returns the absolute path within the container root.
+// RuntimePath returns the absolute path to the given sub path
+// within the container root.
 func (cfg ContainerConfig) RuntimePath(subPath ...string) string {
 	return filepath.Join(cfg.RuntimeDir, filepath.Join(subPath...))
 }
