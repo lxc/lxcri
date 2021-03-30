@@ -307,10 +307,11 @@ func doCreate(ctxcli *cli.Context) error {
 		return err
 	}
 	specPath := filepath.Join(clxc.containerConfig.BundlePath, "config.json")
-	err := clxc.containerConfig.LoadSpecJson(specPath)
+	spec, err := lxcri.ReadSpecJSON(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
+	clxc.containerConfig.Spec = spec
 	pidFile := ctxcli.String("pid-file")
 
 	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second

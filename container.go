@@ -64,16 +64,6 @@ func (cfg ContainerConfig) runtimeDirExists() bool {
 	return false
 }
 
-func (c *ContainerConfig) LoadSpecJson(p string) error {
-	spec := &specs.Spec{}
-	if err := decodeFileJSON(spec, p); err != nil {
-		return err
-	}
-	c.Spec = spec
-	return nil
-
-}
-
 // Container is the runtime state of a container instance.
 type Container struct {
 	LinuxContainer *lxc.Container `json:"-"`

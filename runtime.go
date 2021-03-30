@@ -279,8 +279,20 @@ func (rt *Runtime) Delete(ctx context.Context, c *Container, force bool) error {
 	return nil
 }
 
+// ReadSpecSpecJSON reads the JSON encoded OCI
+// spec process definition from the given path.
+// This is a convenience function for the cli.
 func ReadSpecProcessJSON(src string) (*specs.Process, error) {
 	proc := new(specs.Process)
 	err := decodeFileJSON(proc, src)
 	return proc, err
+}
+
+// ReadSpecJSON reads the JSON encoded OCI
+// spec from the given path.
+// This is a convenience function for the cli.
+func ReadSpecJSON(p string) (*specs.Spec, error) {
+	spec := &specs.Spec{}
+	err := decodeFileJSON(spec, p)
+	return spec, err
 }
