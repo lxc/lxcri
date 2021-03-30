@@ -46,15 +46,17 @@ type RuntimeFeatures struct {
 	CgroupDevices bool
 }
 
-type RuntimeHook func(ctx context.Context, c *Container) error
+// HookFunc defines the function type that must be implemented
+// by runtime and container (non-OCI) callback hooks.
+type HookFunc func(ctx context.Context, c *Container) error
 
-// RuntimeHooks are callback functions executed within the container lifecycle.
+// Hooks are callback functions executed within the container lifecycle.
 type Hooks struct {
 	// OnCreate is called right after creation of container runtime directory
 	// and descriptor, but before the liblxc 'config' file is written.
 	// At this point it's possible to add files to the container runtime directory
 	// and modify the ContainerConfig accordingly.
-	OnCreate RuntimeHook
+	OnCreate HookFunc
 }
 
 // Runtime is a factory for creating and managing containers.
@@ -86,6 +88,8 @@ type Runtime struct {
 	Hooks `json:"-"`
 }
 
+// DefaultRuntime is the default runtime instance
+// used by all static wrapper functions.
 var DefaultRuntime = &Runtime{
 	Log:           log.ConsoleLogger(true),
 	Root:          "/var/run/lxcri",
@@ -98,10 +102,6 @@ var DefaultRuntime = &Runtime{
 		Apparmor:      true,
 		CgroupDevices: true,
 	},
-}
-
-func (rt *Runtime) libexec(name string) string {
-	return filepath.Join(rt.LibexecDir, name)
 }
 
 // CheckSystem is a wrapper around DefaultRuntime.CheckSystem
@@ -132,6 +132,10 @@ func Kill(ctx context.Context, c *Container, signum unix.Signal) error {
 // Delete is a wrapper around DefaultRuntime.Delete
 func Delete(ctx context.Context, c *Container, force bool) error {
 	return DefaultRuntime.Delete(ctx, c, force)
+}
+
+func (rt *Runtime) libexec(name string) string {
+	return filepath.Join(rt.LibexecDir, name)
 }
 
 func (rt *Runtime) Load(cfg *ContainerConfig) (*Container, error) {
@@ -300,7 +304,7 @@ func ReadSpecJSON(p string) (*specs.Spec, error) {
 	return spec, err
 }
 
-// ReadProcessSpecJSON reads the JSON encoded OCI
+// ReadSpecProcessJSON reads the JSON encoded OCI
 // spec process definition from the given path.
 // This is a convenience function for the cli.
 func ReadSpecProcessJSON(src string) (*specs.Process, error) {
