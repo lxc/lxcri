@@ -28,8 +28,12 @@ const (
 )
 
 var (
+	// ErrExist is an error returned by Runtime.Create
+	// if a container with the same ContainerID already exists.
+	ErrExist = fmt.Errorf("container already exists")
+	// ErrNotExist is an error returned by all runtime functions
+	// that exected functions if a container does not exist.
 	ErrNotExist = fmt.Errorf("container does not exist")
-	ErrExist    = fmt.Errorf("container already exists")
 )
 
 // RuntimeFeatures are (security) features supported by the Runtime.
@@ -49,10 +53,14 @@ type Hooks struct {
 	// OnCreate is called right after creation of container runtime directory
 	// and descriptor, but before the liblxc 'config' file is written.
 	// At this point it's possible to add files to the container runtime directory
-	// and modify the ContainerConfig.
+	// and modify the ContainerConfig accordingly.
 	OnCreate RuntimeHook
 }
 
+// Runtime is a factory for creating and managing containers.
+// The exported methods of Runtime  are required to implement the
+// OCI container runtime interface spec (CRI).
+// It shares the common settings
 type Runtime struct {
 	// Log is the logger used by the runtime.
 	Log zerolog.Logger `json:"-"`
@@ -63,14 +71,18 @@ type Runtime struct {
 	// Use systemd encoded cgroup path (from crio-o/conmon)
 	// is true if /etc/crio/crio.conf#cgroup_manager = "systemd"
 	SystemdCgroup bool
-	// Path for lxc monitor cgroup (lxc specific feature)
-	// similar to /etc/crio/crio.conf#conmon_cgroup
+	// Path for lxc monitor cgroup (lxc specific feature).
+	// This is the cgroup where the liblxc monitor process (lxcri-start)
+	// will be placed in. It's similar to /etc/crio/crio.conf#conmon_cgroup
 	MonitorCgroup string
 	// LibexecDir is the the directory that contains the runtime executables.
 	LibexecDir string
-	//
+	// Featuress are runtime (security) features that apply to all containers
+	// created by the runtime.
 	Features RuntimeFeatures
-
+	// Hooks contains all callback functions supported by the runtime.
+	// These hooks are different from the hooks that are
+	// defined within the OCI runtime spec.
 	Hooks `json:"-"`
 }
 
@@ -279,15 +291,6 @@ func (rt *Runtime) Delete(ctx context.Context, c *Container, force bool) error {
 	return nil
 }
 
-// ReadSpecSpecJSON reads the JSON encoded OCI
-// spec process definition from the given path.
-// This is a convenience function for the cli.
-func ReadSpecProcessJSON(src string) (*specs.Process, error) {
-	proc := new(specs.Process)
-	err := decodeFileJSON(proc, src)
-	return proc, err
-}
-
 // ReadSpecJSON reads the JSON encoded OCI
 // spec from the given path.
 // This is a convenience function for the cli.
@@ -295,4 +298,13 @@ func ReadSpecJSON(p string) (*specs.Spec, error) {
 	spec := &specs.Spec{}
 	err := decodeFileJSON(spec, p)
 	return spec, err
+}
+
+// ReadProcessSpecJSON reads the JSON encoded OCI
+// spec process definition from the given path.
+// This is a convenience function for the cli.
+func ReadSpecProcessJSON(src string) (*specs.Process, error) {
+	proc := new(specs.Process)
+	err := decodeFileJSON(proc, src)
+	return proc, err
 }

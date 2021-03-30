@@ -181,6 +181,9 @@ func (c *Container) wait(ctx context.Context, state lxc.State) bool {
 	}
 }
 
+// State returns the OCI specs.State value for the containers process.
+// The State.Pid value is the PID of the liblxc
+// container monitor process (lxcri-start).
 func (c *Container) State() (*specs.State, error) {
 	status, err := c.ContainerState()
 	if err != nil {

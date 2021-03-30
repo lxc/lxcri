@@ -11,30 +11,33 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
-type Namespace struct {
+// namespace is a mapping from the namespace name
+// as used in /proc/{pid}/ns and the namespace clone flag,
+// as defined in `man 2 clone`.
+type namespace struct {
 	Name      string
 	CloneFlag int
 }
 
 var (
-	CgroupNamespace  = Namespace{"cgroup", unix.CLONE_NEWCGROUP}
-	IPCNamespace     = Namespace{"ipc", unix.CLONE_NEWIPC}
-	MountNamespace   = Namespace{"mnt", unix.CLONE_NEWNS}
-	NetworkNamespace = Namespace{"net", unix.CLONE_NEWNET}
-	PIDNamespace     = Namespace{"pid", unix.CLONE_NEWPID}
-	TimeNamespace    = Namespace{"time", unix.CLONE_NEWTIME}
-	UserNamespace    = Namespace{"user", unix.CLONE_NEWUSER}
-	UTSNamespace     = Namespace{"uts", unix.CLONE_NEWUTS}
+	cgroupNamespace  = namespace{"cgroup", unix.CLONE_NEWCGROUP}
+	ipcNamespace     = namespace{"ipc", unix.CLONE_NEWIPC}
+	mountNamespace   = namespace{"mnt", unix.CLONE_NEWNS}
+	networkNamespace = namespace{"net", unix.CLONE_NEWNET}
+	pidNamespace     = namespace{"pid", unix.CLONE_NEWPID}
+	timeNamespace    = namespace{"time", unix.CLONE_NEWTIME}
+	userNamespace    = namespace{"user", unix.CLONE_NEWUSER}
+	utsNamespace     = namespace{"uts", unix.CLONE_NEWUTS}
 
-	namespaceMap = map[specs.LinuxNamespaceType]Namespace{
-		specs.CgroupNamespace:  CgroupNamespace,
-		specs.IPCNamespace:     IPCNamespace,
-		specs.MountNamespace:   MountNamespace,
-		specs.NetworkNamespace: NetworkNamespace,
-		specs.PIDNamespace:     PIDNamespace,
-		// specs.TimeNamespace:     TimeNamespace,
-		specs.UserNamespace: UserNamespace,
-		specs.UTSNamespace:  UTSNamespace,
+	namespaceMap = map[specs.LinuxNamespaceType]namespace{
+		specs.CgroupNamespace:  cgroupNamespace,
+		specs.IPCNamespace:     ipcNamespace,
+		specs.MountNamespace:   mountNamespace,
+		specs.NetworkNamespace: networkNamespace,
+		specs.PIDNamespace:     pidNamespace,
+		// specs.timeNamespace:     timeNamespace,
+		specs.UserNamespace: userNamespace,
+		specs.UTSNamespace:  utsNamespace,
 	}
 )
 
