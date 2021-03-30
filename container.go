@@ -206,6 +206,8 @@ func (c *Container) State() (*specs.State, error) {
 	return state, nil
 }
 
+// ContainerState returns the current state of the container process,
+// as defined by the OCI runtime spec.
 func (c *Container) ContainerState() (specs.ContainerState, error) {
 	state := c.LinuxContainer.State()
 	switch state {
@@ -318,12 +320,14 @@ func (c *Container) saveConfig() error {
 	return nil
 }
 
+// GetConfigItem is a wrapper function and returns the
+// first value returned by  *lxc.Container.ConfigItem
 func (c *Container) GetConfigItem(key string) string {
 	vals := c.LinuxContainer.ConfigItem(key)
 	if len(vals) > 0 {
 		first := vals[0]
-		// some lxc config values are set to '(null)' if unset
-		// eg. lxc.cgroup.dir
+		// some lxc config values are set to '(null)' if unset eg. lxc.cgroup.dir
+		// TODO check if this is already fixed
 		if first != "(null)" {
 			return first
 		}
@@ -331,6 +335,8 @@ func (c *Container) GetConfigItem(key string) string {
 	return ""
 }
 
+// SetConfigItem is a wrapper for *lxc.Container.SetConfigItem.
+// and only adds additional logging.
 func (c *Container) SetConfigItem(key, value string) error {
 	err := c.LinuxContainer.SetConfigItem(key, value)
 	if err != nil {
@@ -340,6 +346,7 @@ func (c *Container) SetConfigItem(key, value string) error {
 	return nil
 }
 
+// SupportsConfigItem is a wrapper for *lxc.Container.IsSupportedConfig item.
 func (c *Container) SupportsConfigItem(keys ...string) bool {
 	canCheck := lxc.VersionAtLeast(4, 0, 6)
 	if !canCheck {
@@ -355,14 +362,16 @@ func (c *Container) SupportsConfigItem(keys ...string) bool {
 	return true
 }
 
+// Release releases resources allocated by the container.
 func (c *Container) Release() error {
 	return c.LinuxContainer.Release()
 }
 
-// "Note that resources associated with the container,
-// but not created by this container, MUST NOT be deleted."
-// TODO - because we set rootfs.managed=0, Destroy() doesn't
-// delete the /var/lib/lxc/$containerID/config file:
+// From OCI runtime spec
+// "Note that resources associated with the container, but not
+// created by this container, MUST NOT be deleted."
+// The *lxc.Container is created with `rootfs.managed=0`,
+// so calling *lxc.Container.Destroy will not delete container resources.
 func (c *Container) destroy() error {
 	if err := c.LinuxContainer.Destroy(); err != nil {
 		return fmt.Errorf("failed to destroy container: %w", err)
@@ -418,6 +427,10 @@ func (c *Container) readFifo() error {
 	return nil
 }
 
+// ExecDetached executes the given process spec within the container.
+// The given process is started and the process PID is returned.
+// It's up to the caller to wait for the process to exit using the returned PID.
+// The container state must be either specs.StateCreated or specs.StateRunning
 func (c *Container) ExecDetached(args []string, proc *specs.Process) (pid int, err error) {
 	opts, err := attachOptions(proc, c.Linux.Namespaces)
 	if err != nil {
@@ -435,6 +448,9 @@ func (c *Container) ExecDetached(args []string, proc *specs.Process) (pid int, e
 	return pid, nil
 }
 
+// Exec executes the given process spec within the container.
+// It waits for the process to exit and returns its exit code.
+// The container state must either be specs.StateCreated or specs.StateRunning
 func (c *Container) Exec(args []string, proc *specs.Process) (exitStatus int, err error) {
 	opts, err := attachOptions(proc, c.Linux.Namespaces)
 	if err != nil {
