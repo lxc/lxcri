@@ -26,7 +26,7 @@ var (
 
 type app struct {
 	lxcri.Runtime
-	containerConfig lxcri.ContainerConfig
+	cfg lxcri.ContainerConfig
 
 	logConfig struct {
 		File      *os.File
@@ -54,8 +54,8 @@ func (app *app) configureLogger() error {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
 	logCtx := log.NewLogger(app.logConfig.File, level)
-	app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.containerConfig.ContainerID).Logger()
-	app.containerConfig.Log = app.Runtime.Log
+	app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.cfg.ContainerID).Logger()
+	app.cfg.Log = app.Runtime.Log
 
 	return nil
 }
@@ -113,14 +113,14 @@ func main() {
 			Usage:       "set the container process (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_LEVEL"},
 			Value:       "warn",
-			Destination: &clxc.containerConfig.LogLevel,
+			Destination: &clxc.cfg.LogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-file",
 			Usage:       "path to the log file for runtime and container output",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_FILE"},
 			Value:       defaultLogFile,
-			Destination: &clxc.containerConfig.LogFile,
+			Destination: &clxc.cfg.LogFile,
 		},
 		&cli.StringFlag{
 			Name:  "root",
@@ -222,7 +222,7 @@ func main() {
 		if len(containerID) == 0 {
 			return fmt.Errorf("missing container ID")
 		}
-		clxc.containerConfig.ContainerID = containerID
+		clxc.cfg.ContainerID = containerID
 
 		if err := clxc.configureLogger(); err != nil {
 			return fmt.Errorf("failed to configure logger: %w", err)
@@ -270,12 +270,12 @@ var createCmd = cli.Command{
 			Name:        "bundle",
 			Usage:       "set bundle directory",
 			Value:       ".",
-			Destination: &clxc.containerConfig.BundlePath,
+			Destination: &clxc.cfg.BundlePath,
 		},
 		&cli.StringFlag{
 			Name:        "console-socket",
 			Usage:       "send container pty master fd to this socket path",
-			Destination: &clxc.containerConfig.ConsoleSocket,
+			Destination: &clxc.cfg.ConsoleSocket,
 		},
 		&cli.StringFlag{
 			Name:  "pid-file",
@@ -306,19 +306,19 @@ func doCreate(ctxcli *cli.Context) error {
 	if err := clxc.CheckSystem(); err != nil {
 		return err
 	}
-	specPath := filepath.Join(clxc.containerConfig.BundlePath, "config.json")
+	specPath := filepath.Join(clxc.cfg.BundlePath, "config.json")
 	spec, err := lxcri.ReadSpecJSON(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
-	clxc.containerConfig.Spec = spec
+	clxc.cfg.Spec = spec
 	pidFile := ctxcli.String("pid-file")
 
 	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	c, err := clxc.Create(ctx, &clxc.containerConfig)
+	c, err := clxc.Create(ctx, &clxc.cfg)
 	if err == nil {
 		defer c.Release()
 	}
@@ -334,11 +334,11 @@ func doCreate(ctxcli *cli.Context) error {
 
 func runCreateHook(ctxcli *cli.Context, err error) {
 	env := []string{
-		"CONTAINER_ID=" + clxc.containerConfig.ContainerID,
-		"LXC_CONFIG=" + clxc.containerConfig.ConfigFilePath(),
+		"CONTAINER_ID=" + clxc.cfg.ContainerID,
+		"LXC_CONFIG=" + clxc.cfg.ConfigFilePath(),
 		"RUNTIME_CMD=" + clxc.command,
-		"RUNTIME_PATH=" + clxc.containerConfig.RuntimePath(),
-		"BUNDLE_PATH=" + clxc.containerConfig.BundlePath,
+		"RUNTIME_PATH=" + clxc.cfg.RuntimePath(),
+		"BUNDLE_PATH=" + clxc.cfg.BundlePath,
 		"LOG_FILE=" + clxc.logConfig.FilePath,
 	}
 	if err != nil {
@@ -376,7 +376,7 @@ starts <containerID>
 }
 
 func doStart(ctxcli *cli.Context) error {
-	c, err := clxc.Load(clxc.containerConfig.ContainerID)
+	c, err := clxc.Load(clxc.cfg.ContainerID)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -400,7 +400,7 @@ var stateCmd = cli.Command{
 }
 
 func doState(unused *cli.Context) error {
-	c, err := clxc.Load(clxc.containerConfig.ContainerID)
+	c, err := clxc.Load(clxc.cfg.ContainerID)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -443,7 +443,7 @@ func doKill(ctxcli *cli.Context) error {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
 
-	c, err := clxc.Load(clxc.containerConfig.ContainerID)
+	c, err := clxc.Load(clxc.cfg.ContainerID)
 	if err != nil {
 		return fmt.Errorf("failed to load container: %w", err)
 	}
@@ -478,7 +478,7 @@ var deleteCmd = cli.Command{
 }
 
 func doDelete(ctxcli *cli.Context) error {
-	c, err := clxc.Load(clxc.containerConfig.ContainerID)
+	c, err := clxc.Load(clxc.cfg.ContainerID)
 	if err == lxcri.ErrNotExist {
 		clxc.Log.Info().Msg("container does not exist")
 		return nil
@@ -562,7 +562,7 @@ func doExec(ctxcli *cli.Context) error {
 		args = procSpec.Args
 	}
 
-	c, err := clxc.Load(clxc.containerConfig.ContainerID)
+	c, err := clxc.Load(clxc.cfg.ContainerID)
 	if err != nil {
 		return err
 	}
