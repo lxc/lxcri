@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
@@ -287,18 +286,6 @@ var createCmd = cli.Command{
 			EnvVars: []string{"LXCRI_CREATE_TIMEOUT"},
 			Value:   60,
 		},
-		&cli.StringFlag{
-			Name:        "create-hook",
-			Usage:       "path to executable to run after create (runs even if create fails)",
-			EnvVars:     []string{"LXCRI_CREATE_HOOK"},
-			Destination: &clxc.createHook,
-		},
-		&cli.UintFlag{
-			Name:    "hook-timeout",
-			Usage:   "maximum duration in seconds for hook to complete",
-			EnvVars: []string{"LXCRI_CREATE_HOOK_TIMEOUT"},
-			Value:   5,
-		},
 	},
 }
 
@@ -319,42 +306,14 @@ func doCreate(ctxcli *cli.Context) error {
 	defer cancel()
 
 	c, err := clxc.Create(ctx, &clxc.cfg)
-	if err == nil {
-		defer c.Release()
-	}
-	if err == nil && pidFile != "" {
-		err = createPidFile(pidFile, c.Pid)
-		if err != nil {
-			return err
-		}
-	}
-	runCreateHook(ctxcli, err)
-	return err
-}
-
-func runCreateHook(ctxcli *cli.Context, err error) {
-	env := []string{
-		"CONTAINER_ID=" + clxc.cfg.ContainerID,
-		"LXC_CONFIG=" + clxc.cfg.ConfigFilePath(),
-		"RUNTIME_CMD=" + clxc.command,
-		"RUNTIME_PATH=" + clxc.cfg.RuntimePath(),
-		"BUNDLE_PATH=" + clxc.cfg.BundlePath,
-		"LOG_FILE=" + clxc.logConfig.FilePath,
-	}
 	if err != nil {
-		env = append(env, "RUNTIME_ERROR="+err.Error())
+		return err
 	}
-	timeout := time.Duration(ctxcli.Uint("hook-timeout")) * time.Second
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, clxc.createHook)
-	cmd.Env = env
-
-	clxc.Log.Debug().Str("file", clxc.createHook).Msg("execute create hook")
-	if err := cmd.Run(); err != nil {
-		clxc.Log.Error().Err(err).Str("file", clxc.createHook).Msg("failed to execute create hook")
+	defer c.Release()
+	if pidFile != "" {
+		return createPidFile(pidFile, c.Pid)
 	}
+	return nil
 }
 
 var startCmd = cli.Command{
