@@ -1,7 +1,6 @@
 package lxcri
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +10,7 @@ import (
 )
 
 func TestResolveMountDestination_absolute(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "golang.test")
+	tmpdir, err := os.MkdirTemp("", "golang.test")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 	err = os.MkdirAll(filepath.Join(tmpdir, "folder1"), 0750)
@@ -24,7 +23,7 @@ func TestResolveMountDestination_absolute(t *testing.T) {
 	require.NoError(t, err)
 	err = os.Symlink("/folder3", filepath.Join(tmpdir, "folder2", "f3"))
 	require.NoError(t, err)
-	err = ioutil.WriteFile(filepath.Join(tmpdir, "folder3", "test.txt"), []byte("hello"), 0640)
+	err = os.WriteFile(filepath.Join(tmpdir, "folder3", "test.txt"), []byte("hello"), 0640)
 	require.NoError(t, err)
 
 	p, err := resolveMountDestination(tmpdir, "/folder1/f2/f3/test.txt")
@@ -41,7 +40,7 @@ func TestResolveMountDestination_absolute(t *testing.T) {
 }
 
 func TestResolveMountDestination_relative(t *testing.T) {
-	tmpdir, err := ioutil.TempDir("", "golang.test")
+	tmpdir, err := os.MkdirTemp("", "golang.test")
 	require.NoError(t, err)
 	defer os.RemoveAll(tmpdir)
 	err = os.MkdirAll(filepath.Join(tmpdir, "folder1"), 0750)
@@ -54,7 +53,7 @@ func TestResolveMountDestination_relative(t *testing.T) {
 	require.NoError(t, err)
 	err = os.Symlink("../folder3", filepath.Join(tmpdir, "folder2", "f3"))
 	require.NoError(t, err)
-	err = ioutil.WriteFile(filepath.Join(tmpdir, "folder3", "test.txt"), []byte("hello"), 0640)
+	err = os.WriteFile(filepath.Join(tmpdir, "folder3", "test.txt"), []byte("hello"), 0640)
 	require.NoError(t, err)
 
 	//err = os.Symlink("../../folder2", filepath.Join(tmpdir, "folder1", "f2"))

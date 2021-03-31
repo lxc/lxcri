@@ -3,7 +3,6 @@ package lxcri
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -226,7 +225,7 @@ func (c *Container) getContainerInitState() (specs.ContainerState, error) {
 		return specs.StateStopped, nil
 	}
 	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", initPid)
-	cmdline, err := ioutil.ReadFile(cmdlinePath)
+	cmdline, err := os.ReadFile(cmdlinePath)
 	if os.IsNotExist(err) {
 		// init process died or returned
 		return specs.StateStopped, nil

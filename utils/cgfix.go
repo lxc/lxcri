@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,7 +28,7 @@ func main() {
 		}
 		if !info.IsDir() && info.Name() == "cgroup.subtree_control" {
 			println(path)
-			if err := ioutil.WriteFile(path, []byte(subtreeControl), 0); err != nil {
+			if err := os.WriteFile(path, []byte(subtreeControl), 0); err != nil {
 				return err
 			}
 		}
@@ -57,7 +56,7 @@ func fmtControllers(controllers ...string) string {
 
 func loadControllers(cgroupPath string) ([]string, error) {
 	// #nosec
-	data, err := ioutil.ReadFile(filepath.Join(cgroupPath, "cgroup.controllers"))
+	data, err := os.ReadFile(filepath.Join(cgroupPath, "cgroup.controllers"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read cgroup.controllers: %s", err)
 	}

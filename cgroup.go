@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -256,7 +255,7 @@ type cgroupInfo struct {
 func (cg *cgroupInfo) loadProcs() error {
 	cgroupProcsPath := filepath.Join(cgroupRoot, cg.Name, "cgroup.procs")
 	// #nosec
-	procsData, err := ioutil.ReadFile(cgroupProcsPath)
+	procsData, err := os.ReadFile(cgroupProcsPath)
 	if err != nil {
 		return fmt.Errorf("failed to read cgroup.procs: %w", err)
 	}
@@ -402,7 +401,7 @@ func createCgroup(cg string, controllers string) error {
 	for _, elem := range strings.Split(cg, "/") {
 		base = filepath.Join(base, elem)
 		c := filepath.Join(base, "cgroup.subtree_control")
-		err := ioutil.WriteFile(c, []byte(strings.TrimSpace(controllers)+"\n"), 0)
+		err := os.WriteFile(c, []byte(strings.TrimSpace(controllers)+"\n"), 0)
 		if err != nil {
 			return fmt.Errorf("failed to enable cgroup controllers: %w", err)
 		}
@@ -412,7 +411,7 @@ func createCgroup(cg string, controllers string) error {
 
 func getControllers(cg string) (string, error) {
 	// enable all available controllers in the scope
-	data, err := ioutil.ReadFile(filepath.Join(cgroupRoot, cg, "group.controllers"))
+	data, err := os.ReadFile(filepath.Join(cgroupRoot, cg, "group.controllers"))
 	if err != nil {
 		return "", fmt.Errorf("failed to read cgroup.controllers: %w", err)
 	}

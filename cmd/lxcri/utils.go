@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -30,7 +29,7 @@ func loadEnvFile(envFile string) (map[string]string, error) {
 	}
 
 	// #nosec
-	data, err := ioutil.ReadFile(envFile)
+	data, err := os.ReadFile(envFile)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +123,7 @@ func createPidFile(path string, pid int) error {
 
 func readPidFile(path string) (int, error) {
 	// #nosec
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return 0, err
 	}
