@@ -139,6 +139,7 @@ func (rt *Runtime) libexec(name string) string {
 }
 
 // Load loads a container from the runtime directory.
+// The container must have been created with Runtime.Create.
 func (rt *Runtime) Load(containerID string) (*Container, error) {
 	c := &Container{ContainerConfig: &ContainerConfig{}}
 	c.RuntimeDir = filepath.Join(rt.Root, containerID)
@@ -149,6 +150,10 @@ func (rt *Runtime) Load(containerID string) (*Container, error) {
 	return c, nil
 }
 
+// Start starts the given container.
+// Start simply unblocks the container init process `lxcri-init`,
+// which then executes the actuall container process.
+// The given container must have been created with Runtime.Create.
 func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 	rt.Log.Info().Msg("notify init to start container process")
 
@@ -265,6 +270,9 @@ func runStartCmdConsole(ctx context.Context, cmd *exec.Cmd, consoleSocket string
 	return ptmx.Close()
 }
 
+// Kill sends the signal signum to the given container.
+// The signal is send to the container monitor process `lxcri-start` who
+// will propagate the signal to the container process.
 func (rt *Runtime) Kill(ctx context.Context, c *Container, signum unix.Signal) error {
 	state, err := c.ContainerState()
 	if err != nil {
@@ -276,6 +284,10 @@ func (rt *Runtime) Kill(ctx context.Context, c *Container, signum unix.Signal) e
 	return c.kill(ctx, signum)
 }
 
+// Delete removes the container from the runtime directory.
+// The container must be stopped or force must be set to true.
+// If the container is not stopped but force is set to true,
+// the container will be killed with unix.SIGKILL.
 func (rt *Runtime) Delete(ctx context.Context, c *Container, force bool) error {
 	rt.Log.Info().Bool("force", force).Msg("delete container")
 	state, err := c.ContainerState()

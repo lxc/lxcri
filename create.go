@@ -49,7 +49,8 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 
 // CheckSystem checks the hosts system configuration.
 // Unsupported runtime features are disabled and a warning message is logged.
-// CheckSystem should be called (once) before using the Runtime.
+// CheckSystem is not called internally, but it recommended to
+// call it once for a runtime instance before calling any other method.
 func (rt *Runtime) CheckSystem() error {
 	err := canExecute(rt.libexec(ExecStart), rt.libexec(ExecHook), rt.libexec(ExecInit))
 	if err != nil {
