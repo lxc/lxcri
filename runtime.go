@@ -115,8 +115,8 @@ func Create(ctx context.Context, cfg *ContainerConfig) (*Container, error) {
 }
 
 // Load is a wrapper around DefaultRuntime.Load
-func Load(cfg *ContainerConfig) (*Container, error) {
-	return DefaultRuntime.Load(cfg)
+func Load(containerID string) (*Container, error) {
+	return DefaultRuntime.Load(containerID)
 }
 
 // Start is a wrapper around DefaultRuntime.Start
@@ -138,9 +138,10 @@ func (rt *Runtime) libexec(name string) string {
 	return filepath.Join(rt.LibexecDir, name)
 }
 
-func (rt *Runtime) Load(cfg *ContainerConfig) (*Container, error) {
-	c := &Container{ContainerConfig: cfg}
-	c.RuntimeDir = filepath.Join(rt.Root, c.ContainerID)
+// Load loads a container from the runtime directory.
+func (rt *Runtime) Load(containerID string) (*Container, error) {
+	c := &Container{ContainerConfig: &ContainerConfig{}}
+	c.RuntimeDir = filepath.Join(rt.Root, containerID)
 
 	if err := c.load(); err != nil {
 		return nil, err
