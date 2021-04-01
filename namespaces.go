@@ -91,6 +91,43 @@ func isNamespaceEnabled(spec *specs.Spec, nsType specs.LinuxNamespaceType) bool 
 	return false
 }
 
+// isHostNamespaceUsed returns true if a container created with the given list of
+// namespaces will use the host namespace of the given namespace type.
+func isHostNamespaceShared(namespaces []specs.LinuxNamespace, nsType specs.LinuxNamespaceType) (bool, error) {
+	ns := getNamespace(nsType, namespaces)
+	// no namespace with this name defined in list
+	if ns == nil {
+		return true, nil
+	}
+	// namespaces without a target path are cloned
+	if ns.Path == "" {
+		return false, nil
+	}
+
+	//  from `man namespaces` The /proc/[pid]/ns/ directory [...]
+	// In Linux 3.7 and earlier, these files were visible as hard links.
+	// If two processes are in the same namespace, then the device IDs and inode numbers
+	// of their /proc/[pid]/ns/xxx symbolic links will be the same;
+	// anapplication can check this using the stat.st_dev and stat.st_ino
+	// fields returned by stat(2).
+	// e.g `strace /usr/bin/stat -L /proc/1/ns/pid`
+
+	var stat unix.Stat_t
+	err := unix.Stat(ns.Path, &stat)
+	if err != nil {
+		return false, err
+	}
+
+	var stat1 unix.Stat_t
+	err = unix.Stat("/proc/1/ns/pid", &stat1)
+	if err != nil {
+		return false, err
+	}
+
+	sameNS := (stat.Dev == stat1.Dev) && (stat.Ino == stat1.Ino)
+	return sameNS, nil
+}
+
 func getNamespace(nsType specs.LinuxNamespaceType, namespaces []specs.LinuxNamespace) *specs.LinuxNamespace {
 	for _, n := range namespaces {
 		if n.Type == nsType {

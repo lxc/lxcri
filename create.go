@@ -96,6 +96,17 @@ func (rt *Runtime) checkConfig(config *ContainerConfig) error {
 		rt.Log.Info().Msg("configs.Process.Cwd is unset defaulting to '/'")
 		config.Process.Cwd = "/"
 	}
+
+	mustNotShareHostNamespaces := []specs.LinuxNamespaceType{specs.PIDNamespace, specs.MountNamespace}
+	for _, n := range mustNotShareHostNamespaces {
+		yes, err := isHostNamespaceShared(config.Linux.Namespaces, n)
+		if err != nil {
+			return err
+		}
+		if yes {
+			return fmt.Errorf("container wants to share the hosts %q namespace", n)
+		}
+	}
 	return nil
 }
 
