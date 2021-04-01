@@ -100,15 +100,22 @@ func (rt *Runtime) checkConfig(config *ContainerConfig) error {
 		config.Process.Cwd = "/"
 	}
 
-	mustNotShareHostNamespaces := []specs.LinuxNamespaceType{specs.PIDNamespace, specs.MountNamespace}
-	for _, n := range mustNotShareHostNamespaces {
-		yes, err := isHostNamespaceShared(config.Linux.Namespaces, n)
-		if err != nil {
-			return err
-		}
-		if yes {
-			return fmt.Errorf("container wants to share the hosts %q namespace", n)
-		}
+	yes, err := isHostNamespaceShared(config.Linux.Namespaces, specs.MountNamespace)
+	if err != nil {
+		return err
+	}
+	if yes {
+		return fmt.Errorf("container wants to share the hosts mount namespace")
+	}
+
+	// It should be best practise not to do so, but there are containers that
+	// want to share the hosts PID namespaces. e.g sonobuoy/sonobuoy-systemd-logs-daemon-set
+	yes, err = isHostNamespaceShared(config.Linux.Namespaces, specs.PIDNamespace)
+	if err != nil {
+		return err
+	}
+	if yes {
+		rt.Log.Info().Msg("container wil share the hosts PID namespace")
 	}
 	return nil
 }
