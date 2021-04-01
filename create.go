@@ -87,14 +87,6 @@ func (rt *Runtime) checkConfig(config *ContainerConfig) error {
 		return fmt.Errorf("empty config.Root.Path")
 	}
 
-	if config.Linux.Resources == nil {
-		config.Linux.Resources = &specs.LinuxResources{}
-	}
-
-	if config.Linux.Devices == nil {
-		config.Linux.Devices = make([]specs.LinuxDevice, 0, 20)
-	}
-
 	if config.Process == nil {
 		return fmt.Errorf("config.Process is nil")
 	}

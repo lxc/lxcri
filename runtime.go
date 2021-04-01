@@ -297,7 +297,7 @@ func (rt *Runtime) Delete(ctx context.Context, c *Container, force bool) error {
 // spec from the given path.
 // This is a convenience function for the cli.
 func ReadSpecJSON(p string) (*specs.Spec, error) {
-	spec := &specs.Spec{}
+	spec := new(specs.Spec)
 	err := decodeFileJSON(spec, p)
 	return spec, err
 }
@@ -309,4 +309,48 @@ func ReadSpecProcessJSON(src string) (*specs.Process, error) {
 	proc := new(specs.Process)
 	err := decodeFileJSON(proc, src)
 	return proc, err
+}
+
+// NewSpec returns a minimal spec.Spec instance, which is
+// required to run the given process within a container
+// using the given rootfs.
+// NOTE /proc and /dev folders must be present within the given rootfs.
+func NewSpec(rootfs string, cmd string, args ...string) *specs.Spec {
+	proc := NewSpecProcess(cmd, args...)
+
+	return &specs.Spec{
+		Linux: &specs.Linux{
+			Namespaces: []specs.LinuxNamespace{
+				// isolate all namespaces by default
+				specs.LinuxNamespace{Type: specs.PIDNamespace},
+				specs.LinuxNamespace{Type: specs.MountNamespace},
+				specs.LinuxNamespace{Type: specs.IPCNamespace},
+				specs.LinuxNamespace{Type: specs.UTSNamespace},
+				specs.LinuxNamespace{Type: specs.CgroupNamespace},
+				specs.LinuxNamespace{Type: specs.NetworkNamespace},
+			},
+			Resources: &specs.LinuxResources{},
+			Devices:   defaultDevices,
+		},
+		Mounts: []specs.Mount{
+			specs.Mount{Destination: "/proc", Source: "proc", Type: "proc",
+				Options: []string{"rw", "nosuid", "nodev", "noexec", "relatime"},
+			},
+			specs.Mount{Destination: "/dev", Source: "tmpfs", Type: "tmpfs",
+				Options: []string{"rw", "nosuid", "noexec", "relatime"},
+			},
+		},
+		Process: proc,
+		Root:    &specs.Root{Path: rootfs},
+	}
+}
+
+// NewSpecProcess creates a specs.Process instance
+// from the given command cmd and the command arguments args.
+func NewSpecProcess(cmd string, args ...string) *specs.Process {
+	proc := new(specs.Process)
+	proc.Args = append(proc.Args, cmd)
+	proc.Args = append(proc.Args, args...)
+	proc.Cwd = "/"
+	return proc
 }

@@ -7,6 +7,19 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
+var defaultDevices = []specs.LinuxDevice{
+	specs.LinuxDevice{Path: "/dev/null", Type: "c", Major: 1, Minor: 3},
+	specs.LinuxDevice{Path: "/dev/zero", Type: "c", Major: 1, Minor: 5},
+	specs.LinuxDevice{Path: "/dev/full", Type: "c", Major: 1, Minor: 7},
+	specs.LinuxDevice{Path: "/dev/random", Type: "c", Major: 1, Minor: 8},
+	specs.LinuxDevice{Path: "/dev/urandom", Type: "c", Major: 1, Minor: 9},
+	specs.LinuxDevice{Path: "/dev/tty", Type: "c", Major: 5, Minor: 0},
+	// FIXME runtime mandates that /dev/ptmx should be bind mount from host - why ?
+	// `man 2 mount` | devpts
+	// ` To use this option effectively, /dev/ptmx must be a symbolic link to pts/ptmx.
+	// See Documentation/filesystems/devpts.txt in the Linux kernel source tree for details.`
+}
+
 func isDeviceEnabled(c *Container, dev specs.LinuxDevice) bool {
 	for _, specDev := range c.Linux.Devices {
 		if specDev.Path == dev.Path {
@@ -39,31 +52,14 @@ func ensureDefaultDevices(c *Container) error {
 	mode := os.FileMode(0666)
 	var uid, gid uint32 = c.Process.User.UID, c.Process.User.GID
 
-	devices := []specs.LinuxDevice{
-		specs.LinuxDevice{Path: "/dev/null", Type: "c", Major: 1, Minor: 3},
-		specs.LinuxDevice{Path: "/dev/zero", Type: "c", Major: 1, Minor: 5},
-		specs.LinuxDevice{Path: "/dev/full", Type: "c", Major: 1, Minor: 7},
-		specs.LinuxDevice{Path: "/dev/random", Type: "c", Major: 1, Minor: 8},
-		specs.LinuxDevice{Path: "/dev/urandom", Type: "c", Major: 1, Minor: 9},
-		specs.LinuxDevice{Path: "/dev/tty", Type: "c", Major: 5, Minor: 0},
-		// FIXME runtime mandates that /dev/ptmx should be bind mount from host - why ?
-		// `man 2 mount` | devpts
-		// ` To use this option effectively, /dev/ptmx must be a symbolic link to pts/ptmx.
-		// See Documentation/filesystems/devpts.txt in the Linux kernel source tree for details.`
-	}
-
 	ptmx := specs.LinuxDevice{Path: "/dev/ptmx", Type: "c", Major: 5, Minor: 2}
 	addDevicePerms(c, "c", &ptmx.Major, &ptmx.Minor, "rwm") // /dev/ptmx, /dev/pts/ptmx
 
 	pts0 := specs.LinuxDevice{Path: "/dev/pts/0", Type: "c", Major: 88, Minor: 0}
 	addDevicePerms(c, "c", &pts0.Major, nil, "rwm") // dev/pts/[0..9]
 
-	if c.Linux.Resources == nil {
-		c.Linux.Resources = &specs.LinuxResources{}
-	}
-
 	// add missing default devices
-	for _, dev := range devices {
+	for _, dev := range defaultDevices {
 		if !isDeviceEnabled(c, dev) {
 			addDevice(c, dev, mode, uid, gid, "rwm")
 		}
