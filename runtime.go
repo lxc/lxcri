@@ -91,10 +91,9 @@ type Runtime struct {
 // DefaultRuntime is the default runtime instance
 // used by all static wrapper functions.
 var DefaultRuntime = &Runtime{
-	Log:           log.ConsoleLogger(true),
-	Root:          "/var/run/lxcri",
-	SystemdCgroup: true,
-	LibexecDir:    "/usr/libexec/lxcri",
+	Log:        log.ConsoleLogger(true),
+	Root:       "/var/run/lxcri",
+	LibexecDir: "/usr/libexec/lxcri",
 
 	Features: RuntimeFeatures{
 		Seccomp:       true,
