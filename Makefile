@@ -5,10 +5,10 @@ LIBEXEC_BINS := lxcri-start lxcri-init lxcri-hook
 # Installation prefix for BINS
 PREFIX ?= /usr/local
 LIBEXEC_DIR = $(PREFIX)/libexec/lxcri
+PKG_CONFIG_PATH ?= $(PREFIX)/lib/pkgconfig
 # Note: The default pkg-config directory is search after PKG_CONFIG_PATH
-PKG_CONFIG_PATH ?= /usr/local/lib/pkgconfig
+# Note: (Exported) environment variables are NOT visible in the environment of the $(shell ...) function.
 export PKG_CONFIG_PATH
-LIBLXC_LDFLAGS = $(shell pkg-config --libs --cflags lxc)
 LDFLAGS=-X main.version=$(COMMIT) -X main.libexecDir=$(LIBEXEC_DIR)
 CC ?= cc
 MUSL_CC ?= musl-gcc
@@ -37,7 +37,7 @@ lxcri: go.mod $(GO_SRC)
 	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd/lxcri
 
 lxcri-start: cmd/lxcri-start/lxcri-start.c
-	$(CC) -Werror -Wpedantic -o $@ $? $(LIBLXC_LDFLAGS)
+	$(CC) -Werror -Wpedantic -o $@ $? $$(pkg-config --libs --cflags lxc)
 
 lxcri-init: cmd/lxcri-init/lxcri-init.c
 	$(MUSL_CC) -Werror -Wpedantic -static -o $@ $?
