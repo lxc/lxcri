@@ -12,8 +12,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// TODO log to systemd journal ?
-
 func init() {
 	zerolog.LevelFieldName = "l"
 	zerolog.MessageFieldName = "m"
@@ -25,13 +23,14 @@ func init() {
 		return time.Now().UTC()
 	}
 
-	// TODO only log caller information in debug and trace level
 	zerolog.CallerFieldName = "c"
 	zerolog.CallerMarshalFunc = func(file string, line int) string {
 		return filepath.Base(file) + ":" + strconv.Itoa(line)
 	}
 }
 
+// OpenFile opens a new or appends to an existing log file.
+// The parent directory is created if it does not exist.
 func OpenFile(name string, mode os.FileMode) (*os.File, error) {
 	logDir := filepath.Dir(name)
 	err := os.MkdirAll(logDir, 0750)
@@ -41,10 +40,13 @@ func OpenFile(name string, mode os.FileMode) (*os.File, error) {
 	return os.OpenFile(name, os.O_WRONLY|os.O_APPEND|os.O_CREATE, mode)
 }
 
+// ParseLevel is a wrapper for zerolog.ParseLevel
 func ParseLevel(level string) (zerolog.Level, error) {
 	return zerolog.ParseLevel(strings.ToLower(level))
 }
 
+// NewLogger creates a new zerlog.Context from the given arguments.
+// The returned context is configured to log with timestamp and caller information.
 func NewLogger(out io.Writer, level zerolog.Level) zerolog.Context {
 	// NOTE Unfortunately it's not possible change the possition of the timestamp.
 	// The ttimestamp is appended to the to the log output because it is dynamically rendered
@@ -52,6 +54,7 @@ func NewLogger(out io.Writer, level zerolog.Level) zerolog.Context {
 	return zerolog.New(out).Level(level).With().Timestamp().Caller()
 }
 
+// ConsoleLogger returns a new zerlog.Logger suited for console usage (e.g unit tests)
 func ConsoleLogger(color bool) zerolog.Logger {
 	return zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: !color}).Level(zerolog.DebugLevel).With().Timestamp().Caller().Logger()
 }
