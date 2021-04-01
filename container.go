@@ -18,6 +18,10 @@ import (
 type ContainerConfig struct {
 	*specs.Spec
 
+	// ContainerID is the identifier of the container.
+	// The ContainerID is used as name for the containers runtime directory.
+	// The ContainerID must be unique at least through all containers of a runtime.
+	// The ContainerID should match the following pattern `[a-z][a-z0-9-_]+`
 	ContainerID string
 
 	BundlePath    string
