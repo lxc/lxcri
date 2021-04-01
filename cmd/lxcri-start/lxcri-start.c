@@ -67,8 +67,9 @@ int main(int argc, char **argv)
 	if (!c->start(c, ENABLE_LXCINIT, NULL))
 		ERROR("failed to start container\n");
 
+	/* Try to die with the same signal the task did. */
+	/* FIXME error_num is zero if init was killed with SIGHUP */
 	if (WIFSIGNALED(c->error_num))
-		/* Try to die with the same signal the task did. */
 		kill(0, WTERMSIG(c->error_num));
 
 	if (WIFEXITED(c->error_num))

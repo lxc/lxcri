@@ -15,7 +15,7 @@ MUSL_CC ?= musl-gcc
 SHELL_SCRIPTS = $(shell find . -name \*.sh)
 GO_SRC = $(shell find . -name \*.go | grep -v _test.go)
 
-all: fmt test build
+all: fmt test
 
 update-tools:
 	GO111MODULE=off go get -u mvdan.cc/sh/v3/cmd/shfmt
@@ -28,12 +28,13 @@ fmt:
 	go mod tidy
 
 .PHONY: test
-test:
-	go test -v ./...
+test: build
+	go build ./cmd/lxcri-test
+	go test --count 1 -v ./...
 
 build: $(BINS) $(LIBEXEC_BINS)
 
-lxcri: go.mod $(GO_SRC)
+lxcri: go.mod $(GO_SRC) Makefile
 	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd/lxcri
 
 lxcri-start: cmd/lxcri-start/lxcri-start.c
