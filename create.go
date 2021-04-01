@@ -76,6 +76,17 @@ func (rt *Runtime) CheckSystem() error {
 }
 
 func (rt *Runtime) checkConfig(config *ContainerConfig) error {
+	if len(config.ContainerID) == 0 {
+		return fmt.Errorf("missing container ID")
+	}
+
+	if config.Root == nil {
+		return fmt.Errorf("config.Root is nil")
+	}
+	if len(config.Root.Path) == 0 {
+		return fmt.Errorf("empty config.Root.Path")
+	}
+
 	if config.Linux.Resources == nil {
 		config.Linux.Resources = &specs.LinuxResources{}
 	}
