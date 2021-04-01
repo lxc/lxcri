@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -244,49 +243,40 @@ func (c *Container) getContainerInitState() (specs.ContainerState, error) {
 
 func (c *Container) kill(ctx context.Context, signum unix.Signal) error {
 	c.Log.Info().Int("signum", int(signum)).Msg("killing container process")
-	if signum == unix.SIGKILL || signum == unix.SIGTERM {
-		return c.stop(ctx, signum)
+
+	// TODO(race condition) check whether it is save to signal InitPid()
+	// To avoid that the PID of the init process is recycled we aquire the pidfd of it.
+	// The container init process may have already died here and if the PID is already recycled,
+	// the wrong process will be signaled. If the kernel is recent enough.
+	// to support pidfd_send_signal (only kernel > 5.6 ?)
+	pidfd, err := c.LinuxContainer.InitPidFd()
+	if err != nil {
+		// since this is best-effort we won't return an error
+		c.Log.Warn().Msgf("failed to get init pidfd: %s", err)
+	} else {
+		defer pidfd.Close()
 	}
 
-	// Send non-terminating signals to monitor process.
-	// The monitor process propagates the signal to all container process.
-	// FIXME revise this, it may be prone to race-conditions,
-	/// the monitor process PID could have been recycled
-	// Maybe use c.lxccontainer.InitPidFd() ?
-	if c.Pid > 1 {
-		c.Log.Info().Int("pid", c.Pid).Int("signal", int(signum)).Msg("sending signal")
-		if err := unix.Kill(c.Pid, 0); err == nil {
-			err := unix.Kill(c.Pid, signum)
-			if err != unix.ESRCH {
-				return fmt.Errorf("failed to send signal %d to container process %d: %w", signum, c.Pid, err)
-			}
-		}
+	// From `man pid_namespaces`: If the "init" process of a PID namespace terminates, the kernel
+	// terminates all of the processes in the namespace via a SIGKILL signal.
+	// So there is nothing more to do here than signaling the init process.
+	// NOTE: The liblxc monitor process `lxcri-start` doesn't propagate all signals to the init process,
+	// but handles some signals on its own. E.g SIGHUP tells the monitor process to hang up the terminal
+	// and terminate the init process with SIGTERM.
+	pid := c.LinuxContainer.InitPid()
+	if pid <= 1 {
+		return nil
+	}
+	c.Log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
+	err = unix.Kill(pid, signum)
+	if err == unix.ESRCH {
+		// init already died before sending the signal - not an error
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to send signal %d to container process %d: %w", signum, pid, err)
 	}
 	return nil
-}
-
-func (c *Container) stop(ctx context.Context, signum unix.Signal) error {
-	if err := c.SetConfigItem("lxc.signal.stop", strconv.Itoa(int(signum))); err != nil {
-		return err
-	}
-	if err := c.LinuxContainer.Stop(); err != nil {
-		return err
-	}
-
-	if !c.wait(ctx, lxc.STOPPED) {
-		c.Log.Warn().Msg("failed to stop lxc container")
-	}
-
-	// draining the cgroup is required to catch processes that escaped from
-	// 'kill' e.g a bash for loop that spawns a new child immediately.
-	start := time.Now()
-	err := drainCgroup(ctx, c.CgroupDir, signum)
-	if err != nil && !os.IsNotExist(err) {
-		c.Log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to drain cgroup")
-	} else {
-		c.Log.Info().Dur("duration", time.Since(start)).Str("file", c.CgroupDir).Msg("cgroup drained")
-	}
-	return err
 }
 
 // SaveConfig creates and atomically enables the lxc config file.
