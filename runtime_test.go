@@ -45,7 +45,7 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 
 	spec := NewSpec(rootfs, filepath.Join("/"+filepath.Base(cmd)))
 	id := filepath.Base(rootfs)
-	cfg := ContainerConfig{ContainerID: id, Spec: spec}
+	cfg := ContainerConfig{ContainerID: id, Spec: spec, Log: DefaultRuntime.Log}
 	cfg.LogFile = "/dev/stderr"
 	cfg.LogLevel = "info"
 	return &cfg
