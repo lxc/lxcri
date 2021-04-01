@@ -202,26 +202,12 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	/*
-		go func() {
-			// NOTE this goroutine may leak until lxcri-start is terminated
-			ps, err := cmd.Process.Wait()
-			if err != nil {
-				rt.Log.Error().Err(err).Msg("failed to wait for start process")
-			} else {
-				rt.Log.Warn().Int("pid", cmd.Process.Pid).Stringer("status", ps).Msg("start process terminated")
-			}
-			cancel()
-		}()
-	*/
-
 	rt.Log.Debug().Msg("waiting for init")
 	if err := c.waitCreated(ctx); err != nil {
 		return err
 	}
 
 	rt.Log.Info().Int("pid", cmd.Process.Pid).Msg("init process is running, container is created")
-	// FIXME set PID to container config ?
 	c.CreatedAt = time.Now()
 	c.Pid = cmd.Process.Pid
 	return nil
