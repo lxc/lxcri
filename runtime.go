@@ -142,7 +142,7 @@ func (rt *Runtime) libexec(name string) string {
 // The container must have been created with Runtime.Create.
 func (rt *Runtime) Load(containerID string) (*Container, error) {
 	c := &Container{ContainerConfig: &ContainerConfig{}}
-	c.RuntimeDir = filepath.Join(rt.Root, containerID)
+	c.runtimeDir = filepath.Join(rt.Root, containerID)
 
 	if err := c.load(); err != nil {
 		return nil, err

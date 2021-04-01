@@ -19,8 +19,6 @@ import (
 type ContainerConfig struct {
 	*specs.Spec
 
-	RuntimeDir string
-
 	ContainerID string
 
 	BundlePath    string
@@ -44,22 +42,22 @@ type ContainerConfig struct {
 }
 
 // ConfigFilePath returns the path to the liblxc config file.
-func (cfg ContainerConfig) ConfigFilePath() string {
-	return cfg.RuntimePath("config")
+func (c Container) ConfigFilePath() string {
+	return c.RuntimePath("config")
 }
 
-func (cfg ContainerConfig) syncFifoPath() string {
-	return cfg.RuntimePath(initDir, "syncfifo")
+func (c Container) syncFifoPath() string {
+	return c.RuntimePath(initDir, "syncfifo")
 }
 
 // RuntimePath returns the absolute path to the given sub path
 // within the container root.
-func (cfg ContainerConfig) RuntimePath(subPath ...string) string {
-	return filepath.Join(cfg.RuntimeDir, filepath.Join(subPath...))
+func (c Container) RuntimePath(subPath ...string) string {
+	return filepath.Join(c.runtimeDir, filepath.Join(subPath...))
 }
 
-func (cfg ContainerConfig) runtimeDirExists() bool {
-	if _, err := os.Stat(cfg.RuntimeDir); err == nil {
+func (c Container) runtimeDirExists() bool {
+	if _, err := os.Stat(c.runtimeDir); err == nil {
 		return true
 	}
 	return false
@@ -72,13 +70,15 @@ type Container struct {
 
 	CreatedAt time.Time
 	Pid       int
+
+	runtimeDir string
 }
 
 func (c *Container) create() error {
 	if c.runtimeDirExists() {
 		return ErrExist
 	}
-	if err := os.MkdirAll(c.RuntimeDir, 0700); err != nil {
+	if err := os.MkdirAll(c.runtimeDir, 0700); err != nil {
 		return fmt.Errorf("failed to create container dir: %w", err)
 	}
 
@@ -93,7 +93,7 @@ func (c *Container) create() error {
 		return fmt.Errorf("failed to close empty config tmpfile: %w", err)
 	}
 
-	c.LinuxContainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.RuntimeDir))
+	c.LinuxContainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.runtimeDir))
 	if err != nil {
 		return err
 	}
@@ -115,7 +115,7 @@ func (c *Container) load() error {
 	if err != nil {
 		return fmt.Errorf("failed to load lxc config file: %w", err)
 	}
-	c.LinuxContainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.RuntimeDir))
+	c.LinuxContainer, err = lxc.NewContainer(c.ContainerID, filepath.Dir(c.runtimeDir))
 	if err != nil {
 		return fmt.Errorf("failed to create lxc container: %w", err)
 	}
