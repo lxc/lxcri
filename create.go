@@ -77,22 +77,22 @@ func (rt *Runtime) CheckSystem() error {
 
 func (rt *Runtime) checkConfig(config *ContainerConfig) error {
 	if len(config.ContainerID) == 0 {
-		return fmt.Errorf("missing container ID")
+		return errorf("missing container ID")
 	}
 
 	if config.Root == nil {
-		return fmt.Errorf("config.Root is nil")
+		return errorf("config.Root is nil")
 	}
 	if len(config.Root.Path) == 0 {
-		return fmt.Errorf("empty config.Root.Path")
+		return errorf("empty config.Root.Path")
 	}
 
 	if config.Process == nil {
-		return fmt.Errorf("config.Process is nil")
+		return errorf("config.Process is nil")
 	}
 
 	if len(config.Process.Args) == 0 {
-		return fmt.Errorf("configs.Process.Args is empty")
+		return errorf("configs.Process.Args is empty")
 	}
 
 	if config.Process.Cwd == "" {
@@ -105,7 +105,7 @@ func (rt *Runtime) checkConfig(config *ContainerConfig) error {
 		return err
 	}
 	if yes {
-		return fmt.Errorf("container wants to share the hosts mount namespace")
+		return errorf("container wants to share the hosts mount namespace")
 	}
 
 	// It should be best practise not to do so, but there are containers that
@@ -135,19 +135,19 @@ func configureContainer(rt *Runtime, c *Container) error {
 	}
 
 	if err := configureRootfs(c); err != nil {
-		return err
+		return fmt.Errorf("failed to configure rootfs: %w", err)
 	}
 
 	if err := configureInit(rt, c); err != nil {
-		return err
+		return fmt.Errorf("failed to configure init: %w", err)
 	}
 
 	if err := configureMounts(rt, c); err != nil {
-		return err
+		return fmt.Errorf("failed to configure mounts: %w", err)
 	}
 
 	if err := configureReadonlyPaths(c); err != nil {
-		return err
+		return fmt.Errorf("failed to configure read-only paths: %w", err)
 	}
 
 	if err := configureNamespaces(c); err != nil {

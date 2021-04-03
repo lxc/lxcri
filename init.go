@@ -19,9 +19,12 @@ const (
 
 func createFifo(dst string, uid int, gid int, mode uint32) error {
 	if err := unix.Mkfifo(dst, mode); err != nil {
-		return err
+		return fmt.Errorf("mkfifo dst:%s mode:%o failed: %w", dst, mode, err)
 	}
-	return unix.Chown(dst, uid, gid)
+	if err := unix.Chown(dst, uid, gid); err != nil {
+		return fmt.Errorf("chown uid:%d gid:%d dst:%s failed: %w", uid, gid, dst, err)
+	}
+	return nil
 }
 
 func configureInit(rt *Runtime, c *Container) error {
@@ -109,28 +112,31 @@ func createList(dst string, entries []string, uid int, gid int, mode uint32) err
 	// #nosec
 	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
-		return err
+		return errorf("failed to create %s: %w", dst, err)
 	}
 
 	for _, arg := range entries {
 		_, err := f.WriteString(arg)
 		if err != nil {
 			f.Close()
-			return err
+			return errorf("failed to write to %s: %w", dst, err)
 		}
 		_, err = f.Write([]byte{'\000'})
 		if err != nil {
 			f.Close()
-			return err
+			return errorf("failed to write to %s: %w", dst, err)
 		}
 	}
 	if err := f.Close(); err != nil {
-		return err
+		return errorf("failed to close %s: %w", dst, err)
 	}
 	if err := unix.Chown(dst, uid, gid); err != nil {
-		return err
+		return errorf("failed to chown %s uid:%d gid:%d :%w", dst, uid, gid, err)
 	}
-	return unix.Chmod(dst, mode)
+	if err := unix.Chmod(dst, mode); err != nil {
+		return errorf("failed to chmod %s mode:%o : %w", dst, mode, err)
+	}
+	return nil
 }
 
 func configureInitUser(c *Container) error {
