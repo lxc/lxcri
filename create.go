@@ -154,10 +154,6 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return fmt.Errorf("failed to configure init: %w", err)
 	}
 
-	if err := configureMounts(rt, c); err != nil {
-		return fmt.Errorf("failed to configure mounts: %w", err)
-	}
-
 	if err := configureReadonlyPaths(c); err != nil {
 		return fmt.Errorf("failed to configure read-only paths: %w", err)
 	}
@@ -291,6 +287,10 @@ func configureContainer(rt *Runtime, c *Container) error {
 
 	if err := setLog(c); err != nil {
 		return errorf("failed to configure container log: %w", err)
+	}
+
+	if err := configureMounts(rt, c); err != nil {
+		return fmt.Errorf("failed to configure mounts: %w", err)
 	}
 
 	return nil
