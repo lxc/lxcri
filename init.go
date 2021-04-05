@@ -48,12 +48,10 @@ func (c *Container) IsUserUID() bool {
 			continue
 		}
 		maxID := idmap.ContainerID + idmap.Size - 1
-		println("-----> maxID: %d", maxID)
 		// check if c.Process.UID is contained in the mapping
 		if (puid >= idmap.ContainerID) && (puid <= maxID) {
 			offset := puid - idmap.ContainerID
 			hostid := idmap.HostID + offset
-			println("-----> hostid: %d", hostid)
 			return hostid == cuid
 		}
 	}
@@ -89,7 +87,6 @@ func configureInit(rt *Runtime, c *Container) error {
 
 	// create files required for lxcri-init
 	if c.IsUserUID() {
-		println("-------> c.IsUserUID")
 		if err := createFifo(c.syncFifoPath(), 0600); err != nil {
 			return fmt.Errorf("failed to create sync fifo: %w", err)
 		}

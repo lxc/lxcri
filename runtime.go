@@ -129,7 +129,6 @@ func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	// #nosec
 	cmd := exec.Command(rt.libexec(ExecStart), c.LinuxContainer.Name(), rt.Root, c.ConfigFilePath())
-	println(os.Environ())
 	cmd.Env = []string{"XDG_RUNTIME_DIR=/tmp/myrun", "PATH=/usr/bin"}
 	cmd.Dir = c.RuntimePath()
 
