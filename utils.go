@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -98,50 +97,6 @@ func errorf(sfmt string, args ...interface{}) error {
 	_, file, line, _ := runtime.Caller(1)
 	prefix := fmt.Sprintf("[%s:%s:%d] ", bin, filepath.Base(file), line)
 	return fmt.Errorf(prefix+sfmt, args...)
-}
-
-// Modified version of golang standard library os.MkdirAll
-func mkdirAll(path string, perm os.FileMode, uid int, gid int) error {
-	// Fast path: if we can tell whether path is a directory or file, stop with success or error.
-	dir, err := os.Stat(path)
-	if err == nil {
-		if dir.IsDir() {
-			return nil
-		}
-		return &os.PathError{Op: "mkdir", Path: path, Err: unix.ENOTDIR}
-	}
-
-	// Slow path: make sure parent exists and then call Mkdir for path.
-	i := len(path)
-	for i > 0 && os.IsPathSeparator(path[i-1]) { // Skip trailing path separator.
-		i--
-	}
-
-	j := i
-	for j > 0 && !os.IsPathSeparator(path[j-1]) { // Scan backward over element.
-		j--
-	}
-
-	if j > 1 {
-		// Create parent.
-		err = mkdirAll(path[:j-1], perm, uid, gid)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Parent now exists; invoke Mkdir and use its result.
-	err = os.Mkdir(path, perm)
-	if err != nil {
-		// Handle arguments like "foo/." by
-		// double-checking that directory doesn't exist.
-		dir, err1 := os.Lstat(path)
-		if err1 == nil && dir.IsDir() {
-			return nil
-		}
-		return err
-	}
-	return unix.Chown(path, uid, gid)
 }
 
 func setenv(env []string, key, val string, overwrite bool) []string {
