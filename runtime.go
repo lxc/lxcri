@@ -88,6 +88,9 @@ type Runtime struct {
 	// defined within the OCI runtime spec.
 	Hooks `json:"-"`
 
+	// Environment passed to `lxcri-start`
+	env []string
+
 	// privileged is set by Runtime.Init if user has root privileges.
 	privileged bool
 }
@@ -129,7 +132,7 @@ func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	// #nosec
 	cmd := exec.Command(rt.libexec(ExecStart), c.LinuxContainer.Name(), rt.Root, c.ConfigFilePath())
-	cmd.Env = []string{"XDG_RUNTIME_DIR=/tmp/myrun", "PATH=/usr/bin"}
+	cmd.Env = rt.env
 	cmd.Dir = c.RuntimePath()
 
 	if c.ConsoleSocket == "" && !c.Process.Terminal {

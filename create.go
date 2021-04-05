@@ -48,6 +48,14 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	return c, err
 }
 
+func (rt *Runtime) keepEnv(names ...string) {
+	for _, n := range names {
+		if val := os.Getenv(n); val != "" {
+			rt.env = append(rt.env, n+"="+val)
+		}
+	}
+}
+
 // Init initializes the runtime instance.
 // It creates required directories and checks the hosts system configuration.
 // Unsupported runtime features are disabled and a warning message is logged.
@@ -63,6 +71,8 @@ func (rt *Runtime) Init() error {
 	}
 
 	rt.privileged = os.Getuid() == 0
+
+	rt.keepEnv("HOME", "XDG_RUNTIME_DIR", "PATH")
 
 	err := canExecute(rt.libexec(ExecStart), rt.libexec(ExecHook), rt.libexec(ExecInit))
 	if err != nil {
