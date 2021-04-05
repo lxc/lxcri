@@ -19,25 +19,22 @@ import (
 
 var tmpDir string
 
-/*
 func init() {
-	// /tmp has permissions 1777
-	// sticky bit prevents renaming .config to /config because
-	// liblxc modifies permissions if user namepaces with uid/gid mappings are enabled
+	// /tmp has permissions 1777, never  use it as runtime / rootfs parent
 	if os.Getuid() != 0 {
 		tmpDir = os.Getenv("HOME")
 	}
 }
-*/
 
 func newRuntime(t *testing.T) *Runtime {
 	//wd, err := os.Getwd()
 	//require.NoError(t, err)
 	runtimeRoot, err := os.MkdirTemp(tmpDir, "lxcri-test")
 	require.NoError(t, err)
-	err = unix.Chmod(runtimeRoot, 0700)
-	require.NoError(t, err)
 	t.Logf("runtime root: %s", runtimeRoot)
+
+	err = unix.Chmod(runtimeRoot, 0755)
+	require.NoError(t, err)
 
 	rt := &Runtime{
 		Log:        log.ConsoleLogger(true),
@@ -59,13 +56,6 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	// copy binary to rootfs
 	err = exec.Command("cp", cmd, rootfs).Run()
 	require.NoError(t, err)
-	// create /proc and /dev in rootfs
-	/*
-		err = os.MkdirAll(filepath.Join(rootfs, "dev"), 0755)
-		require.NoError(t, err)
-		err = os.MkdirAll(filepath.Join(rootfs, "proc"), 0555)
-		require.NoError(t, err)
-	*/
 
 	spec := NewSpec(rootfs, filepath.Join("/"+filepath.Base(cmd)))
 	id := filepath.Base(rootfs)
@@ -75,25 +65,44 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	cfg.LogLevel = "trace"
 
 	if os.Getuid() != 0 {
+
+		// container user ID 0 is mapped to user creating the container
+		// --> file permissions in /.lxcri could be 0600 / 0400
+
 		// get UID/GID mapping from /etc/subgid /etc/subuid
+
+		/*
+			cfg.Linux.UIDMappings = []specs.LinuxIDMapping{
+				specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getuid()), Size: 1},
+				specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+			}
+			cfg.Linux.GIDMappings = []specs.LinuxIDMapping{
+				specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getgid()), Size: 1},
+				specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+			}
+		*/
+
+		// The container UID must have full access to the rootfs.
+		// If we the container UID (0) / or GID are not mapped to the owner (creator) of the rootfs
+		// it must be granted o+rwx.
+		// MkdirTemp creates with 0700
+
+		err = unix.Chmod(rootfs, 0777)
+		require.NoError(t, err)
+
+		// Using 0755 is required if container UID is not
+		// the owner of runtimeRoot
+
+		//err = unix.Chmod(runtimeRoot, 0755)
+		//require.NoError(t, err)
+
 		cfg.Linux.UIDMappings = []specs.LinuxIDMapping{
-			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getuid()), Size: 1},
-			specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+			specs.LinuxIDMapping{ContainerID: 0, HostID: 20000, Size: 65536},
 		}
 		cfg.Linux.GIDMappings = []specs.LinuxIDMapping{
-			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getgid()), Size: 1},
-			specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+			specs.LinuxIDMapping{ContainerID: 0, HostID: 20000, Size: 65536},
 		}
-		/*
-			cfg.Mounts = append(cfg.Mounts,
-				specs.Mount{Destination: "/usr/bin/newgidmap", Source: "/usr/bin/newgidmap", Type: "bind", Options: []string{"bind", "create=file"}},
-				specs.Mount{Destination: "/usr/bin/newuidmap", Source: "/usr/bin/newuidmap", Type: "bind", Options: []string{"bind", "create=file"}},
-			)
 
-			err = os.MkdirAll(filepath.Join(rootfs, "/usr/bin"), 0755)
-			require.NoError(t, err)
-		*/
-		//cfg.Process.Path = "
 	}
 
 	/*
@@ -137,10 +146,10 @@ func TestRuntimeNamespaceCheck(t *testing.T) {
 
 func TestRuntimeKill(t *testing.T) {
 	rt := newRuntime(t)
-	//defer os.RemoveAll(rt.Root)
+	defer os.RemoveAll(rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	//defer os.RemoveAll(cfg.Root.Path)
+	defer os.RemoveAll(cfg.Root.Path)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()

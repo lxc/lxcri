@@ -312,22 +312,6 @@ func NewSpecProcess(cmd string, args ...string) *specs.Process {
 	proc := new(specs.Process)
 	proc.Args = append(proc.Args, cmd)
 	proc.Args = append(proc.Args, args...)
-	//proc.User = currentUser()
 	proc.Cwd = "/"
 	return proc
-}
-
-func currentUser() specs.User {
-	groups, _ := os.Getgroups()
-	gids := make([]uint32, len(groups))
-	for i, g := range groups {
-		gids[i] = uint32(g)
-	}
-	return specs.User{
-		UID: 0,
-		GID: 0,
-		//UID: uint32(os.Getuid()),
-		//GID: uint32(os.Getgid()),
-		AdditionalGids: []uint32{uint32(os.Getgid())},
-	}
 }

@@ -17,8 +17,8 @@ const (
 	initDir = "/.lxcri"
 )
 
-func createFifo(dst string) error {
-	if err := unix.Mkfifo(dst, 0666); err != nil {
+func createFifo(dst string, mode uint32) error {
+	if err := unix.Mkfifo(dst, mode); err != nil {
 		return errorf("mkfifo dst:%s failed: %w", dst, err)
 	}
 	// lxcri-init must be able to write to the fifo.
@@ -26,10 +26,38 @@ func createFifo(dst string) error {
 	// liblxc changes the owner of the runtime directory to the effective container UID.
 	// access to the files is protected by the runtimeDir
 	// because umask (0022) affects unix.Mkfifo, a separate chmod is required
-	if err := unix.Chmod(dst, 0666); err != nil {
+	// FIXME if container UID equals os.GetUID() and spec.
+	if err := unix.Chmod(dst, mode); err != nil {
 		return errorf("chmod mkfifo failed: %w", err)
 	}
 	return nil
+}
+
+// Return true if init user is mapped to runtime user
+func (c *Container) IsUserUID() bool {
+	cuid := uint32(os.Getuid())
+	puid := c.Process.User.UID
+
+	// no id mappings
+	if len(c.Linux.UIDMappings) == 0 {
+		return puid == cuid
+	}
+
+	for _, idmap := range c.Linux.UIDMappings {
+		if idmap.Size < 1 {
+			continue
+		}
+		maxID := idmap.ContainerID + idmap.Size - 1
+		println("-----> maxID: %d", maxID)
+		// check if c.Process.UID is contained in the mapping
+		if (puid >= idmap.ContainerID) && (puid <= maxID) {
+			offset := puid - idmap.ContainerID
+			hostid := idmap.HostID + offset
+			println("-----> hostid: %d", hostid)
+			return hostid == cuid
+		}
+	}
+	return false
 }
 
 func configureInit(rt *Runtime, c *Container) error {
@@ -59,20 +87,30 @@ func configureInit(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	uid := int(c.Process.User.UID)
-	gid := int(c.Process.User.GID)
-
 	// create files required for lxcri-init
-	if err := createFifo(c.syncFifoPath()); err != nil {
-		return fmt.Errorf("failed to create sync fifo: %w", err)
+	if c.IsUserUID() {
+		println("-------> c.IsUserUID")
+		if err := createFifo(c.syncFifoPath(), 0600); err != nil {
+			return fmt.Errorf("failed to create sync fifo: %w", err)
+		}
+		if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Process.Args, 0400); err != nil {
+			return err
+		}
+		if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Process.Env, 0400); err != nil {
+			return err
+		}
+	} else {
+		if err := createFifo(c.syncFifoPath(), 0666); err != nil {
+			return fmt.Errorf("failed to create sync fifo: %w", err)
+		}
+		if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Process.Args, 0444); err != nil {
+			return err
+		}
+		if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Process.Env, 0444); err != nil {
+			return err
+		}
 	}
 
-	if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Process.Args, uid, gid, 0440); err != nil {
-		return err
-	}
-	if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Process.Env, uid, gid, 0440); err != nil {
-		return err
-	}
 	if err := os.Symlink(c.Process.Cwd, filepath.Join(runtimeInitDir, "cwd")); err != nil {
 		return err
 	}
@@ -115,7 +153,7 @@ func touchFile(filePath string, perm os.FileMode) error {
 	return err
 }
 
-func createList(dst string, entries []string, uid int, gid int, mode uint32) error {
+func createList(dst string, entries []string, mode uint32) error {
 	// #nosec
 	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
@@ -137,11 +175,6 @@ func createList(dst string, entries []string, uid int, gid int, mode uint32) err
 	if err := f.Close(); err != nil {
 		return errorf("failed to close %s: %w", dst, err)
 	}
-	/*
-		if err := unix.Chown(dst, uid, gid); err != nil {
-			return errorf("failed to chown %s uid:%d gid:%d :%w", dst, uid, gid, err)
-		}
-	*/
 	if err := unix.Chmod(dst, mode); err != nil {
 		return errorf("failed to chmod %s mode:%o : %w", dst, mode, err)
 	}
