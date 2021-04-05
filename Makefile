@@ -4,7 +4,9 @@ BINS := lxcri
 LIBEXEC_BINS := lxcri-start lxcri-init lxcri-hook
 # Installation prefix for BINS
 PREFIX ?= /usr/local
+export PREFIX
 LIBEXEC_DIR = $(PREFIX)/libexec/lxcri
+export LIBEXEC_DIR
 PKG_CONFIG_PATH ?= $(PREFIX)/lib/pkgconfig
 # Note: The default pkg-config directory is search after PKG_CONFIG_PATH
 # Note: (Exported) environment variables are NOT visible in the environment of the $(shell ...) function.

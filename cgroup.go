@@ -17,8 +17,23 @@ import (
 
 const (
 	allControllers = "+cpuset +cpu +io +memory +hugetlb +pids +rdma"
-	cgroupRoot     = "/sys/fs/cgroup"
 )
+
+var cgroupRoot string
+
+func detectCgroupRoot() string {
+	if err := isFilesystem("/sys/fs/cgroup", "cgroup2"); err == nil {
+		return "/sys/fs/cgroup"
+	}
+	if err := isFilesystem("/sys/fs/cgroup/unified", "cgroup2"); err == nil {
+		return "/sys/fs/cgroup/unified"
+	}
+	return ""
+}
+
+func init() {
+	cgroupRoot = detectCgroupRoot()
+}
 
 // https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md
 // TODO New spec will contain a property Unified for cgroupv2 properties
@@ -69,10 +84,7 @@ func configureCgroup(rt *Runtime, c *Container) error {
 }
 
 func configureCgroupPath(rt *Runtime, c *Container) error {
-	if c.Linux.CgroupsPath == "" {
-		//return fmt.Errorf("empty cgroups path in spec")
-		c.Linux.CgroupsPath = "foo.slice"
-	}
+
 	if rt.SystemdCgroup {
 		c.CgroupDir = parseSystemdCgroupPath(c.Linux.CgroupsPath)
 	} else {
@@ -81,9 +93,11 @@ func configureCgroupPath(rt *Runtime, c *Container) error {
 
 	c.MonitorCgroupDir = filepath.Join(rt.MonitorCgroup, c.ContainerID+".scope")
 
-	if err := createCgroup(filepath.Dir(c.CgroupDir), allControllers); err != nil {
-		return err
-	}
+	/*
+		if err := createCgroup(filepath.Dir(c.CgroupDir), allControllers); err != nil {
+			return err
+		}
+	*/
 
 	if err := c.SetConfigItem("lxc.cgroup.relative", "0"); err != nil {
 		return err
@@ -94,8 +108,8 @@ func configureCgroupPath(rt *Runtime, c *Container) error {
 	}
 
 	/*
-		if c.supportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
-			if err := c.SetConfigItem("lxc.cgroup.dir.monitor.pivot", c.MonitorCgroup); err != nil {
+		if c.SupportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
+			if err := c.SetConfigItem("lxc.cgroup.dir.monitor.pivot", c.MonitorCgroupDir); err != nil {
 				return err
 			}
 		}

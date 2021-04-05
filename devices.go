@@ -34,7 +34,6 @@ func addDevice(c *Container, dev specs.LinuxDevice, mode os.FileMode, uid uint32
 	dev.UID = &uid
 	dev.GID = &gid
 	c.Linux.Devices = append(c.Linux.Devices, dev)
-
 	addDevicePerms(c, dev.Type, &dev.Major, &dev.Minor, access)
 }
 
@@ -48,7 +47,7 @@ func addDevicePerms(c *Container, devType string, major *int64, minor *int64, ac
 // crio can add devices to containers, but this does not work for privileged containers.
 // See https://github.com/cri-o/cri-o/blob/a705db4c6d04d7c14a4d59170a0ebb4b30850675/server/container_create_linux.go#L45
 // TODO file an issue on cri-o (at least for support)
-func ensureDefaultDevices(c *Container) error {
+func ensureDefaultDevices(c *Container) {
 	mode := os.FileMode(0666)
 	var uid, gid uint32 = c.Process.User.UID, c.Process.User.GID
 
@@ -64,7 +63,6 @@ func ensureDefaultDevices(c *Container) error {
 			addDevice(c, dev, mode, uid, gid, "rwm")
 		}
 	}
-	return nil
 }
 
 func writeDevices(dst string, c *Container) error {

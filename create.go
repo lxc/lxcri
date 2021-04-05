@@ -16,6 +16,7 @@ import (
 // You may have to call Runtime.Delete to cleanup container runtime state,
 // if Create returns with an error.
 func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container, error) {
+
 	if err := rt.checkConfig(cfg); err != nil {
 		return nil, err
 	}
@@ -47,11 +48,22 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	return c, err
 }
 
-// CheckSystem checks the hosts system configuration.
+// Init initializes the runtime instance.
+// It creates required directories and checks the hosts system configuration.
 // Unsupported runtime features are disabled and a warning message is logged.
-// CheckSystem is not called internally, but it recommended to
-// call it once for a runtime instance before calling any other method.
-func (rt *Runtime) CheckSystem() error {
+// Init must be called once for a runtime instance before calling any other method.
+func (rt *Runtime) Init() error {
+
+	rt.rootfsMount = filepath.Join(rt.Root, ".rootfs")
+	if err := os.MkdirAll(rt.rootfsMount, 0777); err != nil {
+		return errorf("failed to create directory for rootfs mount %s: %w", rt.rootfsMount, err)
+	}
+	if err := os.Chmod(rt.rootfsMount, 0777); err != nil {
+		return errorf("failed to 'chmod 0777 %s': %w", err)
+	}
+
+	rt.privileged = os.Getuid() == 0
+
 	err := canExecute(rt.libexec(ExecStart), rt.libexec(ExecHook), rt.libexec(ExecInit))
 	if err != nil {
 		return errorf("access check failed: %w", err)
@@ -134,7 +146,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 		}
 	}
 
-	if err := configureRootfs(c); err != nil {
+	if err := configureRootfs(rt, c); err != nil {
 		return fmt.Errorf("failed to configure rootfs: %w", err)
 	}
 
@@ -150,6 +162,15 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return fmt.Errorf("failed to configure read-only paths: %w", err)
 	}
 
+	if !rt.privileged {
+		// ensure user namespace is enabled
+		if !isNamespaceEnabled(c.Spec, specs.UserNamespace) {
+			rt.Log.Warn().Msg("unprivileged runtime - enabling user namespace")
+			c.Linux.Namespaces = append(c.Linux.Namespaces,
+				specs.LinuxNamespace{Type: specs.UserNamespace},
+			)
+		}
+	}
 	if err := configureNamespaces(c); err != nil {
 		return fmt.Errorf("failed to configure namespaces: %w", err)
 	}
@@ -200,12 +221,33 @@ func configureContainer(rt *Runtime, c *Container) error {
 	if err := c.SetConfigItem("lxc.autodev", "0"); err != nil {
 		return err
 	}
-	if err := ensureDefaultDevices(c); err != nil {
-		return fmt.Errorf("failed to add default devices: %w", err)
-	}
 
-	if err := writeDevices(c.RuntimePath("devices.txt"), c); err != nil {
-		return fmt.Errorf("failed to create devices.txt: %w", err)
+	ensureDefaultDevices(c)
+
+	if rt.privileged {
+		// devices are created with mknod in lxcri-hook
+		if err := writeDevices(c.RuntimePath("devices.txt"), c); err != nil {
+			return fmt.Errorf("failed to create devices.txt: %w", err)
+		}
+
+	} else {
+		// if running as non-root bind mount devices, because user can not execute mknod
+		newMounts := make([]specs.Mount, 0, len(c.Mounts)+len(c.Linux.Devices))
+		for _, m := range c.Mounts {
+			if m.Destination == "/dev" {
+				rt.Log.Info().Msg("unprivileged runtime - removing /dev mount")
+				continue
+			}
+			newMounts = append(newMounts, m)
+		}
+		rt.Log.Info().Msg("unprivileged runtime - bind mount devices")
+		for _, device := range c.Linux.Devices {
+			newMounts = append(newMounts,
+				specs.Mount{Destination: device.Path, Source: device.Path, Type: "bind", Options: []string{"bind", "create=file"}},
+			)
+		}
+
+		c.Mounts = newMounts
 	}
 
 	if err := writeMasked(c.RuntimePath("masked.txt"), c); err != nil {
@@ -254,10 +296,15 @@ func configureContainer(rt *Runtime, c *Container) error {
 	return nil
 }
 
-func configureRootfs(c *Container) error {
+func configureRootfs(rt *Runtime, c *Container) error {
 	if err := c.SetConfigItem("lxc.rootfs.path", c.Root.Path); err != nil {
 		return err
 	}
+
+	if err := c.SetConfigItem("lxc.rootfs.mount", rt.rootfsMount); err != nil {
+		return err
+	}
+
 	if err := c.SetConfigItem("lxc.rootfs.managed", "0"); err != nil {
 		return err
 	}

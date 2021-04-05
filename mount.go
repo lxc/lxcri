@@ -74,9 +74,11 @@ func configureMounts(rt *Runtime, c *Container) error {
 		}
 		ms.Destination = mountDest
 
-		err = createMountDestination(c, &ms)
-		if err != nil {
-			return fmt.Errorf("failed to create mount target %s: %w", ms.Destination, err)
+		if c.Root.Readonly {
+			err = createMountDestination(c, &ms)
+			if err != nil {
+				return fmt.Errorf("failed to create mount target %s: %w", ms.Destination, err)
+			}
 		}
 
 		ms.Options = filterMountOptions(rt, ms.Type, ms.Options)
@@ -112,10 +114,10 @@ func createMountDestination(spec *Container, ms *specs.Mount) error {
 		ms.Options = append(ms.Options, "create=file")
 		// source exists and is not a directory
 		// create a target file that can be used as target for a bind mount
-		if err := mkdirAll(filepath.Dir(ms.Destination), 0750, uid, gid); err != nil {
+		if err := mkdirAll(filepath.Dir(ms.Destination), 0755, uid, gid); err != nil {
 			return fmt.Errorf("failed to create mount destination dir: %w", err)
 		}
-		f, err := os.OpenFile(ms.Destination, os.O_CREATE, 0)
+		f, err := os.OpenFile(ms.Destination, os.O_CREATE, 0755)
 		if err != nil {
 			return fmt.Errorf("failed to create file mountpoint: %w", err)
 		}
@@ -124,7 +126,7 @@ func createMountDestination(spec *Container, ms *specs.Mount) error {
 	ms.Options = append(ms.Options, "create=dir")
 	// FIXME exclude all directories that are below other mounts
 	// only directories / files on the readonly rootfs must be created
-	if err = mkdirAll(ms.Destination, 0750, uid, gid); err != nil {
+	if err = mkdirAll(ms.Destination, 0755, uid, gid); err != nil {
 		return fmt.Errorf("failed to create mount target dir: %w", err)
 	}
 	return nil

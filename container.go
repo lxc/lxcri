@@ -81,14 +81,19 @@ func (c *Container) create() error {
 	if c.runtimeDirExists() {
 		return ErrExist
 	}
-	if err := os.MkdirAll(c.runtimeDir, 0700); err != nil {
+
+	if err := os.MkdirAll(c.runtimeDir, 0777); err != nil {
 		return fmt.Errorf("failed to create container dir: %w", err)
+	}
+
+	if err := os.Chmod(c.runtimeDir, 0777); err != nil {
+		return errorf("failed to chmod %s: %w", err)
 	}
 
 	// An empty tmpfile is created to ensure that createContainer can only succeed once.
 	// The config file is atomically activated in SaveConfig.
 	// #nosec
-	f, err := os.OpenFile(c.RuntimePath(".config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
+	f, err := os.OpenFile(c.RuntimePath(".config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0666)
 	if err != nil {
 		return err
 	}
@@ -288,22 +293,18 @@ func (c *Container) kill(ctx context.Context, signum unix.Signal) error {
 // Any config changes via clxc.setConfigItem must be done before calling SaveConfig.
 // FIXME revise the config file mechanism
 func (c *Container) saveConfig() error {
-	// createContainer creates the tmpfile
-	tmpFile := c.RuntimePath(".config")
-	if _, err := os.Stat(tmpFile); err != nil {
-		return fmt.Errorf("failed to stat config tmpfile: %w", err)
-	}
 	// Don't overwrite an existing config.
 	cfgFile := c.ConfigFilePath()
-	if _, err := os.Stat(cfgFile); err == nil {
-		return fmt.Errorf("config file %s already exists", cfgFile)
-	}
-	err := c.LinuxContainer.SaveConfigFile(tmpFile)
+
+	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0640)
 	if err != nil {
-		return fmt.Errorf("failed to save config file to %q: %w", tmpFile, err)
+		return errorf("failed to create config file %q: %w", cfgFile, err)
 	}
-	if err := os.Rename(tmpFile, cfgFile); err != nil {
-		return fmt.Errorf("failed to rename config file: %w", err)
+	f.Close()
+
+	err = c.LinuxContainer.SaveConfigFile(cfgFile)
+	if err != nil {
+		return errorf("failed to save config file to %q: %w", cfgFile, err)
 	}
 	return nil
 }

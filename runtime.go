@@ -13,12 +13,10 @@ import (
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sys/unix"
-
-	"github.com/drachenfels-de/lxcri/log"
 )
 
 // Required runtime executables loaded from Runtime.LibexecDir
-const (
+var (
 	// ExecStart starts the liblxc monitor process, similar to lxc-start
 	ExecStart = "lxcri-start"
 	// ExecHook is run as liblxc hook and creates additional devices and remounts masked paths.
@@ -70,6 +68,9 @@ type Runtime struct {
 	// Directories for containers created by the runtime
 	// are created within this directory.
 	Root string
+	// rootfsMount is the directory where liblxc recursively binds
+	// the container rootfs before pivoting.
+	rootfsMount string
 	// Use systemd encoded cgroup path (from crio-o/conmon)
 	// is true if /etc/crio/crio.conf#cgroup_manager = "systemd"
 	SystemdCgroup bool
@@ -86,51 +87,9 @@ type Runtime struct {
 	// These hooks are different from the hooks that are
 	// defined within the OCI runtime spec.
 	Hooks `json:"-"`
-}
 
-// DefaultRuntime is the default runtime instance
-// used by all static wrapper functions.
-var DefaultRuntime = &Runtime{
-	Log:        log.ConsoleLogger(true),
-	Root:       "/var/run/lxcri",
-	LibexecDir: "/usr/libexec/lxcri",
-
-	Features: RuntimeFeatures{
-		Seccomp:       true,
-		Capabilities:  true,
-		Apparmor:      true,
-		CgroupDevices: true,
-	},
-}
-
-// CheckSystem is a wrapper around DefaultRuntime.CheckSystem
-func CheckSystem() error {
-	return DefaultRuntime.CheckSystem()
-}
-
-// Create is a wrapper around DefaultRuntime.Create
-func Create(ctx context.Context, cfg *ContainerConfig) (*Container, error) {
-	return DefaultRuntime.Create(ctx, cfg)
-}
-
-// Load is a wrapper around DefaultRuntime.Load
-func Load(containerID string) (*Container, error) {
-	return DefaultRuntime.Load(containerID)
-}
-
-// Start is a wrapper around DefaultRuntime.Start
-func Start(ctx context.Context, c *Container) error {
-	return DefaultRuntime.Start(ctx, c)
-}
-
-// Kill is a wrapper around DefaultRuntime.Kill
-func Kill(ctx context.Context, c *Container, signum unix.Signal) error {
-	return DefaultRuntime.Kill(ctx, c, signum)
-}
-
-// Delete is a wrapper around DefaultRuntime.Delete
-func Delete(ctx context.Context, c *Container, force bool) error {
-	return DefaultRuntime.Delete(ctx, c, force)
+	// privileged is set by Runtime.Init if user has root privileges.
+	privileged bool
 }
 
 func (rt *Runtime) libexec(name string) string {
@@ -170,7 +129,8 @@ func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	// #nosec
 	cmd := exec.Command(rt.libexec(ExecStart), c.LinuxContainer.Name(), rt.Root, c.ConfigFilePath())
-	cmd.Env = []string{}
+	println(os.Environ())
+	cmd.Env = []string{"XDG_RUNTIME_DIR=/tmp/myrun", "PATH=/usr/bin"}
 	cmd.Dir = c.RuntimePath()
 
 	if c.ConsoleSocket == "" && !c.Process.Terminal {
@@ -334,10 +294,11 @@ func NewSpec(rootfs string, cmd string, args ...string) *specs.Spec {
 		},
 		Mounts: []specs.Mount{
 			specs.Mount{Destination: "/proc", Source: "proc", Type: "proc",
-				Options: []string{"rw", "nosuid", "nodev", "noexec", "relatime"},
+				Options: []string{"rw", "nosuid", "nodev", "noexec", "relatime", "create=dir"},
 			},
 			specs.Mount{Destination: "/dev", Source: "tmpfs", Type: "tmpfs",
-				Options: []string{"rw", "nosuid", "noexec", "relatime"},
+				Options: []string{"rw", "nosuid", "noexec", "relatime", "dev", "create=dir"},
+				// devtmpfs (rw,nosuid,relatime,size=6122620k,nr_inodes=1530655,mode=755,inode64)
 			},
 		},
 		Process: proc,
@@ -351,6 +312,22 @@ func NewSpecProcess(cmd string, args ...string) *specs.Process {
 	proc := new(specs.Process)
 	proc.Args = append(proc.Args, cmd)
 	proc.Args = append(proc.Args, args...)
+	//proc.User = currentUser()
 	proc.Cwd = "/"
 	return proc
+}
+
+func currentUser() specs.User {
+	groups, _ := os.Getgroups()
+	gids := make([]uint32, len(groups))
+	for i, g := range groups {
+		gids[i] = uint32(g)
+	}
+	return specs.User{
+		UID: 0,
+		GID: 0,
+		//UID: uint32(os.Getuid()),
+		//GID: uint32(os.Getgid()),
+		AdditionalGids: []uint32{uint32(os.Getgid())},
+	}
 }

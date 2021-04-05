@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/drachenfels-de/lxcri/log"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
@@ -16,21 +17,42 @@ import (
 
 // Create a package test ? test.NewRuntime()
 
+var tmpDir string
+
+/*
+func init() {
+	// /tmp has permissions 1777
+	// sticky bit prevents renaming .config to /config because
+	// liblxc modifies permissions if user namepaces with uid/gid mappings are enabled
+	if os.Getuid() != 0 {
+		tmpDir = os.Getenv("HOME")
+	}
+}
+*/
+
 func newRuntime(t *testing.T) *Runtime {
-	runtimeRoot, err := os.MkdirTemp("", "lxcri-test")
+	//wd, err := os.Getwd()
+	//require.NoError(t, err)
+	runtimeRoot, err := os.MkdirTemp(tmpDir, "lxcri-test")
+	require.NoError(t, err)
+	err = unix.Chmod(runtimeRoot, 0700)
 	require.NoError(t, err)
 	t.Logf("runtime root: %s", runtimeRoot)
 
-	return &Runtime{
-		Log:        DefaultRuntime.Log,
+	rt := &Runtime{
+		Log:        log.ConsoleLogger(true),
 		Root:       runtimeRoot,
-		LibexecDir: "/usr/local/libexec/lxcri",
-		Features:   DefaultRuntime.Features,
+		LibexecDir: os.Getenv("LIBEXEC_DIR"),
 	}
+	//ExecInit = "lxcri-debug"
+	require.NoError(t, rt.Init())
+	return rt
 }
 
 func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
-	rootfs, err := os.MkdirTemp("", "lxcri-test")
+	//wd, err := os.Getwd()
+	//require.NoError(t, err)
+	rootfs, err := os.MkdirTemp(tmpDir, "lxcri-test")
 	require.NoError(t, err)
 	t.Logf("container rootfs: %s", rootfs)
 
@@ -38,16 +60,49 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	err = exec.Command("cp", cmd, rootfs).Run()
 	require.NoError(t, err)
 	// create /proc and /dev in rootfs
-	err = os.MkdirAll(filepath.Join(rootfs, "dev"), 0755)
-	require.NoError(t, err)
-	err = os.MkdirAll(filepath.Join(rootfs, "proc"), 0755)
-	require.NoError(t, err)
+	/*
+		err = os.MkdirAll(filepath.Join(rootfs, "dev"), 0755)
+		require.NoError(t, err)
+		err = os.MkdirAll(filepath.Join(rootfs, "proc"), 0555)
+		require.NoError(t, err)
+	*/
 
 	spec := NewSpec(rootfs, filepath.Join("/"+filepath.Base(cmd)))
 	id := filepath.Base(rootfs)
-	cfg := ContainerConfig{ContainerID: id, Spec: spec, Log: DefaultRuntime.Log}
+	cfg := ContainerConfig{ContainerID: id, Spec: spec, Log: log.ConsoleLogger(true)}
+	cfg.Linux.CgroupsPath = "" // use /proc/self/cgroup"
 	cfg.LogFile = "/dev/stderr"
-	cfg.LogLevel = "info"
+	cfg.LogLevel = "trace"
+
+	if os.Getuid() != 0 {
+		// get UID/GID mapping from /etc/subgid /etc/subuid
+		cfg.Linux.UIDMappings = []specs.LinuxIDMapping{
+			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getuid()), Size: 1},
+			specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+		}
+		cfg.Linux.GIDMappings = []specs.LinuxIDMapping{
+			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getgid()), Size: 1},
+			specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+		}
+		/*
+			cfg.Mounts = append(cfg.Mounts,
+				specs.Mount{Destination: "/usr/bin/newgidmap", Source: "/usr/bin/newgidmap", Type: "bind", Options: []string{"bind", "create=file"}},
+				specs.Mount{Destination: "/usr/bin/newuidmap", Source: "/usr/bin/newuidmap", Type: "bind", Options: []string{"bind", "create=file"}},
+			)
+
+			err = os.MkdirAll(filepath.Join(rootfs, "/usr/bin"), 0755)
+			require.NoError(t, err)
+		*/
+		//cfg.Process.Path = "
+	}
+
+	/*
+		cgroupns := specs.LinuxNamespace{
+			Type: specs.CgroupNamespace,
+		}
+		cfg.Linux.Namespaces = append(cfg.Linux.Namespaces, cgroupns)
+	*/
+
 	return &cfg
 }
 
@@ -82,10 +137,10 @@ func TestRuntimeNamespaceCheck(t *testing.T) {
 
 func TestRuntimeKill(t *testing.T) {
 	rt := newRuntime(t)
-	defer os.RemoveAll(rt.Root)
+	//defer os.RemoveAll(rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Root.Path)
+	//defer os.RemoveAll(cfg.Root.Path)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
@@ -114,6 +169,8 @@ func TestRuntimeKill(t *testing.T) {
 	state, err = c.State()
 	require.NoError(t, err)
 	require.Equal(t, specs.StateRunning, state.Status)
+
+	time.Sleep(time.Second * 3)
 
 	// SIGHUP by default terminates a process if it is not ignored or catched by
 	// a signal handler

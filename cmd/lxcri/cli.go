@@ -290,7 +290,7 @@ var createCmd = cli.Command{
 }
 
 func doCreate(ctxcli *cli.Context) error {
-	if err := clxc.CheckSystem(); err != nil {
+	if err := clxc.Init(); err != nil {
 		return err
 	}
 	specPath := filepath.Join(clxc.cfg.BundlePath, "config.json")
