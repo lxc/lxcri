@@ -251,7 +251,7 @@ func (c *Container) kill(ctx context.Context, signum unix.Signal) error {
 
 	// From `man pid_namespaces`: If the "init" process of a PID namespace terminates, the kernel
 	// terminates all of the processes in the namespace via a SIGKILL signal.
-	// So there is nothing more to do here than signaling the init process.
+	// So there is nothing more to do here than to signal the init process.
 	// NOTE: The liblxc monitor process `lxcri-start` doesn't propagate all signals to the init process,
 	// but handles some signals on its own. E.g SIGHUP tells the monitor process to hang up the terminal
 	// and terminate the init process with SIGTERM.
@@ -330,7 +330,7 @@ func (c *Container) destroy() error {
 	if c.CgroupDir != "" {
 		err := deleteCgroup(c.CgroupDir)
 		if err != nil && !os.IsNotExist(err) {
-			c.Log.Warn().Err(err).Str("file", c.CgroupDir).Msg("failed to remove cgroup dir")
+			return err
 		}
 	}
 	return os.RemoveAll(c.RuntimePath())

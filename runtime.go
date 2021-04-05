@@ -221,9 +221,7 @@ func runStartCmdConsole(ctx context.Context, cmd *exec.Cmd, consoleSocket string
 	return ptmx.Close()
 }
 
-// Kill sends the signal signum to the given container.
-// The signal is send to the container monitor process `lxcri-start` who
-// will propagate the signal to the container process.
+// Kill sends the signal signum to the container init process.
 func (rt *Runtime) Kill(ctx context.Context, c *Container, signum unix.Signal) error {
 	state, err := c.ContainerState()
 	if err != nil {
@@ -262,6 +260,17 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 			return errorf("failed to kill container: %w", err)
 		}
 	}
+
+	if c.CgroupDir != "" {
+		// In rare cases processes might escape from kill.
+		// This could happens if the container does not use pid_namespaces.
+		// Since every container get's it's own cgroup, we can
+		// try to kill all processes within the containers cgroup tree.
+		if err := drainCgroup(ctx, c.CgroupDir, unix.SIGKILL); err != nil {
+			c.Log.Warn().Msgf("draining cgroup failed: %s", err)
+		}
+	}
+
 	if err := c.destroy(); err != nil {
 		return errorf("failed to destroy container: %w", err)
 	}

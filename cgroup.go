@@ -93,12 +93,6 @@ func configureCgroupPath(rt *Runtime, c *Container) error {
 
 	c.MonitorCgroupDir = filepath.Join(rt.MonitorCgroup, c.ContainerID+".scope")
 
-	/*
-		if err := createCgroup(filepath.Dir(c.CgroupDir), allControllers); err != nil {
-			return err
-		}
-	*/
-
 	if err := c.SetConfigItem("lxc.cgroup.relative", "0"); err != nil {
 		return err
 	}
@@ -402,42 +396,4 @@ func deleteCgroup(cgroupName string) error {
 		}
 	}
 	return unix.Rmdir(dirName)
-}
-
-func createCgroup(cg string, controllers string) error {
-	// #nosec
-	cgPath := filepath.Join(cgroupRoot, cg)
-	if err := os.MkdirAll(cgPath, 755); err != nil {
-		return err
-	}
-
-	base := cgroupRoot
-	for _, elem := range strings.Split(cg, "/") {
-		base = filepath.Join(base, elem)
-		c := filepath.Join(base, "cgroup.subtree_control")
-		err := os.WriteFile(c, []byte(strings.TrimSpace(controllers)+"\n"), 0)
-		if err != nil {
-			return fmt.Errorf("failed to enable cgroup controllers: %w", err)
-		}
-	}
-	return nil
-}
-
-func getControllers(cg string) (string, error) {
-	// enable all available controllers in the scope
-	data, err := os.ReadFile(filepath.Join(cgroupRoot, cg, "group.controllers"))
-	if err != nil {
-		return "", fmt.Errorf("failed to read cgroup.controllers: %w", err)
-	}
-	controllers := strings.Split(strings.TrimSpace(string(data)), " ")
-
-	var b strings.Builder
-	for i, c := range controllers {
-		if i > 0 {
-			b.WriteByte(' ')
-		}
-		b.WriteByte('+')
-		b.WriteString(c)
-	}
-	return b.String(), nil
 }
