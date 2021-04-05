@@ -154,10 +154,6 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return fmt.Errorf("failed to configure init: %w", err)
 	}
 
-	if err := configureReadonlyPaths(c); err != nil {
-		return fmt.Errorf("failed to configure read-only paths: %w", err)
-	}
-
 	if !rt.privileged {
 		// ensure user namespace is enabled
 		if !isNamespaceEnabled(c.Spec, specs.UserNamespace) {
@@ -291,6 +287,10 @@ func configureContainer(rt *Runtime, c *Container) error {
 
 	if err := configureMounts(rt, c); err != nil {
 		return fmt.Errorf("failed to configure mounts: %w", err)
+	}
+
+	if err := configureReadonlyPaths(c); err != nil {
+		return fmt.Errorf("failed to configure read-only paths: %w", err)
 	}
 
 	return nil
