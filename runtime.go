@@ -297,10 +297,10 @@ func NewSpec(rootfs string, cmd string, args ...string) *specs.Spec {
 		},
 		Mounts: []specs.Mount{
 			specs.Mount{Destination: "/proc", Source: "proc", Type: "proc",
-				Options: []string{"rw", "nosuid", "nodev", "noexec", "relatime", "create=dir"},
+				Options: []string{"rw", "nosuid", "nodev", "noexec", "relatime"},
 			},
 			specs.Mount{Destination: "/dev", Source: "tmpfs", Type: "tmpfs",
-				Options: []string{"rw", "nosuid", "noexec", "relatime", "dev", "create=dir"},
+				Options: []string{"rw", "nosuid", "noexec", "relatime", "dev"},
 				// devtmpfs (rw,nosuid,relatime,size=6122620k,nr_inodes=1530655,mode=755,inode64)
 			},
 		},
