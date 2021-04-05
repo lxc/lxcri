@@ -144,8 +144,11 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 		cmd.Stderr = os.Stderr
 	}
 
-	if err := c.saveConfig(); err != nil {
-		return err
+	// NOTE any config change via clxc.SetConfigItem
+	// must be done before calling SaveConfigFile
+	err = c.LinuxContainer.SaveConfigFile(c.ConfigFilePath())
+	if err != nil {
+		return errorf("failed to save config file to %q: %w", c.ConfigFilePath(), err)
 	}
 
 	rt.Log.Debug().Msg("starting lxc monitor process")

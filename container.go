@@ -90,10 +90,7 @@ func (c *Container) create() error {
 		return errorf("failed to chmod %s: %w", err)
 	}
 
-	// An empty tmpfile is created to ensure that createContainer can only succeed once.
-	// The config file is atomically activated in SaveConfig.
-	// #nosec
-	f, err := os.OpenFile(c.RuntimePath(".config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0666)
+	f, err := os.OpenFile(c.RuntimePath("config"), os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
 	if err != nil {
 		return err
 	}
@@ -284,27 +281,6 @@ func (c *Container) kill(ctx context.Context, signum unix.Signal) error {
 	}
 	if err != nil {
 		return fmt.Errorf("failed to send signal %d to container process %d: %w", signum, pid, err)
-	}
-	return nil
-}
-
-// SaveConfig creates and atomically enables the lxc config file.
-// It must be called only once. It is automatically called by Runtime#Create.
-// Any config changes via clxc.setConfigItem must be done before calling SaveConfig.
-// FIXME revise the config file mechanism
-func (c *Container) saveConfig() error {
-	// Don't overwrite an existing config.
-	cfgFile := c.ConfigFilePath()
-
-	f, err := os.OpenFile(cfgFile, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0640)
-	if err != nil {
-		return errorf("failed to create config file %q: %w", cfgFile, err)
-	}
-	f.Close()
-
-	err = c.LinuxContainer.SaveConfigFile(cfgFile)
-	if err != nil {
-		return errorf("failed to save config file to %q: %w", cfgFile, err)
 	}
 	return nil
 }
