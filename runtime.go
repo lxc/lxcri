@@ -26,11 +26,7 @@ var (
 )
 
 var (
-	// ErrExist is an error returned by Runtime.Create
-	// if a container with the same ContainerID already exists.
-	ErrExist = fmt.Errorf("container already exists")
-	// ErrNotExist is an error returned by all runtime functions
-	// that exected functions if a container does not exist.
+	// ErrNotExist is returned if the container (runtime dir) does not exist.
 	ErrNotExist = fmt.Errorf("container does not exist")
 )
 
@@ -102,9 +98,14 @@ func (rt *Runtime) libexec(name string) string {
 // Load loads a container from the runtime directory.
 // The container must have been created with Runtime.Create.
 func (rt *Runtime) Load(containerID string) (*Container, error) {
-	c := &Container{ContainerConfig: &ContainerConfig{}}
-	c.runtimeDir = filepath.Join(rt.Root, containerID)
-
+	dir := filepath.Join(rt.Root, containerID)
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil, ErrNotExist
+	}
+	c := &Container{
+		ContainerConfig: &ContainerConfig{},
+		runtimeDir:      dir,
+	}
 	if err := c.load(); err != nil {
 		return nil, err
 	}
@@ -238,8 +239,17 @@ func (rt *Runtime) Kill(ctx context.Context, c *Container, signum unix.Signal) e
 // The container must be stopped or force must be set to true.
 // If the container is not stopped but force is set to true,
 // the container will be killed with unix.SIGKILL.
-func (rt *Runtime) Delete(ctx context.Context, c *Container, force bool) error {
+func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) error {
 	rt.Log.Info().Bool("force", force).Msg("delete container")
+	c, err := rt.Load(containerID)
+	if err == ErrNotExist {
+		rt.Log.Info().Msg("container does not exist")
+		return nil
+	}
+	if err != nil {
+		rt.Log.Warn().Msgf("deleting runtime dir for unloadable container: %s", err)
+		return os.RemoveAll(filepath.Join(rt.Root, containerID))
+	}
 	state, err := c.ContainerState()
 	if err != nil {
 		return err

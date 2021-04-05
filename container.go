@@ -59,13 +59,6 @@ func (c Container) RuntimePath(subPath ...string) string {
 	return filepath.Join(c.runtimeDir, filepath.Join(subPath...))
 }
 
-func (c Container) runtimeDirExists() bool {
-	if _, err := os.Stat(c.runtimeDir); err == nil {
-		return true
-	}
-	return false
-}
-
 // Container is the runtime state of a container instance.
 type Container struct {
 	LinuxContainer *lxc.Container `json:"-"`
@@ -78,10 +71,6 @@ type Container struct {
 }
 
 func (c *Container) create() error {
-	if c.runtimeDirExists() {
-		return ErrExist
-	}
-
 	if err := os.MkdirAll(c.runtimeDir, 0777); err != nil {
 		return fmt.Errorf("failed to create container dir: %w", err)
 	}
@@ -107,9 +96,6 @@ func (c *Container) create() error {
 }
 
 func (c *Container) load() error {
-	if !c.runtimeDirExists() {
-		return ErrNotExist
-	}
 
 	err := decodeFileJSON(c, c.RuntimePath("container.json"))
 	if err != nil {

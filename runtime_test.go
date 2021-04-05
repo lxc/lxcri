@@ -205,7 +205,7 @@ func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 	require.NoError(t, err)
 	require.Equal(t, specs.StateStopped, state.Status)
 
-	err = rt.Delete(ctx, c, false)
+	err = rt.Delete(ctx, c.ContainerID, false)
 	require.NoError(t, err)
 
 	state, err = c.State()

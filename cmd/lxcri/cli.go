@@ -437,20 +437,11 @@ var deleteCmd = cli.Command{
 }
 
 func doDelete(ctxcli *cli.Context) error {
-	c, err := clxc.Load(clxc.cfg.ContainerID)
-	if err == lxcri.ErrNotExist {
-		clxc.Log.Info().Msg("container does not exist")
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
 	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	return clxc.Delete(ctx, c, ctxcli.Bool("force"))
+	return clxc.Delete(ctx, clxc.cfg.ContainerID, ctxcli.Bool("force"))
 }
 
 var execCmd = cli.Command{

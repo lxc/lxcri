@@ -61,7 +61,6 @@ func (rt *Runtime) keepEnv(names ...string) {
 // Unsupported runtime features are disabled and a warning message is logged.
 // Init must be called once for a runtime instance before calling any other method.
 func (rt *Runtime) Init() error {
-
 	rt.rootfsMount = filepath.Join(rt.Root, ".rootfs")
 	if err := os.MkdirAll(rt.rootfsMount, 0777); err != nil {
 		return errorf("failed to create directory for rootfs mount %s: %w", rt.rootfsMount, err)
