@@ -70,6 +70,31 @@ type Container struct {
 	runtimeDir string
 }
 
+// Return true if init user is mapped to runtime user
+func (c *Container) isUserUID() bool {
+	cuid := uint32(os.Getuid())
+	puid := c.Process.User.UID
+
+	// no id mappings
+	if len(c.Linux.UIDMappings) == 0 {
+		return puid == cuid
+	}
+
+	for _, idmap := range c.Linux.UIDMappings {
+		if idmap.Size < 1 {
+			continue
+		}
+		maxID := idmap.ContainerID + idmap.Size - 1
+		// check if c.Process.UID is contained in the mapping
+		if (puid >= idmap.ContainerID) && (puid <= maxID) {
+			offset := puid - idmap.ContainerID
+			hostid := idmap.HostID + offset
+			return hostid == cuid
+		}
+	}
+	return false
+}
+
 func (c *Container) create() error {
 	if err := os.MkdirAll(c.runtimeDir, 0777); err != nil {
 		return fmt.Errorf("failed to create container dir: %w", err)

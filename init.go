@@ -32,31 +32,6 @@ func createFifo(dst string, mode uint32) error {
 	return nil
 }
 
-// Return true if init user is mapped to runtime user
-func (c *Container) IsUserUID() bool {
-	cuid := uint32(os.Getuid())
-	puid := c.Process.User.UID
-
-	// no id mappings
-	if len(c.Linux.UIDMappings) == 0 {
-		return puid == cuid
-	}
-
-	for _, idmap := range c.Linux.UIDMappings {
-		if idmap.Size < 1 {
-			continue
-		}
-		maxID := idmap.ContainerID + idmap.Size - 1
-		// check if c.Process.UID is contained in the mapping
-		if (puid >= idmap.ContainerID) && (puid <= maxID) {
-			offset := puid - idmap.ContainerID
-			hostid := idmap.HostID + offset
-			return hostid == cuid
-		}
-	}
-	return false
-}
-
 func configureInit(rt *Runtime, c *Container) error {
 	runtimeInitDir := c.RuntimePath(initDir)
 	//rootfsInitDir := filepath.Join(c.Root.Path, initDir)
@@ -85,7 +60,7 @@ func configureInit(rt *Runtime, c *Container) error {
 	}
 
 	// create files required for lxcri-init
-	if c.IsUserUID() {
+	if c.isUserUID() {
 		if err := createFifo(c.syncFifoPath(), 0600); err != nil {
 			return fmt.Errorf("failed to create sync fifo: %w", err)
 		}
