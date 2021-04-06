@@ -38,9 +38,22 @@ jobs:
           sudo apt-get install -qq lxc-dev musl musl-tools libc6-dev pkg-config make
 
       - name: Build
-        run: make build
+        run: |
+          make build
+          sudo -E "PATH=$PATH" make install
 
-      - name: Run tests
+      - name: Test unprivileged
+        run: |
+          # keep PATH to use go installed through actions/setup-go@v2
+          # and not the system version (which is currently go 1.15.x)
+          sudo /bin/sh -c "echo '$(whoami):1000:1' >> /etc/subuid"
+          sudo /bin/sh -c "echo '$(whoami):20000:65536' >> /etc/subuid"
+          sudo /bin/sh -c "echo '$(whoami):1000:1' >> /etc/subgid"
+          sudo /bin/sh -c "echo '$(whoami):20000:65536' >> /etc/subgid"
+          sudo chown -R $(whoami):$(whoami) /sys/fs/cgroup/unified$(cat /proc/self/cgroup  | grep '^0:' | cut -d: -f3)
+          make test
+
+      - name: Test privileged
         run: |
           # keep PATH to use go installed through actions/setup-go@v2
           # and not the system version (which is currently go 1.15.x)
