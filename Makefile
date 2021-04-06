@@ -31,7 +31,7 @@ fmt:
 
 .PHONY: test
 test: build
-	go build ./cmd/lxcri-test
+	go build -a ./cmd/lxcri-test
 	go test --count 1 -v ./...
 
 build: $(BINS) $(LIBEXEC_BINS)

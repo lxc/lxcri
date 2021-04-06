@@ -42,5 +42,7 @@ jobs:
 
       - name: Run tests
         run: |
-          sudo make install
-          sudo make test
+          # keep PATH to use go installed through actions/setup-go@v2
+          # and not the system version (which is currently go 1.15.x)
+          sudo -E "PATH=$PATH" make install
+          sudo -E "PATH=$PATH" make test
