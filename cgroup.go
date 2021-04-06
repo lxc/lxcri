@@ -294,6 +294,18 @@ func loadCgroup(cgName string) (*cgroupInfo, error) {
 }
 
 func killCgroupProcs(cgroupName string, sig unix.Signal) error {
+
+	cg, err := loadCgroup(cgroupName)
+	if err != nil {
+		return fmt.Errorf("failed to load cgroup %s: %w", cgroupName, err)
+	}
+	for _, pid := range cg.Procs {
+		err := unix.Kill(pid, sig)
+		if err != nil && err != unix.ESRCH {
+			return fmt.Errorf("failed to kill %d: %w", pid, err)
+		}
+	}
+
 	dirName := filepath.Join(cgroupRoot, cgroupName)
 	// #nosec
 	dir, err := os.Open(dirName)
@@ -312,27 +324,25 @@ func killCgroupProcs(cgroupName string, sig unix.Signal) error {
 	}
 	for _, i := range entries {
 		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
-			cg, err := loadCgroup(filepath.Join(cgroupName, i.Name()))
+			err := killCgroupProcs(filepath.Join(cgroupName, i.Name()), sig)
 			if err != nil {
-				return fmt.Errorf("failed to load cgroup %s: %w", i.Name(), err)
-			}
-			for _, pid := range cg.Procs {
-				err := unix.Kill(pid, sig)
-				if err != nil && err != unix.ESRCH {
-					return fmt.Errorf("failed to kill %d: %w", pid, err)
-				}
+				return err
 			}
 		}
 	}
 	return nil
 }
 
+// see http://morningcoffee.io/killing-a-process-and-all-of-its-descendants.html
 // TODO maybe use polling instead
 // fds := []unix.PollFd{{Fd: int32(f.Fd()), Events: unix.POLLIN}}
 // n, err := unix.Poll(fds, timeout)
 func drainCgroup(ctx context.Context, cgroupName string, sig unix.Signal) error {
 	p := filepath.Join(cgroupRoot, cgroupName, "cgroup.events")
 	f, err := os.OpenFile(p, os.O_RDONLY, 0)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -391,7 +401,7 @@ func deleteCgroup(cgroupName string) error {
 			p := filepath.Join(dirName, i.Name())
 			err := unix.Rmdir(p)
 			if err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("failed to dir %s: %w", p, err)
+				return fmt.Errorf("failed to rmdir %s: %w", p, err)
 			}
 		}
 	}

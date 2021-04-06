@@ -267,8 +267,9 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 		// Since every container get's it's own cgroup, we can
 		// try to kill all processes within the containers cgroup tree.
 		if err := drainCgroup(ctx, c.CgroupDir, unix.SIGKILL); err != nil {
-			c.Log.Warn().Msgf("draining cgroup failed: %s", err)
+			rt.Log.Warn().Msgf("draining cgroup failed: %s", err)
 		}
+		rt.Log.Info().Msg("cgroup drained")
 	}
 
 	if err := c.destroy(); err != nil {

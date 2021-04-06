@@ -259,6 +259,7 @@ func (c *Container) kill(ctx context.Context, signum unix.Signal) error {
 	if pid <= 1 {
 		return nil
 	}
+
 	c.Log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
 	err = unix.Kill(pid, signum)
 	if err == unix.ESRCH {
