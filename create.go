@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -33,6 +34,18 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	}
 	if c.OnCreate != nil {
 		c.OnCreate(ctx, c)
+	}
+
+	if cfg.Spec.Hooks != nil {
+		for i, hook := range cfg.Spec.Hooks.CreateRuntime {
+			cmd := exec.Command(hook.Path, hook.Args...)
+			cmd.Env = hook.Env
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				rt.Log.Error().Msgf("failed to run hook CreateRuntime[%d]: %s", i, err)
+			}
+			println(string(out))
+		}
 	}
 
 	if err := configureContainer(rt, c); err != nil {
