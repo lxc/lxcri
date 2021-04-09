@@ -20,13 +20,22 @@ var defaultDevices = []specs.LinuxDevice{
 	// See Documentation/filesystems/devpts.txt in the Linux kernel source tree for details.`
 }
 
-func isDeviceEnabled(c *Container, dev specs.LinuxDevice) bool {
-	for _, specDev := range c.Linux.Devices {
-		if specDev.Path == dev.Path {
-			return true
+func isDeviceEnabled(spec *specs.Spec, dev specs.LinuxDevice) (bool, error) {
+	for _, d := range spec.Linux.Devices {
+		if d.Path == dev.Path {
+			if d.Type != dev.Type {
+				return false, errorf("%s type mismatch (expected %s but was %s)", dev, dev.Type, d.Type)
+			}
+			if d.Major != dev.Major {
+				return false, errorf("%s major number mismatch (expected %d but was %d)", dev, dev.Major, d.Major)
+			}
+			if d.Minor != dev.Minor {
+				return false, errorf("%s major number mismatch (expected %d but was %d)", dev, dev.Major, d.Major)
+			}
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 func addDevice(spec *specs.Spec, dev specs.LinuxDevice, mode os.FileMode, uid uint32, gid uint32, access string) {
@@ -47,7 +56,7 @@ func addDevicePerms(spec *specs.Spec, devType string, major *int64, minor *int64
 // crio can add devices to containers, but this does not work for privileged containers.
 // See https://github.com/cri-o/cri-o/blob/a705db4c6d04d7c14a4d59170a0ebb4b30850675/server/container_create_linux.go#L45
 // TODO file an issue on cri-o (at least for support)
-func ensureDefaultDevices(spec *specs.Spec) {
+func ensureDefaultDevices(spec *specs.Spec) error {
 	mode := os.FileMode(0666)
 	var uid, gid uint32 = spec.Process.User.UID, spec.Process.User.GID
 
@@ -59,10 +68,15 @@ func ensureDefaultDevices(spec *specs.Spec) {
 
 	// add missing default devices
 	for _, dev := range defaultDevices {
-		if !isDeviceEnabled(spec, dev) {
+		exist, err := isDeviceEnabled(spec, dev)
+		if err != nil {
+			return err
+		}
+		if !exist {
 			addDevice(spec, dev, mode, uid, gid, "rwm")
 		}
 	}
+	return nil
 }
 
 func createDeviceFile(dst string, spec *specs.Spec) error {

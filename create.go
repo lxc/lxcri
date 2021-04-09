@@ -249,7 +249,9 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	ensureDefaultDevices(c.Spec)
+	if err := ensureDefaultDevices(c.Spec); err != nil {
+		return err
+	}
 
 	if rt.privileged {
 		// devices are created with mknod in lxcri-hook
