@@ -32,6 +32,12 @@ func createFifo(dst string, mode uint32) error {
 	return nil
 }
 
+// runAsRuntimeUser returns true if container process is started as runtime user.
+func runAsRuntimeUser(spec *specs.Spec) bool {
+	puid := unmapContainerID(spec.Process.User.UID, spec.Linux.UIDMappings)
+	return puid == uint32(os.Getuid())
+}
+
 func configureInit(rt *Runtime, c *Container) error {
 	runtimeInitDir := c.RuntimePath(initDir)
 	//rootfsInitDir := filepath.Join(c.Root.Path, initDir)
@@ -60,7 +66,7 @@ func configureInit(rt *Runtime, c *Container) error {
 	}
 
 	// create files required for lxcri-init
-	if rt.runAsRuntimeUser(c) {
+	if runAsRuntimeUser(c.Spec) {
 		if err := createFifo(c.syncFifoPath(), 0600); err != nil {
 			return fmt.Errorf("failed to create sync fifo: %w", err)
 		}

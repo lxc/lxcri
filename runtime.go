@@ -112,12 +112,6 @@ func (rt *Runtime) Load(containerID string) (*Container, error) {
 	return c, nil
 }
 
-// runAsRuntimeUser returns true if container process is started as runtime user.
-func (rt *Runtime) runAsRuntimeUser(c *Container) bool {
-	puid := unmapContainerID(c.Process.User.UID, c.Linux.UIDMappings)
-	return puid == uint32(os.Getuid())
-}
-
 // Start starts the given container.
 // Start simply unblocks the container init process `lxcri-init`,
 // which then executes the actuall container process.
