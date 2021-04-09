@@ -176,31 +176,46 @@ func (c *Container) wait(ctx context.Context, state lxc.State) bool {
 	}
 }
 
-// State returns the OCI specs.State value for the containers process.
+// State wraps specs.State and adds runtime specific state.
+type State struct {
+	ContainerState string
+	RuntimePath    string
+	SpecState      specs.State
+}
+
+// State returns the runtime state of the containers process.
 // The State.Pid value is the PID of the liblxc
 // container monitor process (lxcri-start).
-func (c *Container) State() (*specs.State, error) {
+func (c *Container) State() (*State, error) {
 	status, err := c.ContainerState()
 	if err != nil {
 		return nil, errorf("failed go get container status: %w", err)
 	}
 
-	state := &specs.State{
-		Version:     specs.Version,
-		ID:          c.ContainerID,
-		Bundle:      c.BundlePath,
-		Pid:         c.Pid,
-		Annotations: c.Spec.Annotations,
-		Status:      status,
+	state := &State{
+		ContainerState: c.LinuxContainer.State().String(),
+		RuntimePath:    c.RuntimePath(),
+		SpecState: specs.State{
+			Version:     c.Spec.Version,
+			ID:          c.ContainerID,
+			Bundle:      c.RuntimePath(),
+			Pid:         c.Pid,
+			Annotations: c.Spec.Annotations,
+			Status:      status,
+		},
 	}
+
 	return state, nil
 }
 
 // ContainerState returns the current state of the container process,
 // as defined by the OCI runtime spec.
 func (c *Container) ContainerState() (specs.ContainerState, error) {
-	state := c.LinuxContainer.State()
-	switch state {
+	return c.state(c.LinuxContainer.State())
+}
+
+func (c *Container) state(s lxc.State) (specs.ContainerState, error) {
+	switch s {
 	case lxc.STOPPED:
 		return specs.StateStopped, nil
 	case lxc.STARTING:
@@ -208,7 +223,7 @@ func (c *Container) ContainerState() (specs.ContainerState, error) {
 	case lxc.RUNNING, lxc.STOPPING, lxc.ABORTING, lxc.FREEZING, lxc.FROZEN, lxc.THAWED:
 		return c.getContainerInitState()
 	default:
-		return specs.StateStopped, fmt.Errorf("unsupported lxc container state %q", state)
+		return specs.StateStopped, fmt.Errorf("unsupported lxc container state %q", s)
 	}
 }
 

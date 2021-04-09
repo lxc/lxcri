@@ -367,7 +367,7 @@ func doState(unused *cli.Context) error {
 	if err != nil {
 		return err
 	}
-	j, err := json.Marshal(state)
+	j, err := json.Marshal(state.SpecState)
 	if err != nil {
 		return fmt.Errorf("failed to marshal json: %w", err)
 	}

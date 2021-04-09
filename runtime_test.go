@@ -194,14 +194,14 @@ func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 
 	state, err := c.State()
 	require.NoError(t, err)
-	require.Equal(t, specs.StateCreated, state.Status)
+	require.Equal(t, specs.StateCreated, state.SpecState.Status)
 
 	err = rt.Start(ctx, c)
 	require.NoError(t, err)
 
 	state, err = c.State()
 	require.NoError(t, err)
-	require.Equal(t, specs.StateRunning, state.Status)
+	require.Equal(t, specs.StateRunning, state.SpecState.Status)
 
 	// Must wait otherwise init process signal handlers may not
 	// yet be established and then sending SIGHUP will kill the container
@@ -211,7 +211,7 @@ func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 
 	state, err = c.State()
 	require.NoError(t, err)
-	require.Equal(t, specs.StateRunning, state.Status)
+	require.Equal(t, specs.StateRunning, state.SpecState.Status)
 
 	time.Sleep(time.Millisecond * 500)
 
@@ -224,14 +224,14 @@ func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 
 	state, err = c.State()
 	require.NoError(t, err)
-	require.Equal(t, specs.StateStopped, state.Status)
+	require.Equal(t, specs.StateStopped, state.SpecState.Status)
 
 	err = rt.Delete(ctx, c.ContainerID, false)
 	require.NoError(t, err)
 
 	state, err = c.State()
 	require.NoError(t, err)
-	require.Equal(t, specs.StateStopped, state.Status)
+	require.Equal(t, specs.StateStopped, state.SpecState.Status)
 
 	t.Log("done")
 

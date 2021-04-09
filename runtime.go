@@ -129,8 +129,8 @@ func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 	if err != nil {
 		return errorf("failed to get container state: %w", err)
 	}
-	if state.Status != specs.StateCreated {
-		return fmt.Errorf("invalid container state. expected %q, but was %q", specs.StateCreated, state.Status)
+	if state.SpecState.Status != specs.StateCreated {
+		return fmt.Errorf("invalid container state. expected %q, but was %q", specs.StateCreated, state.SpecState.Status)
 	}
 
 	return c.start(ctx)
