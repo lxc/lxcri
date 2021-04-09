@@ -60,29 +60,34 @@ func decodeFileJSON(obj interface{}, src string) error {
 	err = json.NewDecoder(f).Decode(obj)
 	if err != nil {
 		f.Close()
-		return fmt.Errorf("failed to decode JSON from %s: %w", src, err)
+		return errorf("failed to decode JSON from %s: %w", src, err)
 	}
 	err = f.Close()
 	if err != nil {
-		return fmt.Errorf("failed to close %s: %w", src, err)
+		return errorf("failed to close %s: %w", src, err)
 	}
 	return nil
 }
 
-func encodeFileJSON(dst string, obj interface{}, flags int, mode uint32) error {
-	f, err := os.OpenFile(dst, flags, os.FileMode(mode))
+func encodeFileJSON(dst string, obj interface{}, flags int, mode os.FileMode) error {
+	f, err := os.OpenFile(dst, flags, mode)
 	if err != nil {
 		return err
 	}
 	enc := json.NewEncoder(f)
-	//enc.SetIndent("", "  ")
 	err = enc.Encode(obj)
 	if err != nil {
 		f.Close()
-		return fmt.Errorf("failed to encode JSON to %s: %w", dst, err)
+		return errorf("failed to encode JSON to %s: %w", dst, err)
 	}
+	err = f.Close()
 	if err != nil {
-		return fmt.Errorf("failed to close %s: %w", dst, err)
+		return errorf("failed to close %s: %w", dst, err)
+	}
+	// Use chmod because initial mode is affected by umask and flags.
+	err = os.Chmod(dst, mode)
+	if err != nil {
+		return errorf("failed to 'chmod %o %s': %w", mode, dst, err)
 	}
 	return nil
 }
