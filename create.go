@@ -25,6 +25,11 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	c := &Container{ContainerConfig: cfg}
 	c.runtimeDir = filepath.Join(rt.Root, c.ContainerID)
 
+	if cfg.Spec.Annotations == nil {
+		cfg.Spec.Annotations = make(map[string]string)
+	}
+	cfg.Spec.Annotations["org.linuxcontainers.lxc.ConfigFile"] = c.RuntimePath("config")
+
 	if err := c.create(); err != nil {
 		return c, errorf("failed to create container: %w", err)
 	}
