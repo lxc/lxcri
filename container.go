@@ -392,17 +392,17 @@ func (c *Container) readFifo() error {
 // The given process is started and the process PID is returned.
 // It's up to the caller to wait for the process to exit using the returned PID.
 // The container state must be either specs.StateCreated or specs.StateRunning
-func (c *Container) ExecDetached(args []string, proc *specs.Process) (pid int, err error) {
+func (c *Container) ExecDetached(proc *specs.Process) (pid int, err error) {
 	opts, err := attachOptions(proc, c.Spec.Linux.Namespaces)
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}
 
-	c.Log.Info().Strs("args", args).
+	c.Log.Info().Strs("args", proc.Args).
 		Int("uid", opts.UID).Int("gid", opts.GID).
 		Ints("groups", opts.Groups).Msg("execute cmd")
 
-	pid, err = c.LinuxContainer.RunCommandNoWait(args, opts)
+	pid, err = c.LinuxContainer.RunCommandNoWait(proc.Args, opts)
 	if err != nil {
 		return pid, errorf("failed to run exec cmd detached: %w", err)
 	}
@@ -412,12 +412,12 @@ func (c *Container) ExecDetached(args []string, proc *specs.Process) (pid int, e
 // Exec executes the given process spec within the container.
 // It waits for the process to exit and returns its exit code.
 // The container state must either be specs.StateCreated or specs.StateRunning
-func (c *Container) Exec(args []string, proc *specs.Process) (exitStatus int, err error) {
+func (c *Container) Exec(proc *specs.Process) (exitStatus int, err error) {
 	opts, err := attachOptions(proc, c.Spec.Linux.Namespaces)
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}
-	exitStatus, err = c.LinuxContainer.RunCommandStatus(args, opts)
+	exitStatus, err = c.LinuxContainer.RunCommandStatus(proc.Args, opts)
 	if err != nil {
 		return exitStatus, errorf("failed to run exec cmd: %w", err)
 	}

@@ -447,13 +447,13 @@ func doDelete(ctxcli *cli.Context) error {
 var execCmd = cli.Command{
 	Name:      "exec",
 	Usage:     "execute a new process in a running container",
-	ArgsUsage: "<containerID>",
+	ArgsUsage: "<containerID> [COMMAND] [args...]",
 	Action:    doExec,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:    "process",
 			Aliases: []string{"p"},
-			Usage:   "path to process json",
+			Usage:   "path to process json - cmd and args are ignored if set",
 			Value:   "",
 		},
 		&cli.StringFlag{
@@ -504,12 +504,9 @@ func doExec(ctxcli *cli.Context) error {
 		clxc.Log.Warn().Msg("detaching process but pid-file value is unset")
 	}
 
-	procSpec, err := lxcri.ReadSpecProcessJSON(ctxcli.String("process"))
+	procSpec, err := lxcri.LoadSpecProcess(ctxcli.String("process"), args)
 	if err != nil {
 		return err
-	}
-	if procSpec != nil {
-		args = procSpec.Args
 	}
 
 	c, err := clxc.Load(clxc.cfg.ContainerID)
@@ -518,7 +515,7 @@ func doExec(ctxcli *cli.Context) error {
 	}
 
 	if detach {
-		pid, err := c.ExecDetached(args, procSpec)
+		pid, err := c.ExecDetached(procSpec)
 		if err != nil {
 			return err
 		}
@@ -526,7 +523,7 @@ func doExec(ctxcli *cli.Context) error {
 			return createPidFile(pidFile, pid)
 		}
 	} else {
-		status, err := c.Exec(args, procSpec)
+		status, err := c.Exec(procSpec)
 		if err != nil {
 			return err
 		}

@@ -296,6 +296,19 @@ func ReadSpecProcessJSON(src string) (*specs.Process, error) {
 	return proc, err
 }
 
+// LoadSpecProcess calls ReadSpecProcessJSON if the given specProcessPath is not empty,
+// otherwise it creates a new specs.Process from the given args.
+// It's an error if both values are empty.
+func LoadSpecProcess(specProcessPath string, args []string) (*specs.Process, error) {
+	if specProcessPath != "" {
+		return ReadSpecProcessJSON(specProcessPath)
+	}
+	if len(args) == 0 {
+		return nil, fmt.Errorf("spec process path and args are empty")
+	}
+	return &specs.Process{Cwd: "/", Args: args}, nil
+}
+
 // NewSpec returns a minimal spec.Spec instance, which is
 // required to run the given process within a container
 // using the given rootfs.
