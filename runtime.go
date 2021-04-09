@@ -304,6 +304,7 @@ func NewSpec(rootfs string, cmd string, args ...string) *specs.Spec {
 	proc := NewSpecProcess(cmd, args...)
 
 	return &specs.Spec{
+		Version: specs.Version,
 		Linux: &specs.Linux{
 			Namespaces: []specs.LinuxNamespace{
 				// isolate all namespaces by default
