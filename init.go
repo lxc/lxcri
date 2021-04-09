@@ -60,7 +60,7 @@ func configureInit(rt *Runtime, c *Container) error {
 	}
 
 	// create files required for lxcri-init
-	if c.isUserUID() {
+	if rt.runAsRuntimeUser(c) {
 		if err := createFifo(c.syncFifoPath(), 0600); err != nil {
 			return fmt.Errorf("failed to create sync fifo: %w", err)
 		}

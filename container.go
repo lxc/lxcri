@@ -73,29 +73,25 @@ type Container struct {
 	runtimeDir string
 }
 
-// Return true if init user is mapped to runtime user
-func (c *Container) isUserUID() bool {
-	cuid := uint32(os.Getuid())
-	puid := c.Process.User.UID
-
-	// no id mappings
-	if len(c.Linux.UIDMappings) == 0 {
-		return puid == cuid
-	}
-
-	for _, idmap := range c.Linux.UIDMappings {
+// unmapContainerID returns the (user/group) ID to which the given
+// ID is mapped to by the given idmaps.
+// The returned id will be equal to the given id
+// if it is not mapped by the given idmaps.
+func unmapContainerID(id uint32, idmaps []specs.LinuxIDMapping) uint32 {
+	for _, idmap := range idmaps {
 		if idmap.Size < 1 {
 			continue
 		}
 		maxID := idmap.ContainerID + idmap.Size - 1
 		// check if c.Process.UID is contained in the mapping
-		if (puid >= idmap.ContainerID) && (puid <= maxID) {
-			offset := puid - idmap.ContainerID
+		if (id >= idmap.ContainerID) && (id <= maxID) {
+			offset := id - idmap.ContainerID
 			hostid := idmap.HostID + offset
-			return hostid == cuid
+			return hostid
 		}
 	}
-	return false
+	// uid is not mapped
+	return id
 }
 
 func (c *Container) create() error {
