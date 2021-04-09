@@ -34,6 +34,9 @@ func newRuntime(t *testing.T) *Runtime {
 		Root:       runtimeRoot,
 		LibexecDir: os.Getenv("LIBEXEC_DIR"),
 	}
+	if rt.LibexecDir == "" {
+		rt.LibexecDir = "/usr/local/libexec/lxcri"
+	}
 	//ExecInit = "lxcri-debug"
 	require.NoError(t, rt.Init())
 	return rt
@@ -210,7 +213,7 @@ func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 	require.NoError(t, err)
 	require.Equal(t, specs.StateRunning, state.Status)
 
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Millisecond * 500)
 
 	// SIGHUP by default terminates a process if it is not ignored or catched by
 	// a signal handler
