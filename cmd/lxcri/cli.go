@@ -293,7 +293,7 @@ func doCreate(ctxcli *cli.Context) error {
 	if err := clxc.Init(); err != nil {
 		return err
 	}
-	specPath := filepath.Join(clxc.cfg.BundlePath, "config.json")
+	specPath := filepath.Join(clxc.cfg.BundlePath, lxcri.BundleConfigFile)
 	spec, err := lxcri.ReadSpecJSON(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)

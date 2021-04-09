@@ -52,7 +52,9 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return c, errorf("failed to configure container: %w", err)
 	}
 
-	specPath := c.RuntimePath("spec.json")
+	// Seralize the modified spec.Spec separately, to make it available for
+	// runtime hooks.
+	specPath := c.RuntimePath(BundleConfigFile)
 	err := encodeFileJSON(specPath, cfg.Spec, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0440)
 	if err != nil {
 		return c, err
@@ -62,7 +64,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return c, errorf("failed to run container process: %w", err)
 	}
 
-	p := c.RuntimePath("container.json")
+	p := c.RuntimePath("lxcri.json")
 	err = encodeFileJSON(p, c, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0440)
 	if err != nil {
 		return c, err

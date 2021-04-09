@@ -15,6 +15,12 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const (
+	// BundleConfigFile is the name of the OCI container bundle config file.
+	// The content is the JSON encoded specs.Spec.
+	BundleConfigFile = "config.json"
+)
+
 // Required runtime executables loaded from Runtime.LibexecDir
 var (
 	// ExecStart starts the liblxc monitor process, similar to lxc-start
