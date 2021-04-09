@@ -55,9 +55,9 @@ func cloneFlags(namespaces []specs.LinuxNamespace) (int, error) {
 
 func configureNamespaces(c *Container) error {
 	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
-	cloneNamespaces := make([]string, 0, len(c.Linux.Namespaces))
+	cloneNamespaces := make([]string, 0, len(c.Spec.Linux.Namespaces))
 
-	for _, ns := range c.Linux.Namespaces {
+	for _, ns := range c.Spec.Linux.Namespaces {
 		if _, seen := seenNamespaceTypes[ns.Type]; seen {
 			return fmt.Errorf("duplicate namespace %s", ns.Type)
 		}

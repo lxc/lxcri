@@ -19,7 +19,7 @@ type ContainerConfig struct {
 	// The modified/updated Spec used to generate the liblxc config.
 	// It's serialized to a separate file to allow external tool access,
 	// without the need to import lxcri.
-	*specs.Spec `json:"-"`
+	Spec *specs.Spec `json:"-"`
 
 	// ContainerID is the identifier of the container.
 	// The ContainerID is used as name for the containers runtime directory.
@@ -194,7 +194,7 @@ func (c *Container) State() (*specs.State, error) {
 		ID:          c.ContainerID,
 		Bundle:      c.BundlePath,
 		Pid:         c.Pid,
-		Annotations: c.Annotations,
+		Annotations: c.Spec.Annotations,
 		Status:      status,
 	}
 	return state, nil
@@ -393,7 +393,7 @@ func (c *Container) readFifo() error {
 // It's up to the caller to wait for the process to exit using the returned PID.
 // The container state must be either specs.StateCreated or specs.StateRunning
 func (c *Container) ExecDetached(args []string, proc *specs.Process) (pid int, err error) {
-	opts, err := attachOptions(proc, c.Linux.Namespaces)
+	opts, err := attachOptions(proc, c.Spec.Linux.Namespaces)
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}
@@ -413,7 +413,7 @@ func (c *Container) ExecDetached(args []string, proc *specs.Process) (pid int, e
 // It waits for the process to exit and returns its exit code.
 // The container state must either be specs.StateCreated or specs.StateRunning
 func (c *Container) Exec(args []string, proc *specs.Process) (exitStatus int, err error) {
-	opts, err := attachOptions(proc, c.Linux.Namespaces)
+	opts, err := attachOptions(proc, c.Spec.Linux.Namespaces)
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}

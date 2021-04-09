@@ -48,8 +48,8 @@ func configureMounts(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	for i := range c.Mounts {
-		ms := c.Mounts[i]
+	for i := range c.Spec.Mounts {
+		ms := c.Spec.Mounts[i]
 		if ms.Type == "cgroup" {
 			// TODO check if hieararchy is cgroup v2 only (unified mode)
 			ms.Type = "cgroup2"
@@ -62,15 +62,15 @@ func configureMounts(rt *Runtime, c *Container) error {
 
 		// TODO replace with symlink.FollowSymlinkInScope(filepath.Join(rootfs, "/etc/passwd"), rootfs) ?
 		// "github.com/docker/docker/pkg/symlink"
-		mountDest, err := resolveMountDestination(c.Root.Path, ms.Destination)
+		mountDest, err := resolveMountDestination(c.Spec.Root.Path, ms.Destination)
 		// Intermediate path resolution failed. This is not an error, since
 		// the remaining directories / files are automatically created (create=dir|file)
 		rt.Log.Trace().Err(err).Str("file", ms.Destination).Str("target", mountDest).Msg("resolve mount destination")
 
 		// Check whether the resolved destination of the target link escapes the rootfs.
-		if !filepath.HasPrefix(mountDest, c.Root.Path) {
+		if !filepath.HasPrefix(mountDest, c.Spec.Root.Path) {
 			// refuses mount destinations that escape from rootfs
-			return fmt.Errorf("resolved mount target path %s escapes from container root %s", mountDest, c.Root.Path)
+			return fmt.Errorf("resolved mount target path %s escapes from container root %s", mountDest, c.Spec.Root.Path)
 		}
 
 		ms.Destination = mountDest
@@ -99,7 +99,7 @@ func configureMounts(rt *Runtime, c *Container) error {
 // TODO check whether this is  desired behaviour in lxc ?
 // Shouldn't the rootfs should be mounted readonly after all mounts destination directories have been created ?
 // https://github.com/lxc/lxc/issues/1702
-func createMountDestination(spec *Container, ms *specs.Mount) error {
+func createMountDestination(c *Container, ms *specs.Mount) error {
 	info, err := os.Stat(ms.Source)
 
 	// source for bind mount must exist
@@ -114,14 +114,14 @@ func createMountDestination(spec *Container, ms *specs.Mount) error {
 
 	if err != nil || info.IsDir() {
 		ms.Options = append(ms.Options, "create=dir")
-		if spec.Root.Readonly {
+		if c.Spec.Root.Readonly {
 			return os.MkdirAll(ms.Destination, 0755)
 		}
 		return nil
 	}
 
 	ms.Options = append(ms.Options, "create=file")
-	if spec.Root.Readonly {
+	if c.Spec.Root.Readonly {
 		if err := os.MkdirAll(filepath.Dir(ms.Destination), 0755); err != nil {
 			return fmt.Errorf("failed to create mount destination dir: %w", err)
 		}

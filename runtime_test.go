@@ -54,7 +54,7 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	spec := NewSpec(rootfs, filepath.Join("/"+filepath.Base(cmd)))
 	id := filepath.Base(rootfs)
 	cfg := ContainerConfig{ContainerID: id, Spec: spec, Log: log.ConsoleLogger(true)}
-	cfg.Linux.CgroupsPath = "" // use /proc/self/cgroup"
+	cfg.Spec.Linux.CgroupsPath = "" // use /proc/self/cgroup"
 	cfg.LogFile = "/dev/stderr"
 	cfg.LogLevel = "trace"
 
@@ -66,11 +66,11 @@ func TestEmptyNamespaces(t *testing.T) {
 	defer os.RemoveAll(rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Root.Path)
+	defer os.RemoveAll(cfg.Spec.Root.Path)
 
 	// Clearing all namespaces should not work,
 	// since the mount namespace must never be shared with the host.
-	cfg.Linux.Namespaces = cfg.Linux.Namespaces[0:0]
+	cfg.Spec.Linux.Namespaces = cfg.Spec.Linux.Namespaces[0:0]
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
@@ -83,7 +83,7 @@ func TestEmptyNamespaces(t *testing.T) {
 		Type: specs.PIDNamespace,
 		Path: fmt.Sprintf("/proc/%d/ns/pid", os.Getpid()),
 	}
-	cfg.Linux.Namespaces = append(cfg.Linux.Namespaces, pidns)
+	cfg.Spec.Linux.Namespaces = append(cfg.Spec.Linux.Namespaces, pidns)
 
 	c, err = rt.Create(ctx, cfg)
 	require.Error(t, err)
@@ -99,7 +99,7 @@ func TestRuntimePrivileged(t *testing.T) {
 	defer os.RemoveAll(rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Root.Path)
+	defer os.RemoveAll(cfg.Spec.Root.Path)
 
 	testRuntime(t, rt, cfg)
 }
@@ -122,23 +122,23 @@ func TestRuntimeUnprivileged(t *testing.T) {
 	defer os.RemoveAll(rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Root.Path)
+	defer os.RemoveAll(cfg.Spec.Root.Path)
 
 	// The container UID must have full access to the rootfs.
 	// MkdirTemp sets directory permissions to 0700.
 	// If we the container UID (0) / or GID are not mapped to the owner (creator) of the rootfs,
 	// then the rootfs and runtime directory permissions must be expanded.
 
-	err := unix.Chmod(cfg.Root.Path, 0777)
+	err := unix.Chmod(cfg.Spec.Root.Path, 0777)
 	require.NoError(t, err)
 
 	err = unix.Chmod(rt.Root, 0755)
 	require.NoError(t, err)
 
-	cfg.Linux.UIDMappings = []specs.LinuxIDMapping{
+	cfg.Spec.Linux.UIDMappings = []specs.LinuxIDMapping{
 		specs.LinuxIDMapping{ContainerID: 0, HostID: 20000, Size: 65536},
 	}
-	cfg.Linux.GIDMappings = []specs.LinuxIDMapping{
+	cfg.Spec.Linux.GIDMappings = []specs.LinuxIDMapping{
 		specs.LinuxIDMapping{ContainerID: 0, HostID: 20000, Size: 65536},
 	}
 
@@ -150,14 +150,14 @@ func TestRuntimeUnprivileged2(t *testing.T) {
 	defer os.RemoveAll(rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Root.Path)
+	defer os.RemoveAll(cfg.Spec.Root.Path)
 
 	if os.Getuid() != 0 {
-		cfg.Linux.UIDMappings = []specs.LinuxIDMapping{
+		cfg.Spec.Linux.UIDMappings = []specs.LinuxIDMapping{
 			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getuid()), Size: 1},
 			specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
 		}
-		cfg.Linux.GIDMappings = []specs.LinuxIDMapping{
+		cfg.Spec.Linux.GIDMappings = []specs.LinuxIDMapping{
 			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getgid()), Size: 1},
 			specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
 		}

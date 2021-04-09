@@ -48,7 +48,7 @@ func configureInit(rt *Runtime, c *Container) error {
 		return fmt.Errorf("failed to create runtime init dir %q: %w", runtimeInitDir, err)
 	}
 
-	c.Mounts = append(c.Mounts, specs.Mount{
+	c.Spec.Mounts = append(c.Spec.Mounts, specs.Mount{
 		Source:      runtimeInitDir,
 		Destination: strings.TrimLeft(initDir, "/"),
 		Type:        "bind",
@@ -64,30 +64,30 @@ func configureInit(rt *Runtime, c *Container) error {
 		if err := createFifo(c.syncFifoPath(), 0600); err != nil {
 			return fmt.Errorf("failed to create sync fifo: %w", err)
 		}
-		if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Process.Args, 0400); err != nil {
+		if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Spec.Process.Args, 0400); err != nil {
 			return err
 		}
-		if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Process.Env, 0400); err != nil {
+		if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Spec.Process.Env, 0400); err != nil {
 			return err
 		}
 	} else {
 		if err := createFifo(c.syncFifoPath(), 0666); err != nil {
 			return fmt.Errorf("failed to create sync fifo: %w", err)
 		}
-		if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Process.Args, 0444); err != nil {
+		if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Spec.Process.Args, 0444); err != nil {
 			return err
 		}
-		if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Process.Env, 0444); err != nil {
+		if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Spec.Process.Env, 0444); err != nil {
 			return err
 		}
 	}
 
-	if err := os.Symlink(c.Process.Cwd, filepath.Join(runtimeInitDir, "cwd")); err != nil {
+	if err := os.Symlink(c.Spec.Process.Cwd, filepath.Join(runtimeInitDir, "cwd")); err != nil {
 		return err
 	}
 
-	if c.Annotations != nil {
-		msgPath := c.Annotations["io.kubernetes.container.terminationMessagePath"]
+	if c.Spec.Annotations != nil {
+		msgPath := c.Spec.Annotations["io.kubernetes.container.terminationMessagePath"]
 		if msgPath != "" {
 			if err := os.Symlink(msgPath, filepath.Join(runtimeInitDir, "error.log")); err != nil {
 				return err
@@ -106,7 +106,7 @@ func configureInit(rt *Runtime, c *Container) error {
 		return fmt.Errorf("failed to create %s: %w", initCmdPath, err)
 	}
 	initCmd := filepath.Join(initDir, "init")
-	c.Mounts = append(c.Mounts, specs.Mount{
+	c.Spec.Mounts = append(c.Spec.Mounts, specs.Mount{
 		Source:      rt.libexec(ExecInit),
 		Destination: strings.TrimLeft(initCmd, "/"),
 		Type:        "bind",
@@ -155,28 +155,28 @@ func createList(dst string, entries []string, mode uint32) error {
 func configureInitUser(c *Container) error {
 	// TODO ensure that the user namespace is enabled
 	// See `man lxc.container.conf` lxc.idmap.
-	for _, m := range c.Linux.UIDMappings {
+	for _, m := range c.Spec.Linux.UIDMappings {
 		if err := c.SetConfigItem("lxc.idmap", fmt.Sprintf("u %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
 			return err
 		}
 	}
 
-	for _, m := range c.Linux.GIDMappings {
+	for _, m := range c.Spec.Linux.GIDMappings {
 		if err := c.SetConfigItem("lxc.idmap", fmt.Sprintf("g %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
 			return err
 		}
 	}
 
-	if err := c.SetConfigItem("lxc.init.uid", fmt.Sprintf("%d", c.Process.User.UID)); err != nil {
+	if err := c.SetConfigItem("lxc.init.uid", fmt.Sprintf("%d", c.Spec.Process.User.UID)); err != nil {
 		return err
 	}
-	if err := c.SetConfigItem("lxc.init.gid", fmt.Sprintf("%d", c.Process.User.GID)); err != nil {
+	if err := c.SetConfigItem("lxc.init.gid", fmt.Sprintf("%d", c.Spec.Process.User.GID)); err != nil {
 		return err
 	}
 
-	if len(c.Process.User.AdditionalGids) > 0 && c.SupportsConfigItem("lxc.init.groups") {
+	if len(c.Spec.Process.User.AdditionalGids) > 0 && c.SupportsConfigItem("lxc.init.groups") {
 		var b strings.Builder
-		for i, gid := range c.Process.User.AdditionalGids {
+		for i, gid := range c.Spec.Process.User.AdditionalGids {
 			if i > 0 {
 				b.WriteByte(',')
 			}

@@ -119,32 +119,35 @@ func (rt *Runtime) Init() error {
 	return nil
 }
 
-func (rt *Runtime) checkConfig(config *ContainerConfig) error {
-	if len(config.ContainerID) == 0 {
+func (rt *Runtime) checkConfig(cfg *ContainerConfig) error {
+	if len(cfg.ContainerID) == 0 {
 		return errorf("missing container ID")
 	}
+	return rt.checkSpec(cfg.Spec)
+}
 
-	if config.Root == nil {
-		return errorf("config.Root is nil")
+func (rt *Runtime) checkSpec(spec *specs.Spec) error {
+	if spec.Root == nil {
+		return errorf("spec.Root is nil")
 	}
-	if len(config.Root.Path) == 0 {
-		return errorf("empty config.Root.Path")
-	}
-
-	if config.Process == nil {
-		return errorf("config.Process is nil")
-	}
-
-	if len(config.Process.Args) == 0 {
-		return errorf("configs.Process.Args is empty")
+	if len(spec.Root.Path) == 0 {
+		return errorf("empty spec.Root.Path")
 	}
 
-	if config.Process.Cwd == "" {
-		rt.Log.Info().Msg("configs.Process.Cwd is unset defaulting to '/'")
-		config.Process.Cwd = "/"
+	if spec.Process == nil {
+		return errorf("spec.Process is nil")
 	}
 
-	yes, err := isHostNamespaceShared(config.Linux.Namespaces, specs.MountNamespace)
+	if len(spec.Process.Args) == 0 {
+		return errorf("specs.Process.Args is empty")
+	}
+
+	if spec.Process.Cwd == "" {
+		rt.Log.Info().Msg("specs.Process.Cwd is unset defaulting to '/'")
+		spec.Process.Cwd = "/"
+	}
+
+	yes, err := isHostNamespaceShared(spec.Linux.Namespaces, specs.MountNamespace)
 	if err != nil {
 		return err
 	}
@@ -154,7 +157,7 @@ func (rt *Runtime) checkConfig(config *ContainerConfig) error {
 
 	// It should be best practise not to do so, but there are containers that
 	// want to share the hosts PID namespaces. e.g sonobuoy/sonobuoy-systemd-logs-daemon-set
-	yes, err = isHostNamespaceShared(config.Linux.Namespaces, specs.PIDNamespace)
+	yes, err = isHostNamespaceShared(spec.Linux.Namespaces, specs.PIDNamespace)
 	if err != nil {
 		return err
 	}
@@ -165,14 +168,14 @@ func (rt *Runtime) checkConfig(config *ContainerConfig) error {
 }
 
 func configureContainer(rt *Runtime, c *Container) error {
-	if c.Hostname != "" {
-		if err := c.SetConfigItem("lxc.uts.name", c.Hostname); err != nil {
+	if c.Spec.Hostname != "" {
+		if err := c.SetConfigItem("lxc.uts.name", c.Spec.Hostname); err != nil {
 			return err
 		}
 
-		uts := getNamespace(specs.UTSNamespace, c.Linux.Namespaces)
+		uts := getNamespace(specs.UTSNamespace, c.Spec.Linux.Namespaces)
 		if uts != nil && uts.Path != "" {
-			if err := setHostname(uts.Path, c.Hostname); err != nil {
+			if err := setHostname(uts.Path, c.Spec.Hostname); err != nil {
 				return fmt.Errorf("failed  to set hostname: %w", err)
 			}
 		}
@@ -190,7 +193,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 		// ensure user namespace is enabled
 		if !isNamespaceEnabled(c.Spec, specs.UserNamespace) {
 			rt.Log.Warn().Msg("unprivileged runtime - enabling user namespace")
-			c.Linux.Namespaces = append(c.Linux.Namespaces,
+			c.Spec.Linux.Namespaces = append(c.Spec.Linux.Namespaces,
 				specs.LinuxNamespace{Type: specs.UserNamespace},
 			)
 		}
@@ -199,13 +202,13 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return fmt.Errorf("failed to configure namespaces: %w", err)
 	}
 
-	if c.Process.OOMScoreAdj != nil {
-		if err := c.SetConfigItem("lxc.proc.oom_score_adj", fmt.Sprintf("%d", *c.Process.OOMScoreAdj)); err != nil {
+	if c.Spec.Process.OOMScoreAdj != nil {
+		if err := c.SetConfigItem("lxc.proc.oom_score_adj", fmt.Sprintf("%d", *c.Spec.Process.OOMScoreAdj)); err != nil {
 			return err
 		}
 	}
 
-	if c.Process.NoNewPrivileges {
+	if c.Spec.Process.NoNewPrivileges {
 		if err := c.SetConfigItem("lxc.no_new_privs", "1"); err != nil {
 			return err
 		}
@@ -220,9 +223,9 @@ func configureContainer(rt *Runtime, c *Container) error {
 	}
 
 	if rt.Features.Seccomp {
-		if c.Linux.Seccomp != nil && len(c.Linux.Seccomp.Syscalls) > 0 {
+		if c.Spec.Linux.Seccomp != nil && len(c.Spec.Linux.Seccomp.Syscalls) > 0 {
 			profilePath := c.RuntimePath("seccomp.conf")
-			if err := writeSeccompProfile(profilePath, c.Linux.Seccomp); err != nil {
+			if err := writeSeccompProfile(profilePath, c.Spec.Linux.Seccomp); err != nil {
 				return err
 			}
 			if err := c.SetConfigItem("lxc.seccomp.profile", profilePath); err != nil {
@@ -246,18 +249,18 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	ensureDefaultDevices(c)
+	ensureDefaultDevices(c.Spec)
 
 	if rt.privileged {
 		// devices are created with mknod in lxcri-hook
-		if err := writeDevices(c.RuntimePath("devices.txt"), c); err != nil {
+		if err := createDeviceFile(c.RuntimePath("devices.txt"), c.Spec); err != nil {
 			return fmt.Errorf("failed to create devices.txt: %w", err)
 		}
 
 	} else {
 		// if running as non-root bind mount devices, because user can not execute mknod
-		newMounts := make([]specs.Mount, 0, len(c.Mounts)+len(c.Linux.Devices))
-		for _, m := range c.Mounts {
+		newMounts := make([]specs.Mount, 0, len(c.Spec.Mounts)+len(c.Spec.Linux.Devices))
+		for _, m := range c.Spec.Mounts {
 			if m.Destination == "/dev" {
 				rt.Log.Info().Msg("unprivileged runtime - removing /dev mount")
 				continue
@@ -265,13 +268,13 @@ func configureContainer(rt *Runtime, c *Container) error {
 			newMounts = append(newMounts, m)
 		}
 		rt.Log.Info().Msg("unprivileged runtime - bind mount devices")
-		for _, device := range c.Linux.Devices {
+		for _, device := range c.Spec.Linux.Devices {
 			newMounts = append(newMounts,
 				specs.Mount{Destination: device.Path, Source: device.Path, Type: "bind", Options: []string{"bind", "create=file"}},
 			)
 		}
 
-		c.Mounts = newMounts
+		c.Spec.Mounts = newMounts
 	}
 
 	if err := writeMasked(c.RuntimePath("masked.txt"), c); err != nil {
@@ -290,7 +293,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return fmt.Errorf("failed to configure cgroups: %w", err)
 	}
 
-	for key, val := range c.Linux.Sysctl {
+	for key, val := range c.Spec.Linux.Sysctl {
 		if err := c.SetConfigItem("lxc.sysctl."+key, val); err != nil {
 			return err
 		}
@@ -298,8 +301,8 @@ func configureContainer(rt *Runtime, c *Container) error {
 
 	// `man lxc.container.conf`: "A resource with no explicitly configured limitation will be inherited
 	// from the process starting up the container"
-	seenLimits := make([]string, 0, len(c.Process.Rlimits))
-	for _, limit := range c.Process.Rlimits {
+	seenLimits := make([]string, 0, len(c.Spec.Process.Rlimits))
+	for _, limit := range c.Spec.Process.Rlimits {
 		name := strings.TrimPrefix(strings.ToLower(limit.Type), "rlimit_")
 		for _, seen := range seenLimits {
 			if seen == name {
@@ -329,7 +332,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 }
 
 func configureRootfs(rt *Runtime, c *Container) error {
-	if err := c.SetConfigItem("lxc.rootfs.path", c.Root.Path); err != nil {
+	if err := c.SetConfigItem("lxc.rootfs.path", c.Spec.Root.Path); err != nil {
 		return err
 	}
 
@@ -347,10 +350,10 @@ func configureRootfs(rt *Runtime, c *Container) error {
 	}
 
 	rootfsOptions := []string{}
-	if c.Linux.RootfsPropagation != "" {
-		rootfsOptions = append(rootfsOptions, c.Linux.RootfsPropagation)
+	if c.Spec.Linux.RootfsPropagation != "" {
+		rootfsOptions = append(rootfsOptions, c.Spec.Linux.RootfsPropagation)
 	}
-	if c.Root.Readonly {
+	if c.Spec.Root.Readonly {
 		rootfsOptions = append(rootfsOptions, "ro")
 	}
 	if err := c.SetConfigItem("lxc.rootfs.options", strings.Join(rootfsOptions, ",")); err != nil {
@@ -364,7 +367,7 @@ func configureReadonlyPaths(c *Container) error {
 	if rootmnt == "" {
 		return fmt.Errorf("lxc.rootfs.mount unavailable")
 	}
-	for _, p := range c.Linux.ReadonlyPaths {
+	for _, p := range c.Spec.Linux.ReadonlyPaths {
 		mnt := fmt.Sprintf("%s %s %s %s", filepath.Join(rootmnt, p), strings.TrimPrefix(p, "/"), "bind", "bind,ro,optional")
 		if err := c.SetConfigItem("lxc.mount.entry", mnt); err != nil {
 			return fmt.Errorf("failed to make path readonly: %w", err)
@@ -375,7 +378,7 @@ func configureReadonlyPaths(c *Container) error {
 
 func configureApparmor(c *Container) error {
 	// The value *apparmor_profile*  from crio.conf is used if no profile is defined by the container.
-	aaprofile := c.Process.ApparmorProfile
+	aaprofile := c.Spec.Process.ApparmorProfile
 	if aaprofile == "" {
 		aaprofile = "unconfined"
 	}
@@ -388,9 +391,9 @@ func configureApparmor(c *Container) error {
 // https://blog.container-solutions.com/linux-capabilities-why-they-exist-and-how-they-work
 func configureCapabilities(c *Container) error {
 	keepCaps := "none"
-	if c.Process.Capabilities != nil {
+	if c.Spec.Process.Capabilities != nil {
 		var caps []string
-		for _, c := range c.Process.Capabilities.Permitted {
+		for _, c := range c.Spec.Process.Capabilities.Permitted {
 			lcCapName := strings.TrimPrefix(strings.ToLower(c), "cap_")
 			caps = append(caps, lcCapName)
 		}
@@ -404,14 +407,14 @@ func configureCapabilities(c *Container) error {
 
 func writeMasked(dst string, c *Container) error {
 	// #nosec
-	if c.Linux.MaskedPaths == nil {
+	if c.Spec.Linux.MaskedPaths == nil {
 		return nil
 	}
 	f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
 	if err != nil {
 		return err
 	}
-	for _, p := range c.Linux.MaskedPaths {
+	for _, p := range c.Spec.Linux.MaskedPaths {
 		_, err = fmt.Fprintln(f, p)
 		if err != nil {
 			f.Close()

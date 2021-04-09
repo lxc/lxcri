@@ -43,7 +43,7 @@ func configureCgroup(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	if devices := c.Linux.Resources.Devices; devices != nil {
+	if devices := c.Spec.Linux.Resources.Devices; devices != nil {
 		if rt.Features.CgroupDevices {
 			if err := configureDeviceController(c); err != nil {
 				return err
@@ -54,30 +54,30 @@ func configureCgroup(rt *Runtime, c *Container) error {
 
 	}
 
-	if mem := c.Linux.Resources.Memory; mem != nil {
+	if mem := c.Spec.Linux.Resources.Memory; mem != nil {
 		c.Log.Debug().Msg("TODO cgroup memory controller not implemented")
 	}
 
-	if cpu := c.Linux.Resources.CPU; cpu != nil {
+	if cpu := c.Spec.Linux.Resources.CPU; cpu != nil {
 		if err := configureCPUController(rt, cpu); err != nil {
 			return err
 		}
 	}
 
-	if pids := c.Linux.Resources.Pids; pids != nil {
+	if pids := c.Spec.Linux.Resources.Pids; pids != nil {
 		if err := c.SetConfigItem("lxc.cgroup2.pids.max", fmt.Sprintf("%d", pids.Limit)); err != nil {
 			return err
 		}
 	}
-	if blockio := c.Linux.Resources.BlockIO; blockio != nil {
+	if blockio := c.Spec.Linux.Resources.BlockIO; blockio != nil {
 		c.Log.Debug().Msg("TODO cgroup blockio controller not implemented")
 	}
 
-	if hugetlb := c.Linux.Resources.HugepageLimits; hugetlb != nil {
+	if hugetlb := c.Spec.Linux.Resources.HugepageLimits; hugetlb != nil {
 		// set Hugetlb limit (in bytes)
 		c.Log.Debug().Msg("TODO cgroup hugetlb controller not implemented")
 	}
-	if net := c.Linux.Resources.Network; net != nil {
+	if net := c.Spec.Linux.Resources.Network; net != nil {
 		c.Log.Debug().Msg("TODO cgroup network controller not implemented")
 	}
 	return nil
@@ -86,9 +86,9 @@ func configureCgroup(rt *Runtime, c *Container) error {
 func configureCgroupPath(rt *Runtime, c *Container) error {
 
 	if rt.SystemdCgroup {
-		c.CgroupDir = parseSystemdCgroupPath(c.Linux.CgroupsPath)
+		c.CgroupDir = parseSystemdCgroupPath(c.Spec.Linux.CgroupsPath)
 	} else {
-		c.CgroupDir = c.Linux.CgroupsPath
+		c.CgroupDir = c.Spec.Linux.CgroupsPath
 	}
 
 	c.MonitorCgroupDir = filepath.Join(rt.MonitorCgroup, c.ContainerID+".scope")
@@ -147,7 +147,7 @@ func configureDeviceController(c *Container) error {
 	blockDevice := "b"
 	charDevice := "c"
 
-	for _, dev := range c.Linux.Resources.Devices {
+	for _, dev := range c.Spec.Linux.Resources.Devices {
 		key := devicesDeny
 		if dev.Allow {
 			key = devicesAllow

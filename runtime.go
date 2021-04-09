@@ -142,7 +142,7 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	cmd.Env = rt.env
 	cmd.Dir = c.RuntimePath()
 
-	if c.ConsoleSocket == "" && !c.Process.Terminal {
+	if c.ConsoleSocket == "" && !c.Spec.Process.Terminal {
 		// Inherit stdio from calling process (conmon).
 		// lxc.console.path must be set to 'none' or stdio of init process is replaced with a PTY by lxc
 		if err := c.SetConfigItem("lxc.console.path", "none"); err != nil {
