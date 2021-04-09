@@ -52,12 +52,22 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return c, errorf("failed to configure container: %w", err)
 	}
 
+	specPath := c.RuntimePath("spec.json")
+	err := encodeFileJSON(specPath, cfg.Spec, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0440)
+	if err != nil {
+		return c, err
+	}
+
 	if err := rt.runStartCmd(ctx, c); err != nil {
 		return c, errorf("failed to run container process: %w", err)
 	}
 
 	p := c.RuntimePath("container.json")
-	err := encodeFileJSON(p, c, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0640)
+	err = encodeFileJSON(p, c, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0440)
+	if err != nil {
+		return c, err
+	}
+
 	return c, err
 }
 

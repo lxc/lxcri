@@ -16,7 +16,10 @@ import (
 
 // ContainerConfig is the configuration for a single Container instance.
 type ContainerConfig struct {
-	*specs.Spec
+	// The modified/updated Spec used to generate the liblxc config.
+	// It's serialized to a separate file to allow external tool access,
+	// without the need to import lxcri.
+	*specs.Spec `json:"-"`
 
 	// ContainerID is the identifier of the container.
 	// The ContainerID is used as name for the containers runtime directory.
@@ -125,6 +128,12 @@ func (c *Container) load() error {
 	err := decodeFileJSON(c, c.RuntimePath("container.json"))
 	if err != nil {
 		return fmt.Errorf("failed to load container config: %w", err)
+	}
+
+	c.Spec = new(specs.Spec)
+	err = decodeFileJSON(c.Spec, c.RuntimePath("spec.json"))
+	if err != nil {
+		return fmt.Errorf("failed to load container spec: %w", err)
 	}
 
 	_, err = os.Stat(c.ConfigFilePath())
