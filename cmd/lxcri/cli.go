@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"text/template"
 	"time"
 
 	"github.com/drachenfels-de/lxcri"
 	"github.com/drachenfels-de/lxcri/log"
+	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli/v2"
 )
 
@@ -83,6 +85,7 @@ func main() {
 		&killCmd,
 		&deleteCmd,
 		&execCmd,
+		&inspectCmd,
 		// TODO extend urfave/cli to render a default environment file.
 	}
 
@@ -532,4 +535,74 @@ func doExec(ctxcli *cli.Context) error {
 		}
 	}
 	return nil
+}
+
+var inspectCmd = cli.Command{
+	Name:   "inspect",
+	Usage:  "returns inspect of a container",
+	Action: doInspect,
+	ArgsUsage: `containerID [containerID...]
+
+<containerID> [containerID...] list of IDs for container to inspect
+`,
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "template",
+			Usage: "Use this go template to to format output.",
+		},
+	},
+}
+
+func doInspect(ctxcli *cli.Context) (err error) {
+	var t *template.Template
+	tmpl := ctxcli.String("template")
+	if tmpl != "" {
+		t, err = template.New("inspect").Parse(tmpl)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, id := range ctxcli.Args().Slice() {
+		if err := inspectContainer(id, t); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func inspectContainer(id string, t *template.Template) error {
+	c, err := clxc.Load(id)
+	if err != nil {
+		return fmt.Errorf("failed to load container: %w", err)
+	}
+	state, err := c.State()
+	if err != nil {
+		return fmt.Errorf("failed ot get container state: %w", err)
+	}
+
+	info := struct {
+		Spec      *specs.Spec
+		Container *lxcri.Container
+		State     *lxcri.State
+	}{
+		Spec:      c.Spec,
+		Container: c,
+		State:     state,
+	}
+
+	if t != nil {
+		return t.Execute(os.Stdout, info)
+	}
+
+	// avoid duplicate output
+	c.Spec = nil
+	state.SpecState.Annotations = nil
+
+	j, err := json.MarshalIndent(info, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
+	_, err = fmt.Fprint(os.Stdout, string(j))
+	return err
 }
