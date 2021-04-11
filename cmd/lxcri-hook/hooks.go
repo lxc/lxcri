@@ -15,11 +15,11 @@ const (
 	HookAutodev            = "autodev"
 	HookStartHost          = "start-host"
 	HookStart              = "start"
-	HookPostStart          = "post-start" // FIXME this is undefined by liblxc
 	HookStop               = "stop"
 	HookPostStop           = "post-stop"
 	HookClone              = "clone"
 	HookDestroy            = "destroy"
+	//HookPostStart          = "post-start" // not defined by liblxc
 )
 
 // Env is the parsed liblxc hook environment.

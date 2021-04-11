@@ -95,10 +95,11 @@ func ociHooksAndState(t HookType, hooks *specs.Hooks) ([]specs.Hook, specs.Conta
 		return hooks.CreateContainer, specs.StateCreating, nil
 	case HookStart:
 		return hooks.StartContainer, specs.StateCreated, nil
-	case HookPostStart:
-		return hooks.Poststart, specs.StateRunning, nil
-	case HookDestroy:
-		return hooks.Poststop, specs.StateStopped, nil
+	// NOTE the following hooks are executed directly from lxcri
+	//case HookPostStart:
+	//	return hooks.Poststart, specs.StateRunning, nil
+	//case HookDestroy:
+	//	return hooks.Poststop, specs.StateStopped, nil
 	default:
 		return nil, specs.StateStopped, fmt.Errorf("liblxc hook %q is not mapped to OCI hooks", t)
 	}
