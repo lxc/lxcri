@@ -47,8 +47,8 @@ lxcri-init: cmd/lxcri-init/lxcri-init.c
 	# this is paranoia - but ensure it is statically compiled
 	! ldd $@  2>/dev/null
 
-lxcri-hook: cmd/lxcri-hook/lxcri-hook.c
-	$(MUSL_CC) -Werror -Wpedantic -static -o $@ $?
+lxcri-hook: go.mod $(GO_SRC) Makefile
+	go build -o $@ ./cmd/lxcri-hook
 
 install: build
 	mkdir -p $(PREFIX)/bin
