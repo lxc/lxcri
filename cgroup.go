@@ -84,7 +84,6 @@ func configureCgroup(rt *Runtime, c *Container) error {
 }
 
 func configureCgroupPath(rt *Runtime, c *Container) error {
-
 	if rt.SystemdCgroup {
 		c.CgroupDir = parseSystemdCgroupPath(c.Spec.Linux.CgroupsPath)
 	} else {
@@ -294,7 +293,6 @@ func loadCgroup(cgName string) (*cgroupInfo, error) {
 }
 
 func killCgroupProcs(cgroupName string, sig unix.Signal) error {
-
 	cg, err := loadCgroup(cgroupName)
 	if err != nil {
 		return fmt.Errorf("failed to load cgroup %s: %w", cgroupName, err)

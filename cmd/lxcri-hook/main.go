@@ -21,7 +21,6 @@ func init() {
 }
 
 func main() {
-
 	var timeout int
 	// Individual hooks should set a timeout lower than the overall timeout.
 	flag.IntVar(&timeout, "timeout", 30, "maximum run time in seconds allowed for all hooks")
@@ -44,7 +43,6 @@ func main() {
 }
 
 func run(ctx context.Context, env *Env) error {
-
 	runtimeDir := filepath.Dir(env.ConfigFile)
 
 	// TODO save hooks to hooks.json

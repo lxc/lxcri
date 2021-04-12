@@ -6,9 +6,8 @@ import (
 	"runtime"
 	"strings"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"golang.org/x/sys/unix"
 )
 
 // namespace is a mapping from the namespace name

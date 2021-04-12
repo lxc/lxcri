@@ -18,7 +18,6 @@ import (
 // You may have to call Runtime.Delete to cleanup container runtime state,
 // if Create returns with an error.
 func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container, error) {
-
 	if err := rt.checkConfig(cfg); err != nil {
 		return nil, err
 	}

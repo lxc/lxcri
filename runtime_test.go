@@ -117,7 +117,6 @@ ruben:1000:1
 ruben:20000:65536
 */
 func TestRuntimeUnprivileged(t *testing.T) {
-
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
