@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sys/unix"
 )
@@ -34,7 +35,7 @@ func createFifo(dst string, mode uint32) error {
 
 // runAsRuntimeUser returns true if container process is started as runtime user.
 func runAsRuntimeUser(spec *specs.Spec) bool {
-	puid := unmapContainerID(spec.Process.User.UID, spec.Linux.UIDMappings)
+	puid := specki.UnmapContainerID(spec.Process.User.UID, spec.Linux.UIDMappings)
 	return puid == uint32(os.Getuid())
 }
 

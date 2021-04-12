@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sys/unix"
@@ -71,7 +72,8 @@ type Container struct {
 	*ContainerConfig
 
 	CreatedAt time.Time
-	Pid       int
+	// Pid is the process ID of the liblxc monitor process ( see ExecStart )
+	Pid int
 
 	runtimeDir string
 }
@@ -102,7 +104,7 @@ func (c *Container) create() error {
 }
 
 func (c *Container) load() error {
-	err := decodeFileJSON(c, c.RuntimePath("lxcri.json"))
+	err := specki.DecodeJSONFile(c.RuntimePath("lxcri.json"), c)
 	if err != nil {
 		return fmt.Errorf("failed to load container config: %w", err)
 	}

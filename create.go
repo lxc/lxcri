@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"gopkg.in/lxc/go-lxc.v2"
 )
@@ -60,7 +61,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	// Seralize the modified spec.Spec separately, to make it available for
 	// runtime hooks.
 	specPath := c.RuntimePath(BundleConfigFile)
-	err := encodeFileJSON(specPath, cfg.Spec, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0440)
+	err := specki.EncodeJSONFile(specPath, cfg.Spec, os.O_EXCL|os.O_CREATE, 0440)
 	if err != nil {
 		return c, err
 	}
@@ -70,7 +71,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	}
 
 	p := c.RuntimePath("lxcri.json")
-	err = encodeFileJSON(p, c, os.O_EXCL|os.O_CREATE|os.O_RDWR, 0440)
+	err = specki.EncodeJSONFile(p, c, os.O_EXCL|os.O_CREATE, 0440)
 	if err != nil {
 		return c, err
 	}

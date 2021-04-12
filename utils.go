@@ -2,7 +2,6 @@ package lxcri
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,48 +45,6 @@ func isFilesystem(dir string, fsName string) error {
 	}
 	if stat.Type != fsType {
 		return fmt.Errorf("%q is not on filesystem %s", dir, fsName)
-	}
-	return nil
-}
-
-func decodeFileJSON(obj interface{}, src string) error {
-	// #nosec
-	f, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	// #nosec
-	err = json.NewDecoder(f).Decode(obj)
-	if err != nil {
-		f.Close()
-		return errorf("failed to decode JSON from %s: %w", src, err)
-	}
-	err = f.Close()
-	if err != nil {
-		return errorf("failed to close %s: %w", src, err)
-	}
-	return nil
-}
-
-func encodeFileJSON(dst string, obj interface{}, flags int, mode os.FileMode) error {
-	f, err := os.OpenFile(dst, flags, mode)
-	if err != nil {
-		return err
-	}
-	enc := json.NewEncoder(f)
-	err = enc.Encode(obj)
-	if err != nil {
-		f.Close()
-		return errorf("failed to encode JSON to %s: %w", dst, err)
-	}
-	err = f.Close()
-	if err != nil {
-		return errorf("failed to close %s: %w", dst, err)
-	}
-	// Use chmod because initial mode is affected by umask and flags.
-	err = os.Chmod(dst, mode)
-	if err != nil {
-		return errorf("failed to 'chmod %o %s': %w", mode, dst, err)
 	}
 	return nil
 }

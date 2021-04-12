@@ -1,17 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"time"
 
+	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -53,7 +50,7 @@ func run(ctx context.Context, env *Env) error {
 	// TODO save hooks to hooks.json
 	var hooks specs.Hooks
 	hooksPath := filepath.Join(runtimeDir, "hooks.json")
-	err := decodeFileJSON(&hooks, hooksPath)
+	err := specki.DecodeJSONFile(hooksPath, &hooks)
 	if err != nil {
 		return err
 	}
@@ -71,13 +68,13 @@ func run(ctx context.Context, env *Env) error {
 	// need to deserialize it to set the current specs.ContainerState
 	var state specs.State
 	statePath := filepath.Join(runtimeDir, "state.json")
-	err = decodeFileJSON(&hooks, statePath)
+	err = specki.DecodeJSONFile(statePath, &hooks)
 	if err != nil {
 		return err
 	}
 	state.Status = status
 
-	return runHooks(ctx, &state, hooksToRun)
+	return specki.RunHooks(ctx, &state, hooksToRun)
 }
 
 // https://github.com/opencontainers/runtime-spec/blob/master/specs-go/state.go
@@ -103,60 +100,4 @@ func ociHooksAndState(t HookType, hooks *specs.Hooks) ([]specs.Hook, specs.Conta
 	default:
 		return nil, specs.StateStopped, fmt.Errorf("liblxc hook %q is not mapped to OCI hooks", t)
 	}
-}
-
-func runHooks(ctx context.Context, state *specs.State, hooks []specs.Hook) error {
-	stateJSON, err := json.Marshal(state)
-	if err != nil {
-		return fmt.Errorf("failed to serialize spec state: %w", err)
-	}
-	for i, h := range hooks {
-		fmt.Printf("running hook[%d] path:%s\n", i, h.Path)
-		if err := runHook(ctx, stateJSON, h); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func runHook(ctx context.Context, stateJSON []byte, hook specs.Hook) error {
-	if hook.Timeout != nil {
-		hookCtx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(*hook.Timeout))
-		defer cancel()
-		ctx = hookCtx
-	}
-	cmd := exec.CommandContext(ctx, hook.Path, hook.Args...)
-	cmd.Env = hook.Env
-	in, err := cmd.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("failed to get stdin pipe: %w", err)
-	}
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	if _, err := io.Copy(in, bytes.NewReader(stateJSON)); err != nil {
-		return err
-	}
-	in.Close()
-	return cmd.Wait()
-}
-
-// FIXME copied from `lxcri`
-func decodeFileJSON(obj interface{}, src string) error {
-	// #nosec
-	f, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	// #nosec
-	err = json.NewDecoder(f).Decode(obj)
-	if err != nil {
-		f.Close()
-		return fmt.Errorf("failed to decode JSON from %s: %w", src, err)
-	}
-	err = f.Close()
-	if err != nil {
-		return fmt.Errorf("failed to close %s: %w", src, err)
-	}
-	return nil
 }

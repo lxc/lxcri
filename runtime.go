@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sys/unix"
@@ -289,7 +290,7 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 // This is a convenience function for the cli.
 func ReadSpecJSON(p string) (*specs.Spec, error) {
 	spec := new(specs.Spec)
-	err := decodeFileJSON(spec, p)
+	err := specki.DecodeJSONFile(p, spec)
 	return spec, err
 }
 
@@ -298,7 +299,7 @@ func ReadSpecJSON(p string) (*specs.Spec, error) {
 // This is a convenience function for the cli.
 func ReadSpecProcessJSON(src string) (*specs.Process, error) {
 	proc := new(specs.Process)
-	err := decodeFileJSON(proc, src)
+	err := specki.DecodeJSONFile(src, proc)
 	return proc, err
 }
 
