@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/drachenfels-de/lxcri"
-	"github.com/drachenfels-de/lxcri/log"
+	"github.com/drachenfels-de/lxcri/pkg/log"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli/v2"
 )

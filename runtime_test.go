@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/drachenfels-de/lxcri/log"
+	"github.com/drachenfels-de/lxcri/pkg/log"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
