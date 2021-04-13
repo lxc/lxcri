@@ -39,12 +39,12 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	// Seralize the modified spec.Spec separately, to make it available for
 	// runtime hooks.
 	specPath := c.RuntimePath(BundleConfigFile)
-	err := specki.EncodeJSONFile(specPath, cfg.Spec, os.O_EXCL|os.O_CREATE, 0440)
+	err := specki.EncodeJSONFile(specPath, cfg.Spec, os.O_EXCL|os.O_CREATE, 0444)
 	if err != nil {
 		return c, err
 	}
 
-	err = specki.EncodeJSONFile(c.RuntimePath("hooks.json"), cfg.Spec.Hooks, os.O_EXCL|os.O_CREATE, 0440)
+	err = specki.EncodeJSONFile(c.RuntimePath("hooks.json"), cfg.Spec.Hooks, os.O_EXCL|os.O_CREATE, 0444)
 	if err != nil {
 		return c, err
 	}
@@ -52,7 +52,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	if err != nil {
 		return c, err
 	}
-	err = specki.EncodeJSONFile(c.RuntimePath("state.json"), state.SpecState, os.O_EXCL|os.O_CREATE, 0440)
+	err = specki.EncodeJSONFile(c.RuntimePath("state.json"), state.SpecState, os.O_EXCL|os.O_CREATE, 0444)
 	if err != nil {
 		return c, err
 	}
