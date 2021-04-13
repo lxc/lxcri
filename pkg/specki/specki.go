@@ -126,3 +126,82 @@ func EncodeJSONFile(filename string, v interface{}, flags int, perm os.FileMode)
 	}
 	return nil
 }
+
+// ReadSpecJSON reads the JSON encoded OCI
+// spec from the given path.
+// This is a convenience function for the cli.
+func ReadSpecJSON(p string) (*specs.Spec, error) {
+	spec := new(specs.Spec)
+	err := DecodeJSONFile(p, spec)
+	return spec, err
+}
+
+// ReadSpecProcessJSON reads the JSON encoded OCI
+// spec process definition from the given path.
+// This is a convenience function for the cli.
+func ReadSpecProcessJSON(src string) (*specs.Process, error) {
+	proc := new(specs.Process)
+	err := DecodeJSONFile(src, proc)
+	return proc, err
+}
+
+// LoadSpecProcess calls ReadSpecProcessJSON if the given specProcessPath is not empty,
+// otherwise it creates a new specs.Process from the given args.
+// It's an error if both values are empty.
+func LoadSpecProcess(specProcessPath string, args []string) (*specs.Process, error) {
+	if specProcessPath != "" {
+		return ReadSpecProcessJSON(specProcessPath)
+	}
+	if len(args) == 0 {
+		return nil, fmt.Errorf("spec process path and args are empty")
+	}
+	return &specs.Process{Cwd: "/", Args: args}, nil
+}
+
+// NewSpec returns a minimal spec.Spec instance, which is
+// required to run the given process within a container
+// using the given rootfs.
+// NOTE /proc and /dev folders must be present within the given rootfs.
+func NewSpec(rootfs string, cmd string, args ...string) *specs.Spec {
+	proc := NewSpecProcess(cmd, args...)
+
+	return &specs.Spec{
+		Version: specs.Version,
+		Linux: &specs.Linux{
+			Namespaces: []specs.LinuxNamespace{
+				// isolate all namespaces by default
+				specs.LinuxNamespace{Type: specs.PIDNamespace},
+				specs.LinuxNamespace{Type: specs.MountNamespace},
+				specs.LinuxNamespace{Type: specs.IPCNamespace},
+				specs.LinuxNamespace{Type: specs.UTSNamespace},
+				specs.LinuxNamespace{Type: specs.CgroupNamespace},
+				specs.LinuxNamespace{Type: specs.NetworkNamespace},
+			},
+			Devices: EssentialDevices,
+			Resources: &specs.LinuxResources{
+				Devices: EssentialDevicesAllow,
+			},
+		},
+		Mounts: []specs.Mount{
+			specs.Mount{Destination: "/proc", Source: "proc", Type: "proc",
+				Options: []string{"rw", "nosuid", "nodev", "noexec", "relatime"},
+			},
+			specs.Mount{Destination: "/dev", Source: "tmpfs", Type: "tmpfs",
+				Options: []string{"rw", "nosuid", "noexec", "relatime", "dev"},
+				// devtmpfs (rw,nosuid,relatime,size=6122620k,nr_inodes=1530655,mode=755,inode64)
+			},
+		},
+		Process: proc,
+		Root:    &specs.Root{Path: rootfs},
+	}
+}
+
+// NewSpecProcess creates a specs.Process instance
+// from the given command cmd and the command arguments args.
+func NewSpecProcess(cmd string, args ...string) *specs.Process {
+	proc := new(specs.Process)
+	proc.Args = append(proc.Args, cmd)
+	proc.Args = append(proc.Args, args...)
+	proc.Cwd = "/"
+	return proc
+}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/drachenfels-de/lxcri"
 	"github.com/drachenfels-de/lxcri/pkg/log"
+	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli/v2"
 )
@@ -297,7 +298,7 @@ func doCreate(ctxcli *cli.Context) error {
 		return err
 	}
 	specPath := filepath.Join(clxc.cfg.BundlePath, lxcri.BundleConfigFile)
-	spec, err := lxcri.ReadSpecJSON(specPath)
+	spec, err := specki.ReadSpecJSON(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
@@ -507,7 +508,7 @@ func doExec(ctxcli *cli.Context) error {
 		clxc.Log.Warn().Msg("detaching process but pid-file value is unset")
 	}
 
-	procSpec, err := lxcri.LoadSpecProcess(ctxcli.String("process"), args)
+	procSpec, err := specki.LoadSpecProcess(ctxcli.String("process"), args)
 	if err != nil {
 		return err
 	}

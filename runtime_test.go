@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/drachenfels-de/lxcri/pkg/log"
+	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
@@ -51,7 +52,7 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	err = exec.Command("cp", cmd, rootfs).Run()
 	require.NoError(t, err)
 
-	spec := NewSpec(rootfs, filepath.Join("/"+filepath.Base(cmd)))
+	spec := specki.NewSpec(rootfs, filepath.Join("/"+filepath.Base(cmd)))
 	id := filepath.Base(rootfs)
 	cfg := ContainerConfig{ContainerID: id, Spec: spec, Log: log.ConsoleLogger(true)}
 	cfg.Spec.Linux.CgroupsPath = "" // use /proc/self/cgroup"
