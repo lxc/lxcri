@@ -339,24 +339,6 @@ func (c *Container) Release() error {
 	return c.LinuxContainer.Release()
 }
 
-// From OCI runtime spec
-// "Note that resources associated with the container, but not
-// created by this container, MUST NOT be deleted."
-// The *lxc.Container is created with `rootfs.managed=0`,
-// so calling *lxc.Container.Destroy will not delete container resources.
-func (c *Container) destroy() error {
-	if err := c.LinuxContainer.Destroy(); err != nil {
-		return fmt.Errorf("failed to destroy container: %w", err)
-	}
-	if c.CgroupDir != "" {
-		err := deleteCgroup(c.CgroupDir)
-		if err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-	return os.RemoveAll(c.RuntimePath())
-}
-
 func (c *Container) start(ctx context.Context) error {
 	done := make(chan error)
 	go func() {

@@ -1,7 +1,7 @@
 COMMIT_HASH = $(shell git describe --always --tags --long)
 COMMIT = $(if $(shell git status --porcelain --untracked-files=no),$(COMMIT_HASH)-dirty,$(COMMIT_HASH))
 BINS := lxcri
-LIBEXEC_BINS := lxcri-start lxcri-init lxcri-hook
+LIBEXEC_BINS := lxcri-start lxcri-init lxcri-hook lxcri-hook-builtin
 # Installation prefix for BINS
 PREFIX ?= /usr/local
 export PREFIX
@@ -48,7 +48,10 @@ lxcri-init: cmd/lxcri-init/lxcri-init.c
 	! ldd $@  2>/dev/null
 
 lxcri-hook: go.mod $(GO_SRC) Makefile
-	go build -o $@ ./cmd/lxcri-hook
+	go build -o $@ ./cmd/$@
+
+lxcri-hook-builtin: go.mod $(GO_SRC) Makefile
+	go build -o $@ ./cmd/$@
 
 install: build
 	mkdir -p $(PREFIX)/bin

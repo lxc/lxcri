@@ -11,6 +11,7 @@ import (
 
 	"github.com/creack/pty"
 	"github.com/drachenfels-de/gocapability/capability"
+	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sys/unix"
@@ -28,7 +29,8 @@ var (
 	// ExecStart starts the liblxc monitor process, similar to lxc-start
 	ExecStart = "lxcri-start"
 	// ExecHook is run as liblxc hook and creates additional devices and remounts masked paths.
-	ExecHook = "lxcri-hook"
+	ExecHook        = "lxcri-hook"
+	ExecHookBuiltin = "lxcri-hook-builtin"
 	// ExecInit is the container init process that execs the container process.
 	ExecInit = "lxcri-init"
 )
@@ -232,7 +234,19 @@ func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 		return fmt.Errorf("invalid container state. expected %q, but was %q", specs.StateCreated, state.SpecState.Status)
 	}
 
-	return c.start(ctx)
+	err = c.start(ctx)
+	if err != nil {
+		return err
+	}
+
+	if c.Spec.Hooks != nil {
+		state, err := c.State()
+		if err != nil {
+			return errorf("failed to get container state: %w", err)
+		}
+		specki.RunHooks(ctx, &state.SpecState, c.Spec.Hooks.Poststart, true)
+	}
+	return nil
 }
 
 func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
@@ -366,6 +380,7 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 		}
 	}
 
+	// FIXME move this to lxcri-hook ?
 	if c.CgroupDir != "" {
 		// In rare cases processes might escape from kill.
 		// This could happens if the container does not use pid_namespaces.
@@ -377,8 +392,28 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 		rt.Log.Info().Msg("cgroup drained")
 	}
 
-	if err := c.destroy(); err != nil {
-		return errorf("failed to destroy container: %w", err)
+	// From OCI runtime spec
+	// "Note that resources associated with the container, but not
+	// created by this container, MUST NOT be deleted."
+	// The *lxc.Container is created with `rootfs.managed=0`,
+	// so calling *lxc.Container.Destroy will not delete container resources.
+	if err := c.LinuxContainer.Destroy(); err != nil {
+		return fmt.Errorf("failed to destroy container: %w", err)
 	}
-	return nil
+	if c.CgroupDir != "" {
+		err := deleteCgroup(c.CgroupDir)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+
+	if c.Spec.Hooks != nil {
+		state, err := c.State()
+		if err != nil {
+			return errorf("failed to get container state: %w", err)
+		}
+		specki.RunHooks(ctx, &state.SpecState, c.Spec.Hooks.Poststart, true)
+	}
+
+	return os.RemoveAll(c.RuntimePath())
 }

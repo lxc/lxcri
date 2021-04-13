@@ -4,4 +4,5 @@
 /lxcri-init
 /lxcri-hook
 /lxcri-test
+/lxcri-hook-builtin
 .stacker/

@@ -52,7 +52,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	if err != nil {
 		return c, err
 	}
-	err = specki.EncodeJSONFile(c.RuntimePath("state.json"), state, os.O_EXCL|os.O_CREATE, 0440)
+	err = specki.EncodeJSONFile(c.RuntimePath("state.json"), state.SpecState, os.O_EXCL|os.O_CREATE, 0440)
 	if err != nil {
 		return c, err
 	}
@@ -190,15 +190,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 		c.Spec.Linux.Devices = nil
 	}
 
-	if err := writeMasked(c.RuntimePath("masked.txt"), c); err != nil {
-		return fmt.Errorf("failed to create masked.txt: %w", err)
-	}
-
-	// pass context information as environment variables to hook scripts
-	if err := c.SetConfigItem("lxc.hook.version", "1"); err != nil {
-		return err
-	}
-	if err := c.SetConfigItem("lxc.hook.mount", rt.libexec(ExecHook)); err != nil {
+	if err := configureHooks(rt, c); err != nil {
 		return err
 	}
 
@@ -318,21 +310,31 @@ func configureCapabilities(c *Container) error {
 	return c.SetConfigItem("lxc.cap.keep", keepCaps)
 }
 
-func writeMasked(dst string, c *Container) error {
-	// #nosec
-	if c.Spec.Linux.MaskedPaths == nil {
+// NOTE keep in sync with cmd/lxcri-hook#ociHooksAndState
+func configureHooks(rt *Runtime, c *Container) error {
+	if c.Spec.Hooks == nil {
 		return nil
 	}
-	f, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0600)
-	if err != nil {
+
+	// pass context information as environment variables to hook scripts
+	if err := c.SetConfigItem("lxc.hook.version", "1"); err != nil {
 		return err
 	}
-	for _, p := range c.Spec.Linux.MaskedPaths {
-		_, err = fmt.Fprintln(f, p)
-		if err != nil {
-			f.Close()
+
+	if len(c.Spec.Hooks.Prestart) > 0 || len(c.Spec.Hooks.CreateRuntime) > 0 {
+		if err := c.SetConfigItem("lxc.hook.pre-mount", rt.libexec(ExecHook)); err != nil {
 			return err
 		}
 	}
-	return f.Close()
+	if len(c.Spec.Hooks.CreateContainer) > 0 {
+		if err := c.SetConfigItem("lxc.hook.mount", rt.libexec(ExecHook)); err != nil {
+			return err
+		}
+	}
+	if len(c.Spec.Hooks.StartContainer) > 0 {
+		if err := c.SetConfigItem("lxc.hook.start", rt.libexec(ExecHook)); err != nil {
+			return err
+		}
+	}
+	return nil
 }

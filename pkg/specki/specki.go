@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -39,15 +40,22 @@ func UnmapContainerID(id uint32, idmaps []specs.LinuxIDMapping) uint32 {
 
 // RunHooks calls RunHook for each of the given runtime hooks.
 // The given runtime state is serialized as JSON and passed to each RunHook call.
-func RunHooks(ctx context.Context, state *specs.State, hooks []specs.Hook) error {
+func RunHooks(ctx context.Context, state *specs.State, hooks []specs.Hook, continueOnError bool) error {
+	if len(hooks) == 0 {
+		return nil
+	}
 	stateJSON, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("failed to serialize spec state: %w", err)
 	}
 	for i, h := range hooks {
 		fmt.Printf("running hook[%d] path:%s\n", i, h.Path)
-		if err := RunHook(ctx, stateJSON, h); err != nil {
-			return err
+		err := RunHook(ctx, stateJSON, h)
+		if err != nil {
+			fmt.Printf("hook[%d] failed: %s\n", i, err)
+			if !continueOnError {
+				return err
+			}
 		}
 	}
 	return nil
@@ -65,6 +73,8 @@ func RunHook(ctx context.Context, stateJSON []byte, hook specs.Hook) error {
 	}
 	cmd := exec.CommandContext(ctx, hook.Path, hook.Args...)
 	cmd.Env = hook.Env
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdin pipe: %w", err)
@@ -277,4 +287,20 @@ func NewSpecProcess(cmd string, args ...string) *specs.Process {
 	proc.Args = append(proc.Args, args...)
 	proc.Cwd = "/"
 	return proc
+}
+
+func ReadSpecState(r io.Reader) (*specs.State, error) {
+	state := new(specs.State)
+	dec := json.NewDecoder(r)
+	err := dec.Decode(state)
+	return state, err
+}
+
+func InitHook(r io.Reader) (*specs.State, *specs.Spec, error) {
+	state, err := ReadSpecState(r)
+	if err != nil {
+		return nil, nil, err
+	}
+	spec, err := ReadSpecJSON(filepath.Join(state.Bundle, "config.json"))
+	return state, spec, err
 }

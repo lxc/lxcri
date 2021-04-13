@@ -47,8 +47,7 @@ func run(ctx context.Context, env *Env) error {
 
 	// TODO save hooks to hooks.json
 	var hooks specs.Hooks
-	hooksPath := filepath.Join(runtimeDir, "hooks.json")
-	err := specki.DecodeJSONFile(hooksPath, &hooks)
+	err := specki.DecodeJSONFile(filepath.Join(runtimeDir, "hooks.json"), &hooks)
 	if err != nil {
 		return err
 	}
@@ -65,14 +64,14 @@ func run(ctx context.Context, env *Env) error {
 
 	// need to deserialize it to set the current specs.ContainerState
 	var state specs.State
-	statePath := filepath.Join(runtimeDir, "state.json")
-	err = specki.DecodeJSONFile(statePath, &hooks)
+	err = specki.DecodeJSONFile(filepath.Join(runtimeDir, "state.json"), &state)
 	if err != nil {
 		return err
 	}
 	state.Status = status
 
-	return specki.RunHooks(ctx, &state, hooksToRun)
+	fmt.Printf("running OCI hooks for lxc hook %q", env.Type)
+	return specki.RunHooks(ctx, &state, hooksToRun, true)
 }
 
 // https://github.com/opencontainers/runtime-spec/blob/master/specs-go/state.go
