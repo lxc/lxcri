@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sys/unix"
+	"gopkg.in/lxc/go-lxc.v2"
 )
 
 const (
@@ -138,7 +138,6 @@ func (rt *Runtime) Init() error {
 	if !lxc.VersionAtLeast(4, 0, 5) {
 		rt.Log.Warn().Msgf("liblxc runtime version >= 4.0.5 is recommended (was %s)", lxc.Version())
 	}
-
 	return nil
 }
 

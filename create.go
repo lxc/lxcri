@@ -10,7 +10,6 @@ import (
 
 	"github.com/drachenfels-de/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
-	"gopkg.in/lxc/go-lxc.v2"
 )
 
 // Create creates a single container instance from the given ContainerConfig.

@@ -127,6 +127,79 @@ func EncodeJSONFile(filename string, v interface{}, flags int, perm os.FileMode)
 	return nil
 }
 
+func int64p(v int64) *int64 {
+	return &v
+}
+
+func modep(m os.FileMode) *os.FileMode {
+	return &m
+}
+
+// FIXME runtime mandates that /dev/ptmx should be bind mount from host - why ?
+// `man 2 mount` | devpts
+// ` To use this option effectively, /dev/ptmx must be a symbolic link to pts/ptmx.
+// See Documentation/filesystems/devpts.txt in the Linux kernel source tree for details.`
+var (
+	EssentialDevices = []specs.LinuxDevice{
+		specs.LinuxDevice{Type: "c", Major: 1, Minor: 3, FileMode: modep(0666), Path: "/dev/null"},
+		specs.LinuxDevice{Type: "c", Major: 1, Minor: 5, FileMode: modep(0666), Path: "/dev/zero"},
+		specs.LinuxDevice{Type: "c", Major: 1, Minor: 7, FileMode: modep(0666), Path: "/dev/full"},
+		specs.LinuxDevice{Type: "c", Major: 1, Minor: 8, FileMode: modep(0666), Path: "/dev/random"},
+		specs.LinuxDevice{Type: "c", Major: 1, Minor: 9, FileMode: modep(0666), Path: "/dev/urandom"},
+		specs.LinuxDevice{Type: "c", Major: 5, Minor: 0, FileMode: modep(0666), Path: "/dev/tty"},
+	}
+
+	EssentialDevicesAllow = []specs.LinuxDeviceCgroup{
+		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(1), Minor: int64p(3), Access: "rwm"}, // null
+		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(1), Minor: int64p(5), Access: "rwm"}, // zero
+		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(1), Minor: int64p(7), Access: "rwm"}, // full
+		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(1), Minor: int64p(8), Access: "rwm"}, // random
+		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(1), Minor: int64p(9), Access: "rwm"}, // urandom
+		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(5), Minor: int64p(0), Access: "rwm"}, // tty
+		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(5), Minor: int64p(2), Access: "rwm"}, // ptmx
+		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(88), Access: "rwm"},                  // /dev/pts/{n}
+	}
+)
+
+// AllowEssentialDevices adds and allows access to EssentialDevices which are required by the
+// [runtime spec](https://github.com/opencontainers/runtime-spec/blob/master/config-linux.md#default-devices)
+func AllowEssentialDevices(spec *specs.Spec) error {
+	for _, dev := range EssentialDevices {
+		exist, err := IsDeviceEnabled(spec, dev)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			spec.Linux.Devices = append(spec.Linux.Devices, dev)
+		}
+	}
+
+	for _, perm := range EssentialDevicesAllow {
+		spec.Linux.Resources.Devices = append(spec.Linux.Resources.Devices, perm)
+	}
+	return nil
+}
+
+// IsDeviceEnabled checks if the LinuxDevice dev is enabled in the Spec spec.
+// An error is returned if the device Path matches and Type, Major or Minor don't match.
+func IsDeviceEnabled(spec *specs.Spec, dev specs.LinuxDevice) (bool, error) {
+	for _, d := range spec.Linux.Devices {
+		if d.Path == dev.Path {
+			if d.Type != dev.Type {
+				return false, fmt.Errorf("%s type mismatch (expected %s but was %s)", dev.Path, dev.Type, d.Type)
+			}
+			if d.Major != dev.Major {
+				return false, fmt.Errorf("%s major number mismatch (expected %d but was %d)", dev.Path, dev.Major, d.Major)
+			}
+			if d.Minor != dev.Minor {
+				return false, fmt.Errorf("%s major number mismatch (expected %d but was %d)", dev.Path, dev.Major, d.Major)
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ReadSpecJSON reads the JSON encoded OCI
 // spec from the given path.
 // This is a convenience function for the cli.
