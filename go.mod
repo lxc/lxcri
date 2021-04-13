@@ -4,6 +4,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect
 	github.com/creack/pty v1.1.11
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/drachenfels-de/gocapability v0.0.0-20210413092208-755d79b01352
 	github.com/kr/pretty v0.2.1 // indirect
 	github.com/opencontainers/runtime-spec v1.0.3-0.20200929063507-e6143ca7d51d
 	github.com/rs/zerolog v1.20.0

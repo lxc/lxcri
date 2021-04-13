@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"github.com/drachenfels-de/gocapability/capability"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/rs/zerolog"
 	"golang.org/x/sys/unix"
@@ -94,12 +95,20 @@ type Runtime struct {
 	// Environment passed to `lxcri-start`
 	env []string
 
-	// privileged is set by Runtime.Init if user has root privileges.
-	privileged bool
+	caps capability.Capabilities
 }
 
 func (rt *Runtime) libexec(name string) string {
 	return filepath.Join(rt.LibexecDir, name)
+}
+
+func (rt *Runtime) hasCapability(s string) bool {
+	c, exist := capability.Parse(s)
+	if !exist {
+		rt.Log.Warn().Msgf("undefined capability %q", s)
+		return false
+	}
+	return rt.caps.Get(capability.EFFECTIVE, c)
 }
 
 // Init initializes the runtime instance.
@@ -115,11 +124,18 @@ func (rt *Runtime) Init() error {
 		return errorf("failed to 'chmod 0777 %s': %w", err)
 	}
 
-	rt.privileged = os.Getuid() == 0
+	caps, err := capability.NewPid2(0)
+	if err != nil {
+		return errorf("failed to create capabilities object: %w", err)
+	}
+	if err := caps.Load(); err != nil {
+		return errorf("failed to load process capabilities: %w", err)
+	}
+	rt.caps = caps
 
 	rt.keepEnv("HOME", "XDG_RUNTIME_DIR", "PATH")
 
-	err := canExecute(rt.libexec(ExecStart), rt.libexec(ExecHook), rt.libexec(ExecInit))
+	err = canExecute(rt.libexec(ExecStart), rt.libexec(ExecHook), rt.libexec(ExecInit))
 	if err != nil {
 		return errorf("access check failed: %w", err)
 	}

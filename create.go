@@ -99,7 +99,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return fmt.Errorf("failed to configure init: %w", err)
 	}
 
-	if !rt.privileged {
+	if os.Getuid() != 0 {
 		// ensure user namespace is enabled
 		if !isNamespaceEnabled(c.Spec, specs.UserNamespace) {
 			rt.Log.Warn().Msg("unprivileged runtime - enabling user namespace")
@@ -151,7 +151,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 			return fmt.Errorf("failed to configure capabilities: %w", err)
 		}
 	} else {
-		rt.Log.Warn().Msg("capabilities feature is disabled - running with full privileges")
+		rt.Log.Warn().Msg("capabilities feature is disabled - running with runtime privileges")
 	}
 
 	// make sure autodev is disabled
@@ -159,34 +159,42 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	if err := ensureDefaultDevices(c.Spec); err != nil {
+	// NOTE crio can add devices (through the config) but this does not work for privileged containers.
+	// See https://github.com/cri-o/cri-o/blob/a705db4c6d04d7c14a4d59170a0ebb4b30850675/server/container_create_linux.go#L45
+	// File an issue on cri-o (at least for support)
+	if err := specki.AllowEssentialDevices(c.Spec); err != nil {
 		return err
 	}
 
-	if rt.privileged {
-		// devices are created with mknod in lxcri-hook
-		if err := createDeviceFile(c.RuntimePath("devices.txt"), c.Spec); err != nil {
-			return fmt.Errorf("failed to create devices.txt: %w", err)
-		}
-
-	} else {
-		// if running as non-root bind mount devices, because user can not execute mknod
+	if !rt.hasCapability("mknod") {
+		rt.Log.Info().Msg("runtime does not have capability CAP_MKNOD")
+		// CAP_MKNOD is not granted `man capabilities`
+		// Bind mount devices instead.
 		newMounts := make([]specs.Mount, 0, len(c.Spec.Mounts)+len(c.Spec.Linux.Devices))
 		for _, m := range c.Spec.Mounts {
 			if m.Destination == "/dev" {
-				rt.Log.Info().Msg("unprivileged runtime - removing /dev mount")
+				rt.Log.Info().Msg("removing old /dev mount")
 				continue
 			}
 			newMounts = append(newMounts, m)
 		}
-		rt.Log.Info().Msg("unprivileged runtime - bind mount devices")
+		c.Spec.Mounts = append(c.Spec.Mounts,
+			specs.Mount{
+				Destination: "/dev", Source: "tmpfs", Type: "tmpfs",
+				Options: []string{"rw", "nosuid", "noexec", "relatime"},
+			},
+		)
+		rt.Log.Info().Msg("bind mount devices")
 		for _, device := range c.Spec.Linux.Devices {
 			newMounts = append(newMounts,
-				specs.Mount{Destination: device.Path, Source: device.Path, Type: "bind", Options: []string{"bind", "create=file"}},
+				specs.Mount{
+					Destination: device.Path, Source: device.Path, Type: "bind",
+					Options: []string{"bind", "create=file"},
+				},
 			)
 		}
-
 		c.Spec.Mounts = newMounts
+		c.Spec.Linux.Devices = nil
 	}
 
 	if err := writeMasked(c.RuntimePath("masked.txt"), c); err != nil {
