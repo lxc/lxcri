@@ -31,13 +31,13 @@ fmt:
 
 .PHONY: test
 test: build
-	go build -a ./cmd/lxcri-test
+	go build ./cmd/lxcri-test
 	go test --count 1 -v ./...
 
 build: $(BINS) $(LIBEXEC_BINS)
 
 lxcri: go.mod $(GO_SRC) Makefile
-	go build -a -ldflags '$(LDFLAGS)' -o $@ ./cmd/lxcri
+	go build -ldflags '$(LDFLAGS)' -o $@ ./cmd/lxcri
 
 lxcri-start: cmd/lxcri-start/lxcri-start.c
 	$(CC) -Werror -Wpedantic -o $@ $? $$(pkg-config --libs --cflags lxc)
