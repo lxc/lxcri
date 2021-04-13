@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -33,25 +32,6 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return c, errorf("failed to create container: %w", err)
 	}
 
-	if rt.OnCreate != nil {
-		rt.OnCreate(ctx, c)
-	}
-	if c.OnCreate != nil {
-		c.OnCreate(ctx, c)
-	}
-
-	if cfg.Spec.Hooks != nil {
-		for i, hook := range cfg.Spec.Hooks.CreateRuntime {
-			cmd := exec.Command(hook.Path, hook.Args...)
-			cmd.Env = hook.Env
-			out, err := cmd.CombinedOutput()
-			if err != nil {
-				rt.Log.Error().Msgf("failed to run hook CreateRuntime[%d]: %s", i, err)
-			}
-			println(string(out))
-		}
-	}
-
 	if err := configureContainer(rt, c); err != nil {
 		return c, errorf("failed to configure container: %w", err)
 	}
@@ -60,6 +40,19 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	// runtime hooks.
 	specPath := c.RuntimePath(BundleConfigFile)
 	err := specki.EncodeJSONFile(specPath, cfg.Spec, os.O_EXCL|os.O_CREATE, 0440)
+	if err != nil {
+		return c, err
+	}
+
+	err = specki.EncodeJSONFile(c.RuntimePath("hooks.json"), cfg.Spec.Hooks, os.O_EXCL|os.O_CREATE, 0440)
+	if err != nil {
+		return c, err
+	}
+	state, err := c.State()
+	if err != nil {
+		return c, err
+	}
+	err = specki.EncodeJSONFile(c.RuntimePath("state.json"), state, os.O_EXCL|os.O_CREATE, 0440)
 	if err != nil {
 		return c, err
 	}

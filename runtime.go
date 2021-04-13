@@ -52,15 +52,6 @@ type RuntimeFeatures struct {
 // by runtime and container (non-OCI) callback hooks.
 type HookFunc func(ctx context.Context, c *Container) error
 
-// Hooks are callback functions executed within the container lifecycle.
-type Hooks struct {
-	// OnCreate is called right after creation of container runtime directory
-	// and descriptor, but before the liblxc 'config' file is written.
-	// At this point it's possible to add files to the container runtime directory
-	// and modify the ContainerConfig accordingly.
-	OnCreate HookFunc
-}
-
 // Runtime is a factory for creating and managing containers.
 // The exported methods of Runtime  are required to implement the
 // OCI container runtime interface spec (CRI).
@@ -87,10 +78,6 @@ type Runtime struct {
 	// Featuress are runtime (security) features that apply to all containers
 	// created by the runtime.
 	Features RuntimeFeatures
-	// Hooks contains all callback functions supported by the runtime.
-	// These hooks are different from the hooks that are
-	// defined within the OCI runtime spec.
-	Hooks `json:"-"`
 
 	// Environment passed to `lxcri-start`
 	env []string

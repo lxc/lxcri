@@ -47,8 +47,6 @@ type ContainerConfig struct {
 
 	// Log is the container Logger
 	Log zerolog.Logger `json:"-"`
-
-	Hooks `json:"-"`
 }
 
 // ConfigFilePath returns the path to the liblxc config file.

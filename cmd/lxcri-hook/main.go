@@ -60,7 +60,7 @@ func run(ctx context.Context, env *Env) error {
 	}
 
 	if len(hooksToRun) == 0 {
-		return fmt.Errorf("no hooks defined for %q", env.Type)
+		return fmt.Errorf("no OCI hooks defined for lxc hook %q", env.Type)
 	}
 
 	// need to deserialize it to set the current specs.ContainerState
