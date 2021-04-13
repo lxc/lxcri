@@ -289,15 +289,19 @@ func NewSpecProcess(cmd string, args ...string) *specs.Process {
 	return proc
 }
 
-func ReadSpecState(r io.Reader) (*specs.State, error) {
+// ReadSpecStateJSON parses the JSON encoded specs.State from the given reader.
+func ReadSpecStateJSON(r io.Reader) (*specs.State, error) {
 	state := new(specs.State)
 	dec := json.NewDecoder(r)
 	err := dec.Decode(state)
 	return state, err
 }
 
+// InitHook is a convenience function for OCI hooks.
+// It parses specs.State from the given reader and
+// loads specs.Spec from the specs.State.Bundle path.
 func InitHook(r io.Reader) (*specs.State, *specs.Spec, error) {
-	state, err := ReadSpecState(r)
+	state, err := ReadSpecStateJSON(r)
 	if err != nil {
 		return nil, nil, err
 	}

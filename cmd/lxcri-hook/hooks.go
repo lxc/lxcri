@@ -6,8 +6,10 @@ import (
 	"strings"
 )
 
+// HookType is the liblxc hook type.
 type HookType string
 
+// List of liblxc hook types.
 const (
 	HookPreStart  HookType = "pre-start"
 	HookPreMount           = "pre-mount"
@@ -52,12 +54,13 @@ type Env struct {
 
 var namespaces = []string{"cgroup", "ipc", "mnt", "net", "pid", "time", "user", "uts"}
 
+// ErrEnv is the error returned by LoadEnv
+// if the LXC_HOOK_TYPE environment variable is not set.
 var ErrEnv = errors.New("LXC_HOOK_TYPE environment variable is not set")
 
-// Env parses all environment variables available in liblxc hooks,
+// LoadEnv parses all liblxc hook environment variables,
 // and returns the parsed values in an Env struct.
-// Env only parses the environment if`LXC_HOOK_TYPE` is set,
-// and will return nil otherwise.
+// If `LXC_HOOK_TYPE` is not set ErrEnv will be returned.
 // NOTE The environment variables in liblxc hooks are all prefixed with LXC_.
 func LoadEnv() (*Env, error) {
 	hookType, exist := os.LookupEnv("LXC_HOOK_TYPE")
