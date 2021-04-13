@@ -102,6 +102,102 @@ func (rt *Runtime) libexec(name string) string {
 	return filepath.Join(rt.LibexecDir, name)
 }
 
+// Init initializes the runtime instance.
+// It creates required directories and checks the hosts system configuration.
+// Unsupported runtime features are disabled and a warning message is logged.
+// Init must be called once for a runtime instance before calling any other method.
+func (rt *Runtime) Init() error {
+	rt.rootfsMount = filepath.Join(rt.Root, ".rootfs")
+	if err := os.MkdirAll(rt.rootfsMount, 0777); err != nil {
+		return errorf("failed to create directory for rootfs mount %s: %w", rt.rootfsMount, err)
+	}
+	if err := os.Chmod(rt.rootfsMount, 0777); err != nil {
+		return errorf("failed to 'chmod 0777 %s': %w", err)
+	}
+
+	rt.privileged = os.Getuid() == 0
+
+	rt.keepEnv("HOME", "XDG_RUNTIME_DIR", "PATH")
+
+	err := canExecute(rt.libexec(ExecStart), rt.libexec(ExecHook), rt.libexec(ExecInit))
+	if err != nil {
+		return errorf("access check failed: %w", err)
+	}
+
+	if err := isFilesystem("/proc", "proc"); err != nil {
+		return errorf("procfs not mounted on /proc: %w", err)
+	}
+	if err := isFilesystem(cgroupRoot, "cgroup2"); err != nil {
+		return errorf("ccgroup2 not mounted on %s: %w", cgroupRoot, err)
+	}
+
+	if !lxc.VersionAtLeast(3, 1, 0) {
+		return errorf("liblxc runtime version is %s, but >= 3.1.0 is required", lxc.Version())
+	}
+
+	if !lxc.VersionAtLeast(4, 0, 5) {
+		rt.Log.Warn().Msgf("liblxc runtime version >= 4.0.5 is recommended (was %s)", lxc.Version())
+	}
+
+	return nil
+}
+
+func (rt *Runtime) checkConfig(cfg *ContainerConfig) error {
+	if len(cfg.ContainerID) == 0 {
+		return errorf("missing container ID")
+	}
+	return rt.checkSpec(cfg.Spec)
+}
+
+func (rt *Runtime) checkSpec(spec *specs.Spec) error {
+	if spec.Root == nil {
+		return errorf("spec.Root is nil")
+	}
+	if len(spec.Root.Path) == 0 {
+		return errorf("empty spec.Root.Path")
+	}
+
+	if spec.Process == nil {
+		return errorf("spec.Process is nil")
+	}
+
+	if len(spec.Process.Args) == 0 {
+		return errorf("specs.Process.Args is empty")
+	}
+
+	if spec.Process.Cwd == "" {
+		rt.Log.Info().Msg("specs.Process.Cwd is unset defaulting to '/'")
+		spec.Process.Cwd = "/"
+	}
+
+	yes, err := isHostNamespaceShared(spec.Linux.Namespaces, specs.MountNamespace)
+	if err != nil {
+		return err
+	}
+	if yes {
+		return errorf("container wants to share the hosts mount namespace")
+	}
+
+	// It should be best practise not to do so, but there are containers that
+	// want to share the hosts PID namespaces. e.g sonobuoy/sonobuoy-systemd-logs-daemon-set
+	yes, err = isHostNamespaceShared(spec.Linux.Namespaces, specs.PIDNamespace)
+	if err != nil {
+		return err
+	}
+	if yes {
+		rt.Log.Info().Msg("container wil share the hosts PID namespace")
+	}
+	return nil
+}
+
+func (rt *Runtime) keepEnv(names ...string) {
+	for _, n := range names {
+		if val := os.Getenv(n); val != "" {
+			rt.env = append(rt.env, n+"="+val)
+		}
+	}
+}
+
 // Load loads a container from the runtime directory.
 // The container must have been created with Runtime.Create.
 func (rt *Runtime) Load(containerID string) (*Container, error) {
