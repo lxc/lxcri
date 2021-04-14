@@ -187,11 +187,7 @@ func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 				"LXCRI_HOOK_TYPE=" + string(HookCreateRuntime),
 			},
 		},
-		specs.Hook{
-			Path: "/usr/local/libexec/lxcri/lxcri-hook-builtin",
-		},
 	)
-
 	c, err := rt.Create(ctx, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, c)
