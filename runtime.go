@@ -50,10 +50,6 @@ type RuntimeFeatures struct {
 	CgroupDevices bool
 }
 
-// HookFunc defines the function type that must be implemented
-// by runtime and container (non-OCI) callback hooks.
-type HookFunc func(ctx context.Context, c *Container) error
-
 // Runtime is a factory for creating and managing containers.
 // The exported methods of Runtime  are required to implement the
 // OCI container runtime interface spec (CRI).
@@ -82,6 +78,8 @@ type Runtime struct {
 	env []string
 
 	caps capability.Capabilities
+
+	specs.Hooks
 }
 
 func (rt *Runtime) libexec(name string) string {

@@ -316,9 +316,32 @@ func configureCapabilities(c *Container) error {
 
 // NOTE keep in sync with cmd/lxcri-hook#ociHooksAndState
 func configureHooks(rt *Runtime, c *Container) error {
-	if c.Spec.Hooks == nil {
-		return nil
+
+	//  prepend runtime OCI hooks to container hooks
+	hooks := rt.Hooks
+
+	if c.Spec.Hooks != nil {
+		if len(c.Spec.Hooks.Prestart) > 0 {
+			hooks.Prestart = append(hooks.Prestart, c.Spec.Hooks.Prestart...)
+		}
+		if len(c.Spec.Hooks.CreateRuntime) > 0 {
+			hooks.CreateRuntime = append(hooks.CreateRuntime, c.Spec.Hooks.CreateRuntime...)
+		}
+		if len(c.Spec.Hooks.CreateContainer) > 0 {
+			hooks.CreateContainer = append(hooks.CreateContainer, c.Spec.Hooks.CreateContainer...)
+		}
+		if len(c.Spec.Hooks.StartContainer) > 0 {
+			hooks.StartContainer = append(hooks.StartContainer, c.Spec.Hooks.StartContainer...)
+		}
+		if len(c.Spec.Hooks.Poststart) > 0 {
+			hooks.Poststart = append(hooks.Poststart, c.Spec.Hooks.Poststart...)
+		}
+		if len(c.Spec.Hooks.Poststop) > 0 {
+			hooks.Poststop = append(hooks.Poststop, c.Spec.Hooks.Poststop...)
+		}
 	}
+
+	c.Spec.Hooks = &hooks
 
 	// pass context information as environment variables to hook scripts
 	if err := c.SetConfigItem("lxc.hook.version", "1"); err != nil {
