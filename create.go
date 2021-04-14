@@ -237,11 +237,15 @@ func configureContainer(rt *Runtime, c *Container) error {
 }
 
 func configureRootfs(rt *Runtime, c *Container) error {
-	if err := c.SetConfigItem("lxc.rootfs.path", c.Spec.Root.Path); err != nil {
+	rootfs := c.Spec.Root.Path
+	if !filepath.IsAbs(rootfs) {
+		rootfs = filepath.Join(c.BundlePath, rootfs)
+	}
+	if err := c.SetConfigItem("lxc.rootfs.path", rootfs); err != nil {
 		return err
 	}
 
-	if err := c.SetConfigItem("lxc.rootfs.mount", rt.rootfsMount); err != nil {
+	if err := c.SetConfigItem("lxc.rootfs.mount", rootfs); err != nil {
 		return err
 	}
 

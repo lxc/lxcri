@@ -300,11 +300,21 @@ func ReadSpecStateJSON(r io.Reader) (*specs.State, error) {
 // InitHook is a convenience function for OCI hooks.
 // It parses specs.State from the given reader and
 // loads specs.Spec from the specs.State.Bundle path.
-func InitHook(r io.Reader) (*specs.State, *specs.Spec, error) {
-	state, err := ReadSpecStateJSON(r)
+func InitHook(r io.Reader) (rootfs string, state *specs.State, spec *specs.Spec, err error) {
+	state, err = ReadSpecStateJSON(r)
 	if err != nil {
-		return nil, nil, err
+		return
 	}
-	spec, err := ReadSpecJSON(filepath.Join(state.Bundle, "config.json"))
-	return state, spec, err
+	spec, err = ReadSpecJSON(filepath.Join(state.Bundle, "config.json"))
+
+	// quote from https://github.com/opencontainers/runtime-spec/blob/master/config.md#root
+	// > On POSIX platforms, path is either an absolute path or a relative path to the bundle.
+	// > For example, with a bundle at /to/bundle and a root filesystem at /to/bundle/rootfs,
+	// > the path value can be either /to/bundle/rootfs or rootfs.
+	// > The value SHOULD be the conventional rootfs.
+	rootfs = spec.Root.Path
+	if !filepath.IsAbs(rootfs) {
+		rootfs = filepath.Join(state.Bundle, rootfs)
+	}
+	return
 }

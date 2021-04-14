@@ -65,9 +65,6 @@ type Runtime struct {
 	// Directories for containers created by the runtime
 	// are created within this directory.
 	Root string
-	// rootfsMount is the directory where liblxc recursively binds
-	// the container rootfs before pivoting.
-	rootfsMount string
 	// Use systemd encoded cgroup path (from crio-o/conmon)
 	// is true if /etc/crio/crio.conf#cgroup_manager = "systemd"
 	SystemdCgroup bool
@@ -105,13 +102,6 @@ func (rt *Runtime) hasCapability(s string) bool {
 // Unsupported runtime features are disabled and a warning message is logged.
 // Init must be called once for a runtime instance before calling any other method.
 func (rt *Runtime) Init() error {
-	rt.rootfsMount = filepath.Join(rt.Root, ".rootfs")
-	if err := os.MkdirAll(rt.rootfsMount, 0777); err != nil {
-		return errorf("failed to create directory for rootfs mount %s: %w", rt.rootfsMount, err)
-	}
-	if err := os.Chmod(rt.rootfsMount, 0777); err != nil {
-		return errorf("failed to 'chmod 0777 %s': %w", err)
-	}
 
 	caps, err := capability.NewPid2(0)
 	if err != nil {
