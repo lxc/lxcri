@@ -166,28 +166,10 @@ func TestRuntimeUnprivileged2(t *testing.T) {
 	testRuntime(t, rt, cfg)
 }
 
-type HookType string
-
-const (
-	HookCreateRuntime HookType = "CreateRuntime"
-)
-
 func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
 
-	cfg.Spec.Hooks = &specs.Hooks{}
-	cfg.Spec.Hooks.CreateRuntime = append(cfg.Spec.Hooks.CreateRuntime,
-		specs.Hook{
-			Path: "/tmp/myhook.sh",
-			//Args: []string{},
-			Env: []string{
-				"LXCRI_CONTAINER_ID=" + cfg.ContainerID,
-				"LXCRI_RUNTIME_ROOT=" + rt.Root,
-				"LXCRI_HOOK_TYPE=" + string(HookCreateRuntime),
-			},
-		},
-	)
 	c, err := rt.Create(ctx, cfg)
 	require.NoError(t, err)
 	require.NotNil(t, c)
