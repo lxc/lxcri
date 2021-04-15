@@ -404,7 +404,7 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 		if err != nil {
 			return errorf("failed to get container state: %w", err)
 		}
-		specki.RunHooks(ctx, &state.SpecState, c.Spec.Hooks.Poststart, true)
+		specki.RunHooks(ctx, &state.SpecState, c.Spec.Hooks.Poststop, true)
 	}
 
 	return os.RemoveAll(c.RuntimePath())

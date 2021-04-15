@@ -71,7 +71,7 @@ func run(ctx context.Context, env *Env) error {
 	state.Status = status
 
 	fmt.Printf("running OCI hooks for lxc hook %q", env.Type)
-	return specki.RunHooks(ctx, &state, hooksToRun, true)
+	return specki.RunHooks(ctx, &state, hooksToRun, false)
 }
 
 // https://github.com/opencontainers/runtime-spec/blob/master/specs-go/state.go
