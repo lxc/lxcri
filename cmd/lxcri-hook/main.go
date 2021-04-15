@@ -84,7 +84,10 @@ func ociHooksAndState(t HookType, hooks *specs.Hooks) ([]specs.Hook, specs.Conta
 		// quote from https://github.com/opencontainers/runtime-spec/blob/master/config.md#posix-platform-hooks
 		// > For runtimes that implement the deprecated prestart hooks as createRuntime hooks,
 		// > createRuntime hooks MUST be called after the prestart hooks.
-		return append(hooks.Prestart, hooks.CreateRuntime...), specs.StateCreating, nil
+		if len(hooks.CreateRuntime) > 0 {
+			return append(hooks.Prestart, hooks.CreateRuntime...), specs.StateCreating, nil
+		}
+		return hooks.Prestart, specs.StateCreating, nil
 	case HookMount:
 		return hooks.CreateContainer, specs.StateCreating, nil
 	case HookStart:

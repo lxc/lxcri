@@ -46,7 +46,7 @@ func getDeviceMode(dev specs.LinuxDevice) (uint32, error) {
 	}
 
 	var perm uint32 = 0666
-	if dev.FileMode == nil {
+	if dev.FileMode != nil {
 		perm = uint32(*dev.FileMode)
 	}
 	return (fileType | perm), nil
