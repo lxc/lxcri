@@ -72,7 +72,7 @@ func (app *app) release() error {
 func main() {
 	app := cli.NewApp()
 	app.Name = "lxcri"
-	app.Usage = "lxcri is a CRI compliant runtime wrapper for lxc"
+	app.Usage = "lxcri is a OCI compliant runtime wrapper for lxc"
 	app.Version = version
 
 	// Disable the default ExitErrHandler.
