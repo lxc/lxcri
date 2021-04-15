@@ -309,15 +309,30 @@ func doCreate(ctxcli *cli.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	if err := doCreateInternal(ctx, pidFile); err != nil {
+		// Create a new context because create may fail with a timeout.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := clxc.Delete(ctx, clxc.cfg.ContainerID, true); err != nil {
+			clxc.Log.Error().Err(err).Msg("failed to destroy container")
+		}
+		return err
+	}
+	return nil
+}
+
+func doCreateInternal(ctx context.Context, pidFile string) error {
 	c, err := clxc.Create(ctx, &clxc.cfg)
 	if err != nil {
 		return err
 	}
-	defer c.Release()
 	if pidFile != "" {
-		return createPidFile(pidFile, c.Pid)
+		err := createPidFile(pidFile, c.Pid)
+		if err != nil {
+			return err
+		}
 	}
-	return nil
+	return c.Release()
 }
 
 var startCmd = cli.Command{
@@ -339,14 +354,28 @@ starts <containerID>
 }
 
 func doStart(ctxcli *cli.Context) error {
-	c, err := clxc.Load(clxc.cfg.ContainerID)
-	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
-	}
 
 	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	if err := doStartInternal(ctx); err != nil {
+		//  a new context because start may fail with a timeout.
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := clxc.Delete(ctx, clxc.cfg.ContainerID, true); err != nil {
+			clxc.Log.Error().Err(err).Msg("failed to destroy container")
+		}
+		return err
+	}
+	return nil
+}
+
+func doStartInternal(ctx context.Context) error {
+	c, err := clxc.Load(clxc.cfg.ContainerID)
+	if err != nil {
+		return fmt.Errorf("failed to load container: %w", err)
+	}
 
 	return clxc.Start(ctx, c)
 }
