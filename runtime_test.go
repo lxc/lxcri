@@ -106,18 +106,18 @@ func TestRuntimePrivileged(t *testing.T) {
 }
 
 // The following tests require the following setup:
-// TODO load UID/GID mappings from /etc/subgid /etc/subuid
 
+// sudo /bin/sh -c "echo '$(whoami):1000:1' >> /etc/subuid"
+// sudo /bin/sh -c "echo '$(whoami):20000:65536' >> /etc/subuid"
+// sudo /bin/sh -c "echo '$(whoami):1000:1' >> /etc/subgid"
+// sudo /bin/sh -c "echo '$(whoami):20000:65536' >> /etc/subgid"
+// sudo chown -R $(whoami):$(whoami) /sys/fs/cgroup/unified$(cat /proc/self/cgroup  | grep '^0:' | cut -d: -f3)
 // sudo chown -R $(whoami):$(whoami) /sys/fs/cgroup$(cat /proc/self/cgroup  | grep '^0:' | cut -d: -f3)
-/*
-[ruben@k8s-cluster8-controller lxcri]$ cat /etc/subgid
-ruben:1000:1
-ruben:20000:65536
-[ruben@k8s-cluster8-controller lxcri]$ cat /etc/subuid
-ruben:1000:1
-ruben:20000:65536
-*/
+//
 func TestRuntimeUnprivileged(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skipf("this test is only run as non-root")
+	}
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
@@ -146,6 +146,9 @@ func TestRuntimeUnprivileged(t *testing.T) {
 }
 
 func TestRuntimeUnprivileged2(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skipf("this test is only run as non-root")
+	}
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
