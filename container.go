@@ -237,15 +237,16 @@ func (c *Container) getContainerInitState() (specs.ContainerState, error) {
 	}
 	cmdlinePath := fmt.Sprintf("/proc/%d/cmdline", initPid)
 	cmdline, err := os.ReadFile(cmdlinePath)
-	if os.IsNotExist(err) {
+	// Ignore any error here. Most likely the error will be os.ErrNotExist.
+	// But I've seen race conditions where ESRCH is returned instead because
+	// the process has died while opening it's proc directory.
+	if err != nil {
+		if !(os.IsNotExist(err) || err == unix.ESRCH) {
+			c.Log.Warn().Str("file", cmdlinePath).Msgf("open failed: %s", err)
+		}
 		// init process died or returned
 		return specs.StateStopped, nil
 	}
-	if err != nil {
-		// it's a serious error if cmdlinePath exists but can't be read
-		return specs.StateStopped, err
-	}
-
 	initCmdline := fmt.Sprintf("/.lxcri/init\000%s\000", c.ContainerID)
 	if string(cmdline) == initCmdline {
 		return specs.StateCreated, nil
