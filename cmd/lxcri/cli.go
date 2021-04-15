@@ -474,7 +474,13 @@ func doDelete(ctxcli *cli.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	return clxc.Delete(ctx, clxc.cfg.ContainerID, ctxcli.Bool("force"))
+	err := clxc.Delete(ctx, clxc.cfg.ContainerID, ctxcli.Bool("force"))
+	// Deleting a non-existing container is a noop,
+	// otherwise cri-o / kubelet log warnings about that.
+	if err == lxcri.ErrNotExist {
+		return nil
+	}
+	return err
 }
 
 var execCmd = cli.Command{
