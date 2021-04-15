@@ -352,10 +352,10 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 	rt.Log.Info().Bool("force", force).Msg("delete container")
 	c, err := rt.Load(containerID)
 	if err == ErrNotExist {
-		rt.Log.Info().Msg("container does not exist")
-		return nil
+		return err
 	}
 	if err != nil {
+		// NOTE hooks won't run in this case
 		rt.Log.Warn().Msgf("deleting runtime dir for unloadable container: %s", err)
 		return os.RemoveAll(filepath.Join(rt.Root, containerID))
 	}
