@@ -290,6 +290,7 @@ func NewSpecProcess(cmd string, args ...string) *specs.Process {
 	return proc
 }
 
+// LoadSpecStateJSON parses specs.State from the JSON encoded file filename.
 func LoadSpecStateJSON(filename string) (*specs.State, error) {
 	state := new(specs.State)
 	err := DecodeJSONFile(filename, state)
@@ -367,11 +368,11 @@ func Getenv(env []string, key string) (string, bool) {
 	return "", false
 }
 
-// Setenv appends the given kv to the environment.
-// kv is only append if either a value with the same key
-// is not yet set and overwrite is false, or if the value is
-// already set and overwrite is true.
-// It returns the changed environment and true the variable already exists.
+// Setenv adds the given variable to the environment env.
+// The variable is only added if it is not yet defined
+// or if overwrite is set to true.
+// Setenv returns the modified environment and
+// true the variable is already defined or false otherwise.
 func Setenv(env []string, val string, overwrite bool) ([]string, bool) {
 	a := strings.Split(val, "=")
 	key := a[0]
