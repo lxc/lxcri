@@ -13,7 +13,6 @@ PKG_CONFIG_PATH ?= $(PREFIX)/lib/pkgconfig
 export PKG_CONFIG_PATH
 LDFLAGS=-X main.version=$(COMMIT) -X main.libexecDir=$(LIBEXEC_DIR)
 CC ?= cc
-MUSL_CC ?= musl-gcc
 SHELL_SCRIPTS = $(shell find . -name \*.sh)
 GO_SRC = $(shell find . -name \*.go | grep -v _test.go)
 

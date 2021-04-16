@@ -17,7 +17,7 @@ case "$DISTRIBUTION" in
 
 	export DEBIAN_FRONTEND=noninteractive
 
-	PKGS_BUILD="automake build-essential ca-certificates git libc6-dev libtool make musl musl-tools pkg-config wget"
+	PKGS_BUILD="automake build-essential ca-certificates git libc6-dev libtool make pkg-config wget"
 	PKGS_BUILD="$PKGS_BUILD libapparmor-dev libbtrfs-dev libc6-dev libcap-dev libdevmapper-dev libglib2.0-dev libseccomp-dev"
 
 	PKGS_RUNTIME="libapparmor1 libbtrfs0 libcap2 libdevmapper1.02.1 libseccomp2"
