@@ -1,3 +1,4 @@
+// Package log provides logging for lxcri.
 package log
 
 import (

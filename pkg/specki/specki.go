@@ -1,5 +1,4 @@
-// Package specki containse general-purpose helper functions that operate
-// on (parts of) the runtime spec (specs.Spec).
+// Package specki provides helper functions to process OCI container specs.
 // These functions should not contain any code that is `lxcri` specific.
 package specki
 

@@ -1,3 +1,4 @@
+// Package lxcri provides an OCI specific runtime interface for lxc.
 package lxcri
 
 import (
