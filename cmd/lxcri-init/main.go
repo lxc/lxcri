@@ -81,7 +81,7 @@ func doInit(runtimeDir string, spec *specs.Spec) error {
 		}
 	}
 
-	val, exist = specki.Getenv(spec.Process.Env, "HOME")
+	_, exist = specki.Getenv(spec.Process.Env, "HOME")
 	if !exist {
 		addEnvHome(spec)
 	}
@@ -144,5 +144,4 @@ func addEnvHome(spec *specs.Spec) {
 		}
 	}
 	spec.Process.Env = append(spec.Process.Env, "HOME="+spec.Process.Cwd)
-	return
 }

@@ -37,8 +37,7 @@ type app struct {
 		Timestamp string
 	}
 
-	command    string
-	createHook string
+	command string
 }
 
 var clxc = app{}
@@ -193,13 +192,11 @@ func main() {
 		println(err.Error())
 		os.Exit(1)
 	}
-	if env != nil {
-		for key, val := range env {
-			if err := setEnv(key, val, false); err != nil {
-				err = fmt.Errorf("failed to set environment variable \"%s=%s\": %w", key, val, err)
-				println(err.Error())
-				os.Exit(1)
-			}
+	for key, val := range env {
+		if err := setEnv(key, val, false); err != nil {
+			err = fmt.Errorf("failed to set environment variable \"%s=%s\": %w", key, val, err)
+			println(err.Error())
+			os.Exit(1)
 		}
 	}
 

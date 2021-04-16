@@ -91,7 +91,7 @@ func seccompArchs(seccomp *specs.LinuxSeccomp) ([]string, error) {
 	}
 	archs := make([]string, len(seccomp.Architectures))
 	for _, a := range seccomp.Architectures {
-		s := strings.ToLower(strings.TrimLeft(string(a), "SCMP_ARCH_"))
+		s := strings.ToLower(strings.TrimPrefix(string(a), "SCMP_ARCH_"))
 		if strings.ToLower(nativeArch) == s {
 			// lxc seccomp code automatically adds syscalls to compat architectures
 			return []string{nativeArch}, nil

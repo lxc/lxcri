@@ -68,7 +68,7 @@ func configureMounts(rt *Runtime, c *Container) error {
 		rt.Log.Trace().Err(err).Str("file", ms.Destination).Str("target", mountDest).Msg("resolve mount destination")
 
 		// Check whether the resolved destination of the target link escapes the rootfs.
-		if !filepath.HasPrefix(mountDest, c.Spec.Root.Path) {
+		if !strings.HasPrefix(mountDest, c.Spec.Root.Path) {
 			// refuses mount destinations that escape from rootfs
 			return fmt.Errorf("resolved mount target path %s escapes from container root %s", mountDest, c.Spec.Root.Path)
 		}
@@ -155,7 +155,7 @@ func resolvePathRelative(rootfs string, currentPath string, subPath string) (str
 
 	// The destination of an absolute link must be prefixed with the rootfs
 	if filepath.IsAbs(linkDst) {
-		if filepath.HasPrefix(linkDst, rootfs) {
+		if strings.HasPrefix(linkDst, rootfs) {
 			return p, nil
 		}
 		return filepath.Join(rootfs, linkDst), nil

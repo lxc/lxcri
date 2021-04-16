@@ -69,33 +69,6 @@ func parseSignal(sig string) unix.Signal {
 	return unix.SignalNum(s)
 }
 
-/*
-func logEnv(log *zerolog.Log)
-		if env != nil {
-			stat, _ := os.Stat(envFile)
-			if stat != nil && (stat.Mode().Perm()^0640) != 0 {
-				log.Warn().Str("file", envFile).Stringer("mode", stat.Mode().Perm()).Msgf("environment file should have mode %s", os.FileMode(0640))
-			}
-			for key, val := range env {
-				log.Trace().Str("env", key).Str("val", val).Msg("environment file value")
-			}
-			log.Debug().Str("file", envFile).Msg("loaded environment variables from file")
-		} else {
-			if os.IsNotExist(envErr) {
-				log.Warn().Str("file", envFile).Msg("environment file does not exist")
-			} else {
-				return errors.Wrapf(envErr, "failed to load env file %s", envFile)
-			}
-		}
-
-		for _, f := range ctx.Command.Flags {
-			name := f.Names()[0]
-			log.Trace().Str("flag", name).Str("val", ctx.String(name)).Msg("flag value")
-		}
-
-  }
-*/
-
 // createPidFile atomically creates a pid file for the given pid at the given path
 func createPidFile(path string, pid int) error {
 	tmpDir := filepath.Dir(path)
@@ -119,14 +92,4 @@ func createPidFile(path string, pid int) error {
 		return fmt.Errorf("failed to rename temporary PID file %q to %q: %w", tmpName, path, err)
 	}
 	return nil
-}
-
-func readPidFile(path string) (int, error) {
-	// #nosec
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0, err
-	}
-	s := strings.TrimSpace(string(data))
-	return strconv.Atoi(s)
 }

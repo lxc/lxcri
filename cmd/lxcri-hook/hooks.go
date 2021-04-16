@@ -12,15 +12,15 @@ type HookType string
 // List of liblxc hook types.
 const (
 	HookPreStart  HookType = "pre-start"
-	HookPreMount           = "pre-mount"
-	HookMount              = "mount"
-	HookAutodev            = "autodev"
-	HookStartHost          = "start-host"
-	HookStart              = "start"
-	HookStop               = "stop"
-	HookPostStop           = "post-stop"
-	HookClone              = "clone"
-	HookDestroy            = "destroy"
+	HookPreMount  HookType = "pre-mount"
+	HookMount     HookType = "mount"
+	HookAutodev   HookType = "autodev"
+	HookStartHost HookType = "start-host"
+	HookStart     HookType = "start"
+	HookStop      HookType = "stop"
+	HookPostStop  HookType = "post-stop"
+	HookClone     HookType = "clone"
+	HookDestroy   HookType = "destroy"
 	//HookPostStart          = "post-start" // not defined by liblxc
 )
 

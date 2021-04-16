@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -59,16 +58,4 @@ func errorf(sfmt string, args ...interface{}) error {
 	_, file, line, _ := runtime.Caller(1)
 	prefix := fmt.Sprintf("[%s:%s:%d] ", bin, filepath.Base(file), line)
 	return fmt.Errorf(prefix+sfmt, args...)
-}
-
-func setenv(env []string, key, val string, overwrite bool) []string {
-	for i, kv := range env {
-		if strings.HasPrefix(kv, key+"=") {
-			if overwrite {
-				env[i] = key + "=" + val
-			}
-			return env
-		}
-	}
-	return append(env, key+"="+val)
 }

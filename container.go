@@ -162,20 +162,6 @@ func (c *Container) waitNot(ctx context.Context, state specs.ContainerState) err
 	}
 }
 
-func (c *Container) wait(ctx context.Context, state lxc.State) bool {
-	for {
-		select {
-		case <-ctx.Done():
-			return false
-		default:
-			if c.LinuxContainer.State() == state {
-				return true
-			}
-			time.Sleep(time.Millisecond * 100)
-		}
-	}
-}
-
 // State wraps specs.State and adds runtime specific state.
 type State struct {
 	ContainerState string
@@ -247,8 +233,7 @@ func (c *Container) getContainerInitState() (specs.ContainerState, error) {
 		// init process died or returned
 		return specs.StateStopped, nil
 	}
-	initCmdline := fmt.Sprintf("/.lxcri/lxcri-init\000")
-	if string(cmdline) == initCmdline {
+	if string(cmdline) == "/.lxcri/lxcri-init\000" {
 		return specs.StateCreated, nil
 	}
 	return specs.StateRunning, nil

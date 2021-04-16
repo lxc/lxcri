@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,10 +14,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
-)
-
-const (
-	allControllers = "+cpuset +cpu +io +memory +hugetlb +pids +rdma"
 )
 
 var cgroupRoot string
@@ -183,7 +180,7 @@ func configureDeviceController(c *Container) error {
 				return err
 			}
 		default:
-			return fmt.Errorf("Invalid cgroup2 device - invalid type (allow:%t %s %s:%s %s)", dev.Allow, dev.Type, maj, min, dev.Access)
+			return fmt.Errorf("invalid cgroup2 device - invalid type (allow:%t %s %s:%s %s)", dev.Allow, dev.Type, maj, min, dev.Access)
 		}
 	}
 	return nil
@@ -354,7 +351,7 @@ func drainCgroup(ctx context.Context, cgroupName string, sig unix.Signal) error 
 			return fmt.Errorf("drain group aborted: %w", ctx.Err())
 		default:
 			buf.Reset()
-			_, err = f.Seek(0, os.SEEK_SET)
+			_, err = f.Seek(0, io.SeekStart)
 			if err != nil {
 				return err
 			}
