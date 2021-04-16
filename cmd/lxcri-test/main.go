@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,5 +26,11 @@ func main() {
 
 	fmt.Printf("%#v\n", os.Args)
 	println("sleeping for 30 seconds")
+	f, err := os.Open("/proc/self/mounts")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	io.Copy(os.Stdout, f)
 	time.Sleep(time.Second * 30)
 }

@@ -104,6 +104,11 @@ func doInit(runtimeDir string, spec *specs.Spec) error {
 		return err
 	}
 
+	// unmount runtimeDir and lxcri-init bind mounts after exec
+	if err := unix.Unmount(runtimeDir, unix.MNT_DETACH); err != nil {
+		return err
+	}
+
 	unix.Exec(cmdPath, spec.Process.Args, spec.Process.Env)
 	if err != nil {
 		return fmt.Errorf("exec failed: %w", err)
