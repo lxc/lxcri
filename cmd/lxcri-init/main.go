@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/drachenfels-de/lxcri/pkg/specki"
@@ -69,15 +68,8 @@ func doInit(runtimeDir string, spec *specs.Spec) error {
 		return fmt.Errorf("failed to read spec %q: %s", statePath, err)
 	}
 
-	// remove duplicates from environment variables,
-	// since the behaviour of execve is undefined here.
-	// glibc setenv has a parameter `overwrite` to control the behaviour. see `man 3 setenv`
-	// previously overwrite was set to 1, the last defined variable will overwrite all
-	// previously defined variables.
-	cleanenv(spec, true)
-
 	cmdPath := spec.Process.Args[0]
-	val, exist := getenv(spec.Process.Env, "PATH")
+	val, exist := specki.Getenv(spec.Process.Env, "PATH")
 	if exist {
 		err := os.Setenv("PATH", val)
 		if err != nil {
@@ -89,11 +81,9 @@ func doInit(runtimeDir string, spec *specs.Spec) error {
 		}
 	}
 
-	addEnvHome(spec)
-
-	err = readSyncfifo(filepath.Join(runtimeDir, "syncfifo"))
-	if err != nil {
-		return err
+	val, exist = specki.Getenv(spec.Process.Env, "HOME")
+	if !exist {
+		addEnvHome(spec)
 	}
 
 	err = unix.Chdir(spec.Process.Cwd)
@@ -101,7 +91,10 @@ func doInit(runtimeDir string, spec *specs.Spec) error {
 		return fmt.Errorf("failed to change cwd to %s: %w", spec.Process.Cwd, err)
 	}
 
-	// TODO unmount the runtimeDir
+	err = readSyncfifo(filepath.Join(runtimeDir, "syncfifo"))
+	if err != nil {
+		return err
+	}
 
 	// TODO use environment variable to control timeout
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
@@ -126,51 +119,6 @@ func readSyncfifo(filename string) error {
 	return f.Close()
 }
 
-// Getenv returns the first matching value from env,
-// which has a prefix of key + "=".
-func getenv(env []string, key string) (string, bool) {
-	for _, kv := range env {
-		if strings.HasPrefix(kv, key+"=") {
-			val := strings.TrimPrefix(kv, key+"=")
-			return val, true
-		}
-	}
-	return "", false
-}
-
-// Setenv appends the given kv to the environment.
-// kv is only append if either a value with the same key
-// is not yet set and overwrite is false, or if the value is
-// already set and overwrite is true.
-func setenv(env []string, kv string, overwrite bool) []string {
-	a := strings.Split(kv, "=")
-	key := a[0]
-	for i, kv := range env {
-		if strings.HasPrefix(kv, key+"=") {
-			if overwrite {
-				env[i] = kv
-			}
-			return env
-		}
-	}
-	return append(env, kv)
-}
-
-// cleanenv removes duplicates from spec.Process.Env.
-// If overwrite is false the first defined value takes precedence,
-// if overwrite is true, the last defined value overwrites previously
-// defined values.
-func cleanenv(spec *specs.Spec, overwrite bool) {
-	if len(spec.Process.Env) < 2 {
-		return
-	}
-	newEnv := make([]string, len(spec.Process.Env))
-	for _, kv := range spec.Process.Env {
-		newEnv = setenv(newEnv, kv, overwrite)
-	}
-	spec.Process.Env = newEnv
-}
-
 /*
 func closeExtraFds() {
 	os.Open("/proc/self/fd")
@@ -178,14 +126,7 @@ func closeExtraFds() {
 */
 
 func addEnvHome(spec *specs.Spec) {
-	// Use existing HOME environment variable.
-	for _, kv := range spec.Process.Env {
-		if strings.HasPrefix(kv, "HOME=") {
-			return
-		}
-	}
-
-	// Or lookup users home directory in passwd.
+	// lookup users home directory in passwd.
 	userName := spec.Process.User.Username
 	if userName != "" {
 		u, err := user.Lookup(userName)

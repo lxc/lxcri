@@ -36,6 +36,8 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return c, errorf("failed to configure container: %w", err)
 	}
 
+	cleanenv(c, true)
+
 	// Seralize the modified spec.Spec separately, to make it available for
 	// runtime hooks.
 	specPath := c.RuntimePath(BundleConfigFile)
@@ -364,4 +366,25 @@ func configureHooks(rt *Runtime, c *Container) error {
 		}
 	}
 	return nil
+}
+
+// cleanenv removes duplicates from spec.Process.Env.
+// If overwrite is false the first defined value takes precedence,
+// if overwrite is true, the last defined value overwrites previously
+// defined values.
+func cleanenv(c *Container, overwrite bool) {
+	env := c.Spec.Process.Env
+	if len(env) < 2 {
+		return
+	}
+	newEnv := make([]string, len(env))
+	var exist bool
+	for _, kv := range env {
+		newEnv, exist = specki.Setenv(newEnv, kv, overwrite)
+		if exist {
+			vals := strings.Split(kv, "=")
+			c.Log.Warn().Msgf("duplicate environment variable %s (overwrite=%t)", vals[0], overwrite)
+		}
+	}
+	c.Spec.Process.Env = newEnv
 }

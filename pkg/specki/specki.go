@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/opencontainers/runtime-spec/specs-go"
@@ -352,4 +353,35 @@ func HasOptions(m specs.Mount, opts ...string) bool {
 		}
 	}
 	return true
+}
+
+// Getenv returns the first matching value from env,
+// which has a prefix of key + "=".
+func Getenv(env []string, key string) (string, bool) {
+	for _, kv := range env {
+		if strings.HasPrefix(kv, key+"=") {
+			val := strings.TrimPrefix(kv, key+"=")
+			return val, true
+		}
+	}
+	return "", false
+}
+
+// Setenv appends the given kv to the environment.
+// kv is only append if either a value with the same key
+// is not yet set and overwrite is false, or if the value is
+// already set and overwrite is true.
+// It returns the changed environment and true the variable already exists.
+func Setenv(env []string, val string, overwrite bool) ([]string, bool) {
+	a := strings.Split(val, "=")
+	key := a[0]
+	for i, kv := range env {
+		if strings.HasPrefix(kv, key+"=") {
+			if overwrite {
+				env[i] = val
+			}
+			return env, true
+		}
+	}
+	return append(env, val), false
 }
