@@ -101,7 +101,6 @@ func (rt *Runtime) hasCapability(s string) bool {
 // Unsupported runtime features are disabled and a warning message is logged.
 // Init must be called once for a runtime instance before calling any other method.
 func (rt *Runtime) Init() error {
-
 	caps, err := capability.NewPid2(0)
 	if err != nil {
 		return errorf("failed to create capabilities object: %w", err)
@@ -197,14 +196,17 @@ func (rt *Runtime) keepEnv(names ...string) {
 
 // Load loads a container from the runtime directory.
 // The container must have been created with Runtime.Create.
+// The logger Container.Log is set to Runtime.Log by default.
 func (rt *Runtime) Load(containerID string) (*Container, error) {
 	dir := filepath.Join(rt.Root, containerID)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		return nil, ErrNotExist
 	}
 	c := &Container{
-		ContainerConfig: &ContainerConfig{},
-		runtimeDir:      dir,
+		ContainerConfig: &ContainerConfig{
+			Log: rt.Log,
+		},
+		runtimeDir: dir,
 	}
 	if err := c.load(); err != nil {
 		return nil, err
