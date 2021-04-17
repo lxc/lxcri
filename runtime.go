@@ -373,17 +373,6 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 		}
 	}
 
-	// FIXME move this to lxcri-hook ?
-	if c.CgroupDir != "" {
-		// In rare cases processes might escape from kill.
-		// This could happens if the container does not use pid_namespaces.
-		// Since every container get's it's own cgroup, we can
-		// try to kill all processes within the containers cgroup tree.
-		if err := drainCgroup(ctx, c.CgroupDir, unix.SIGKILL); err != nil {
-			rt.Log.Debug().Msgf("failed to drain cgroup: %s", err)
-		}
-	}
-
 	// From OCI runtime spec
 	// "Note that resources associated with the container, but not
 	// created by this container, MUST NOT be deleted."
@@ -392,11 +381,20 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 	if err := c.LinuxContainer.Destroy(); err != nil {
 		return fmt.Errorf("failed to destroy container: %w", err)
 	}
-	if c.CgroupDir != "" {
-		err := deleteCgroup(c.CgroupDir)
-		if err != nil && !os.IsNotExist(err) {
-			return err
-		}
+
+	// the monitor might be part of the cgroup so wait for it to exit
+	eventsFile := filepath.Join(cgroupRoot, c.CgroupDir, "cgroup.events")
+	err = pollCgroupEvents(ctx, eventsFile, func(ev cgroupEvents) bool {
+		return !ev.populated
+	})
+	if err != nil && !os.IsNotExist(err) {
+		// try to delete the cgroup anyways
+		c.Log.Warn().Msgf("failed to wait until cgroup.events populated=0: %s", err)
+	}
+
+	err = deleteCgroup(c.CgroupDir)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete cgroup: %s", err)
 	}
 
 	if c.Spec.Hooks != nil {

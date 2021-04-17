@@ -1,19 +1,18 @@
 package lxcri
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	"golang.org/x/sys/unix"
-
+	//"github.com/fsnotify/fsnotify"
 	"github.com/opencontainers/runtime-spec/specs-go"
+	"golang.org/x/sys/unix"
 )
 
 var cgroupRoot string
@@ -87,46 +86,35 @@ func configureCgroupPath(rt *Runtime, c *Container) error {
 		c.CgroupDir = c.Spec.Linux.CgroupsPath
 	}
 
-	c.MonitorCgroupDir = filepath.Join(rt.MonitorCgroup, c.ContainerID+".scope")
-
 	if err := c.SetConfigItem("lxc.cgroup.relative", "0"); err != nil {
 		return err
 	}
 
-	if err := c.SetConfigItem("lxc.cgroup.dir", c.CgroupDir); err != nil {
+	// @since lxc @a900cbaf257c6a7ee9aa73b09c6d3397581d38fb
+	// checking for on of the config items shuld be enough, because they were introduced together ...
+	//  lxc.cgroup.dir.payload and lxc.cgroup.dir.monitor
+	splitCgroup := c.SupportsConfigItem("lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor")
+
+	if !splitCgroup || rt.MonitorCgroup == "" {
+		return c.SetConfigItem("lxc.cgroup.dir", c.CgroupDir)
+	}
+
+	c.MonitorCgroupDir = filepath.Join(rt.MonitorCgroup, c.ContainerID+".scope")
+
+	if err := c.SetConfigItem("lxc.cgroup.dir.container", c.CgroupDir); err != nil {
+		return err
+	}
+	if err := c.SetConfigItem("lxc.cgroup.dir.monitor", c.MonitorCgroupDir); err != nil {
 		return err
 	}
 
-	/*
-		if c.SupportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
-			if err := c.SetConfigItem("lxc.cgroup.dir.monitor.pivot", c.MonitorCgroupDir); err != nil {
-				return err
-			}
+	if c.SupportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
+		if err := c.SetConfigItem("lxc.cgroup.dir.monitor.pivot", rt.MonitorCgroup); err != nil {
+			return err
 		}
-	*/
-
-	/*
-		// @since lxc @a900cbaf257c6a7ee9aa73b09c6d3397581d38fb
-		// checking for on of the config items shuld be enough, because they were introduced together ...
-		if supportsConfigItem("lxc.cgroup.dir.container", "lxc.cgroup.dir.monitor") {
-			if err := c.SetConfigItem("lxc.cgroup.dir.container", c.CgroupDir); err != nil {
-				return err
-			}
-			if err := c.SetConfigItem("lxc.cgroup.dir.monitor", c.MonitorCgroupDir); err != nil {
-				return err
-			}
-		} else {
-			if err := c.SetConfigItem("lxc.cgroup.dir", c.CgroupDir); err != nil {
-				return err
-			}
-		}
-		if supportsConfigItem("lxc.cgroup.dir.monitor.pivot") {
-			if err := c.SetConfigItem("lxc.cgroup.dir.monitor.pivot", c.MonitorCgroup); err != nil {
-				return err
-			}
-		}
-	*/
+	}
 	return nil
+
 }
 
 func configureDeviceController(c *Container) error {
@@ -250,137 +238,157 @@ func parseSystemdCgroupPath(s string) string {
 	return filepath.Join(cgPath...)
 }
 
-type cgroupInfo struct {
-	Name  string
-	Procs []int
-	// controllers
-}
-
-func (cg *cgroupInfo) loadProcs() error {
-	cgroupProcsPath := filepath.Join(cgroupRoot, cg.Name, "cgroup.procs")
-	// #nosec
-	procsData, err := os.ReadFile(cgroupProcsPath)
-	if err != nil {
-		return fmt.Errorf("failed to read cgroup.procs: %w", err)
-	}
-	// cgroup.procs contains one PID per line and is newline separated.
-	// A trailing newline is always present.
-	s := strings.TrimSpace(string(procsData))
-	if s == "" {
+// killCgroup freezes the cgroups of the given container
+// and sends the given signal sig to all cgroup members.
+func killCgroup(ctx context.Context, c *Container, sig unix.Signal) error {
+	if c.CgroupDir == "" {
 		return nil
 	}
-	pidStrings := strings.Split(s, "\n")
-	cg.Procs = make([]int, 0, len(pidStrings))
-	for _, s := range pidStrings {
-		pid, err := strconv.Atoi(s)
+	rootDir := filepath.Join(cgroupRoot, c.CgroupDir)
+	eventsFile := filepath.Join(rootDir, "cgroup.events")
+
+	ev, err := parseCgroupEvents(eventsFile)
+	if err != nil {
+		return err
+	}
+	if !ev.populated {
+		return nil
+	}
+
+	freezer := filepath.Join(rootDir, "cgroup.freeze")
+
+	err = cgroupFreeze(freezer, true)
+	if err != nil {
+		return err
+	}
+
+	err = pollCgroupEvents(ctx, eventsFile, func(ev cgroupEvents) bool {
+		return ev.frozen
+	})
+	if err != nil {
+		return err
+	}
+
+	err = filepath.Walk(rootDir, func(path string, info fs.FileInfo, err error) error {
 		if err != nil {
-			return fmt.Errorf("failed to convert PID %q to number: %w", s, err)
+			return err
 		}
-		cg.Procs = append(cg.Procs, pid)
-	}
-	return nil
-}
-
-func loadCgroup(cgName string) (*cgroupInfo, error) {
-	info := &cgroupInfo{Name: cgName}
-	if err := info.loadProcs(); err != nil {
-		return nil, err
-	}
-	return info, nil
-}
-
-func killCgroupProcs(cgroupName string, sig unix.Signal) error {
-	cg, err := loadCgroup(cgroupName)
-	if err != nil {
-		return fmt.Errorf("failed to load cgroup %s: %w", cgroupName, err)
-	}
-	for _, pid := range cg.Procs {
-		err := unix.Kill(pid, sig)
-		if err != nil && err != unix.ESRCH {
-			return fmt.Errorf("failed to kill %d: %w", pid, err)
+		if info.Name() != "cgroup.procs" {
+			return nil
 		}
-	}
+		procsData, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		// cgroup.procs contains one PID per line and is newline separated.
+		// A trailing newline is always present.
+		s := strings.TrimSpace(string(procsData))
+		if s == "" {
+			return nil
+		}
+		vals := strings.Split(s, "\n")
 
-	dirName := filepath.Join(cgroupRoot, cgroupName)
-	// #nosec
-	dir, err := os.Open(dirName)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	entries, err := dir.Readdir(-1)
-	if err := dir.Close(); err != nil {
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	for _, i := range entries {
-		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
-			err := killCgroupProcs(filepath.Join(cgroupName, i.Name()), sig)
+		c.Log.Debug().Msgf("killing %d cgroup procs: %s", len(vals), vals)
+		for _, s := range vals {
+			pid, err := strconv.Atoi(s)
 			if err != nil {
-				return err
+				c.Log.Error().Msgf("failed to convert PID %q to number: %s", s, err)
+				continue
+			}
+			// do not kill the monitor process
+			if pid == c.Pid {
+				continue
+			}
+			err = unix.Kill(pid, sig)
+			if err != nil && err != unix.ESRCH {
+				c.Log.Error().Msgf("failed to kill %d: %s", pid, err)
+				continue
 			}
 		}
-	}
-	return nil
-}
-
-// see http://morningcoffee.io/killing-a-process-and-all-of-its-descendants.html
-// TODO maybe use polling instead
-// fds := []unix.PollFd{{Fd: int32(f.Fd()), Events: unix.POLLIN}}
-// n, err := unix.Poll(fds, timeout)
-func drainCgroup(ctx context.Context, cgroupName string, sig unix.Signal) error {
-	p := filepath.Join(cgroupRoot, cgroupName, "cgroup.events")
-	f, err := os.OpenFile(p, os.O_RDONLY, 0)
-	if os.IsNotExist(err) {
 		return nil
-	}
+	})
+
 	if err != nil {
 		return err
 	}
 
-	var buf bytes.Buffer
-	buf.Grow(64)
+	err = cgroupFreeze(freezer, false)
+	if err != nil {
+		return err
+	}
 
+	return nil
+}
+
+type cgroupEvents struct {
+	frozen    bool
+	populated bool
+}
+
+func parseCgroupEvents(filename string) (cgroupEvents, error) {
+	ev := cgroupEvents{}
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return ev, err
+	}
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		switch line {
+		case "populated 0":
+			ev.populated = false
+		case "populated 1":
+			ev.populated = true
+		case "frozen 0":
+			ev.frozen = false
+		case "frozen 1":
+			ev.frozen = true
+		}
+	}
+	return ev, nil
+}
+
+func cgroupFreeze(filename string, freeze bool) error {
+	f, err := os.OpenFile(filename, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if freeze {
+		_, err = f.Write([]byte("1"))
+	} else {
+		_, err = f.Write([]byte("0"))
+	}
+	return err
+}
+
+func pollCgroupEvents(ctx context.Context, eventsFile string, fn func(ev cgroupEvents) bool) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("drain group aborted: %w", ctx.Err())
+			return ctx.Err()
 		default:
-			buf.Reset()
-			_, err = f.Seek(0, io.SeekStart)
+			ev, err := parseCgroupEvents(eventsFile)
 			if err != nil {
 				return err
 			}
-			_, err := buf.ReadFrom(f)
-			if err != nil {
-				return err
+			if fn(ev) {
+				return nil
 			}
-
-			for _, line := range strings.Split(buf.String(), "\n") {
-				if line == "populated 0" {
-					return nil
-				}
-			}
-			err = killCgroupProcs(cgroupName, sig)
-			if err != nil {
-				return fmt.Errorf("failed to kill cgroup procs: %w", err)
-			}
-			time.Sleep(time.Millisecond * 50)
+			time.Sleep(time.Millisecond * 5)
 		}
 	}
 }
 
 func deleteCgroup(cgroupName string) error {
-	dirName := filepath.Join(cgroupRoot, cgroupName)
-	// #nosec
-	dir, err := os.Open(dirName)
-	if os.IsNotExist(err) {
-		return nil
+	return deleteCgroupRecursive(cgroupName, 0, 10)
+}
+
+func deleteCgroupRecursive(cgroupName string, level, max int) error {
+	if level == max {
+		return fmt.Errorf("reached max recursion of %d", max)
 	}
+	dirName := filepath.Join(cgroupRoot, cgroupName)
+	dir, err := os.Open(dirName)
 	if err != nil {
 		return err
 	}
@@ -392,12 +400,17 @@ func deleteCgroup(cgroupName string) error {
 		return err
 	}
 	for _, i := range entries {
-		if i.IsDir() && i.Name() != "." && i.Name() != ".." {
-			p := filepath.Join(dirName, i.Name())
-			err := unix.Rmdir(p)
-			if err != nil && !os.IsNotExist(err) {
-				return fmt.Errorf("failed to rmdir %s: %w", p, err)
-			}
+		if !i.IsDir() {
+			continue
+		}
+		name := i.Name()
+		if name == "." || name == ".." {
+			continue
+		}
+		childGroup := filepath.Join(cgroupName, name)
+		err := deleteCgroupRecursive(childGroup, level+1, max)
+		if err != nil {
+			return err
 		}
 	}
 	return unix.Rmdir(dirName)

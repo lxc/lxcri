@@ -242,38 +242,14 @@ func (c *Container) getContainerInitState() (specs.ContainerState, error) {
 func (c *Container) kill(ctx context.Context, signum unix.Signal) error {
 	c.Log.Info().Int("signum", int(signum)).Msg("killing container process")
 
-	// TODO(race condition) check whether it is save to signal InitPid()
-	// To avoid that the PID of the init process is recycled we aquire the pidfd of it.
-	// The container init process may have already died here and if the PID is already recycled,
-	// the wrong process will be signaled. If the kernel is recent enough.
-	// to support pidfd_send_signal (only kernel > 5.6 ?)
-	pidfd, err := c.LinuxContainer.InitPidFd()
-	if err != nil {
-		// since this is best-effort we won't return an error
-		c.Log.Warn().Msgf("failed to get init pidfd: %s", err)
-	} else {
-		defer pidfd.Close()
-	}
-
 	// From `man pid_namespaces`: If the "init" process of a PID namespace terminates, the kernel
 	// terminates all of the processes in the namespace via a SIGKILL signal.
-	// So there is nothing more to do here than to signal the init process.
 	// NOTE: The liblxc monitor process `lxcri-start` doesn't propagate all signals to the init process,
 	// but handles some signals on its own. E.g SIGHUP tells the monitor process to hang up the terminal
 	// and terminate the init process with SIGTERM.
-	pid := c.LinuxContainer.InitPid()
-	if pid <= 1 {
-		return nil
-	}
-
-	c.Log.Info().Int("pid", pid).Int("signal", int(signum)).Msg("sending signal")
-	err = unix.Kill(pid, signum)
-	if err == unix.ESRCH {
-		// init already died before sending the signal - not an error
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to send signal %d to container process %d: %w", signum, pid, err)
+	err := killCgroup(ctx, c, signum)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to kill group: %s", err)
 	}
 	return nil
 }
