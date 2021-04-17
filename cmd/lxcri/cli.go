@@ -457,7 +457,7 @@ var deleteCmd = cli.Command{
 			Name:  "force",
 			Usage: "force deletion",
 		},
-		&cli.DurationFlag{
+		&cli.UintFlag{
 			Name:    "timeout",
 			Usage:   "maximum duration in seconds for delete to complete",
 			EnvVars: []string{"LXCRI_DELETE_TIMEOUT"},
