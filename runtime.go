@@ -373,6 +373,10 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 		if err := c.kill(ctx, unix.SIGKILL); err != nil {
 			return errorf("failed to kill container: %w", err)
 		}
+		// wait until stopped
+		if !c.wait(ctx, lxc.STOPPED) {
+			return errorf("container not stopped")
+		}
 	}
 
 	// From OCI runtime spec

@@ -123,6 +123,20 @@ func (c *Container) load() error {
 	return nil
 }
 
+func (c *Container) wait(ctx context.Context, state lxc.State) bool {
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+			if c.LinuxContainer.State() == state {
+				return true
+			}
+			time.Sleep(time.Millisecond * 100)
+		}
+	}
+}
+
 func (c *Container) waitCreated(ctx context.Context) error {
 	for {
 		select {
