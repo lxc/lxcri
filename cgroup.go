@@ -39,6 +39,15 @@ func configureCgroup(rt *Runtime, c *Container) error {
 		return err
 	}
 
+	// refuse to run in a non-empty cgroup
+	ev, err := parseCgroupEvents(filepath.Join(cgroupRoot, c.CgroupDir, "cgroup.events"))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to parse cgroup events: %w", err)
+	}
+	if err == nil && ev.populated {
+		return fmt.Errorf("container cgroup %s is not empty", c.CgroupDir)
+	}
+
 	if devices := c.Spec.Linux.Resources.Devices; devices != nil {
 		if rt.Features.CgroupDevices {
 			if err := configureDeviceController(c); err != nil {
