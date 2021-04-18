@@ -44,6 +44,9 @@ func newRuntime(t *testing.T) *Runtime {
 	return rt
 }
 
+// NOTE a container that was created successfully must always be
+// deleted, otherwise the go test runner will hang because it waits
+// for the container process to exit.
 func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	rootfs, err := mkdirTemp()
 	require.NoError(t, err)
@@ -79,17 +82,66 @@ func TestEmptyNamespaces(t *testing.T) {
 
 	c, err := rt.Create(ctx, cfg)
 	require.Error(t, err)
+	t.Logf("create error: %s", err)
 	require.Nil(t, c)
+}
+
+func TestSharedPIDNamespace(t *testing.T) {
+	rt := newRuntime(t)
+	defer os.RemoveAll(rt.Root)
+
+	cfg := newConfig(t, "lxcri-test")
+	defer os.RemoveAll(cfg.Spec.Root.Path)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
 
 	pidns := specs.LinuxNamespace{
 		Type: specs.PIDNamespace,
 		Path: fmt.Sprintf("/proc/%d/ns/pid", os.Getpid()),
 	}
-	cfg.Spec.Linux.Namespaces = append(cfg.Spec.Linux.Namespaces, pidns)
 
-	c, err = rt.Create(ctx, cfg)
+	for i, ns := range cfg.Spec.Linux.Namespaces {
+		if ns.Type == specs.PIDNamespace {
+			cfg.Spec.Linux.Namespaces[i] = pidns
+		}
+	}
+
+	c, err := rt.Create(ctx, cfg)
+	require.Nil(t, err)
+	require.NotNil(t, c)
+
+	err = rt.Delete(ctx, c.ContainerID, true)
+	require.NoError(t, err)
+}
+
+// TODO test uts namespace (shared with host)
+
+func TestNonEmptyCgroup(t *testing.T) {
+	rt := newRuntime(t)
+	defer os.RemoveAll(rt.Root)
+
+	cfg := newConfig(t, "lxcri-test")
+	defer os.RemoveAll(cfg.Spec.Root.Path)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+
+	c, err := rt.Create(ctx, cfg)
+	require.NoError(t, err)
+	require.NotNil(t, c)
+
+	cfg2 := newConfig(t, "lxcri-test")
+	defer os.RemoveAll(cfg.Spec.Root.Path)
+	cfg2.Spec.Linux.CgroupsPath = cfg.Spec.Linux.CgroupsPath
+
+	c2, err := rt.Create(ctx, cfg2)
 	require.Error(t, err)
-	require.Nil(t, c)
+	t.Logf("create error: %s", err)
+	require.NotNil(t, c2)
+
+	err = rt.Delete(ctx, c.ContainerID, true)
+	require.NoError(t, err)
 }
 
 func TestRuntimePrivileged(t *testing.T) {
