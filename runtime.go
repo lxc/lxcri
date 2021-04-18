@@ -166,7 +166,7 @@ func (rt *Runtime) checkSpec(spec *specs.Spec) error {
 		spec.Process.Cwd = "/"
 	}
 
-	yes, err := isHostNamespaceShared(spec.Linux.Namespaces, specs.MountNamespace)
+	yes, err := isNamespaceSharedWithHost(getNamespace(spec, specs.MountNamespace))
 	if err != nil {
 		return err
 	}
@@ -176,12 +176,12 @@ func (rt *Runtime) checkSpec(spec *specs.Spec) error {
 
 	// It should be best practise not to do so, but there are containers that
 	// want to share the hosts PID namespaces. e.g sonobuoy/sonobuoy-systemd-logs-daemon-set
-	yes, err = isHostNamespaceShared(spec.Linux.Namespaces, specs.PIDNamespace)
+	yes, err = isNamespaceSharedWithHost(getNamespace(spec, specs.PIDNamespace))
 	if err != nil {
 		return err
 	}
 	if yes {
-		rt.Log.Info().Msg("container wil share the hosts PID namespace")
+		rt.Log.Warn().Msg("container wil share the hosts PID namespace")
 	}
 	return nil
 }

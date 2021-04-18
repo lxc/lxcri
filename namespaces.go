@@ -90,11 +90,31 @@ func isNamespaceEnabled(spec *specs.Spec, nsType specs.LinuxNamespaceType) bool 
 	return false
 }
 
-// isHostNamespaceUsed returns true if a container created with the given list of
-// namespaces will use the host namespace of the given namespace type.
-func isHostNamespaceShared(namespaces []specs.LinuxNamespace, nsType specs.LinuxNamespaceType) (bool, error) {
-	ns := getNamespace(nsType, namespaces)
-	// no namespace with this name defined in list
+func getNamespace(spec *specs.Spec, nsType specs.LinuxNamespaceType) *specs.LinuxNamespace {
+	for _, n := range spec.Linux.Namespaces {
+		if n.Type == nsType {
+			return &n
+		}
+	}
+	return nil
+}
+
+// isNamespaceCloned returns true if the given namespace
+// is not nil and the namespace path it not empty.
+func isNamespaceCloned(ns *specs.LinuxNamespace) bool {
+	if ns == nil {
+		return false
+	}
+	return ns.Path == ""
+}
+
+// isNamespaceSharedWithHost returns true if the given namespace is nil.
+// If the given namespace is not nil then the namespace then true is
+// returned if the namespace path refers to the host namespace and
+// false otherwise.
+// Should be used with isNamespaceSharedWithHost(getNamespace(...))
+func isNamespaceSharedWithHost(ns *specs.LinuxNamespace) (bool, error) {
+	// no namespace with this name defined
 	if ns == nil {
 		return true, nil
 	}
@@ -125,15 +145,6 @@ func isHostNamespaceShared(namespaces []specs.LinuxNamespace, nsType specs.Linux
 
 	sameNS := (stat.Dev == stat1.Dev) && (stat.Ino == stat1.Ino)
 	return sameNS, nil
-}
-
-func getNamespace(nsType specs.LinuxNamespaceType, namespaces []specs.LinuxNamespace) *specs.LinuxNamespace {
-	for _, n := range namespaces {
-		if n.Type == nsType {
-			return &n
-		}
-	}
-	return nil
 }
 
 // lxc does not set the hostname on shared namespaces

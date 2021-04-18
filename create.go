@@ -73,17 +73,8 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 }
 
 func configureContainer(rt *Runtime, c *Container) error {
-	if c.Spec.Hostname != "" {
-		if err := c.SetConfigItem("lxc.uts.name", c.Spec.Hostname); err != nil {
-			return err
-		}
-
-		uts := getNamespace(specs.UTSNamespace, c.Spec.Linux.Namespaces)
-		if uts != nil && uts.Path != "" {
-			if err := setHostname(uts.Path, c.Spec.Hostname); err != nil {
-				return fmt.Errorf("failed  to set hostname: %w", err)
-			}
-		}
+	if err := configureHostname(rt, c); err != nil {
+		return err
 	}
 
 	if err := configureRootfs(rt, c); err != nil {
@@ -235,6 +226,35 @@ func configureContainer(rt *Runtime, c *Container) error {
 		return fmt.Errorf("failed to configure read-only paths: %w", err)
 	}
 
+	return nil
+}
+
+func configureHostname(rt *Runtime, c *Container) error {
+	if c.Spec.Hostname == "" {
+		return nil
+	}
+	if err := c.SetConfigItem("lxc.uts.name", c.Spec.Hostname); err != nil {
+		return err
+	}
+
+	// Check if UTS namespace is shared, but not with the host.
+	uts := getNamespace(c.Spec, specs.UTSNamespace)
+	if uts == nil {
+		return nil
+	}
+
+	yes, err := isNamespaceSharedWithHost(uts)
+	if err != nil {
+		return errorf("failed to check if uts namespace is shared with host: %w", err)
+	}
+	if yes {
+		return nil
+	}
+
+	// Set the hostname on shared UTS namespace, since liblxc doesn't do it.
+	if err := setHostname(uts.Path, c.Spec.Hostname); err != nil {
+		return fmt.Errorf("failed  to set hostname: %w", err)
+	}
 	return nil
 }
 
