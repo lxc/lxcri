@@ -243,7 +243,7 @@ func configureHostname(rt *Runtime, c *Container) error {
 		return nil
 	}
 
-	yes, err := isNamespaceSharedWithHost(uts)
+	yes, err := isNamespaceSharedWithRuntime(uts)
 	if err != nil {
 		return errorf("failed to check if uts namespace is shared with host: %w", err)
 	}

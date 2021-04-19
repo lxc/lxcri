@@ -113,7 +113,7 @@ func isNamespaceCloned(ns *specs.LinuxNamespace) bool {
 // returned if the namespace path refers to the host namespace and
 // false otherwise.
 // Should be used with isNamespaceSharedWithHost(getNamespace(...))
-func isNamespaceSharedWithHost(ns *specs.LinuxNamespace) (bool, error) {
+func isNamespaceSharedWithRuntime(ns *specs.LinuxNamespace) (bool, error) {
 	// no namespace with this name defined
 	if ns == nil {
 		return true, nil
@@ -138,7 +138,7 @@ func isNamespaceSharedWithHost(ns *specs.LinuxNamespace) (bool, error) {
 	}
 
 	var stat1 unix.Stat_t
-	err = unix.Stat("/proc/1/ns/pid", &stat1)
+	err = unix.Stat("/proc/self/ns/pid", &stat1)
 	if err != nil {
 		return false, err
 	}
