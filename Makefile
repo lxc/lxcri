@@ -31,7 +31,7 @@ fmt:
 .PHONY: test
 test: build
 	go build ./pkg/internal/lxcri-test
-	go test --count 1 -v ./...
+	go test --failfast --count 1 -v ./...
 
 build: $(BINS) $(LIBEXEC_BINS)
 
