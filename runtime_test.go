@@ -60,7 +60,17 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	id := filepath.Base(rootfs)
 	cfg := ContainerConfig{ContainerID: id, Spec: spec, Log: log.ConsoleLogger(true, log.TraceLevel)}
 	cfg.Spec.Linux.CgroupsPath = id + ".slice" // use /proc/self/cgroup"
-	cfg.LogFile = "/dev/stderr"
+
+	// FIXME /dev/stderr has perms 600
+	// If container process user is not equal to the
+	// runtime process user then setting lxc log file will fail
+	// because of missing permissions.
+	if runAsRuntimeUser(cfg.Spec) {
+		cfg.LogFile = "/dev/stderr"
+	} else {
+		cfg.LogFile = filepath.Join(rootfs, "log")
+	}
+	t.Logf("liblxc log output is written to %s", cfg.LogFile)
 	cfg.LogLevel = "trace"
 
 	return &cfg
@@ -108,7 +118,7 @@ func TestSharedPIDNamespace(t *testing.T) {
 	}
 
 	c, err := rt.Create(ctx, cfg)
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.NotNil(t, c)
 
 	err = rt.Delete(ctx, c.ContainerID, true)
@@ -168,9 +178,6 @@ func TestRuntimePrivileged(t *testing.T) {
 // sudo chown -R $(whoami):$(whoami) /sys/fs/cgroup$(cat /proc/self/cgroup  | grep '^0:' | cut -d: -f3)
 //
 func TestRuntimeUnprivileged(t *testing.T) {
-	if os.Getuid() == 0 {
-		t.Skipf("this test is only run as non-root")
-	}
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
@@ -199,9 +206,6 @@ func TestRuntimeUnprivileged(t *testing.T) {
 }
 
 func TestRuntimeUnprivileged2(t *testing.T) {
-	if os.Getuid() == 0 {
-		t.Skipf("this test is only run as non-root")
-	}
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
@@ -275,14 +279,4 @@ func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 
 	err = c.Release()
 	require.NoError(t, err)
-
-	// manpage for 'wait4' suggests to use waitpid or waitid instead, but
-	// golang/x/sys/unix only implements 'Wait4'. See https://github.com/golang/go/issues/9176
-	var ws unix.WaitStatus
-	_, err = unix.Wait4(c.Pid, &ws, 0, nil)
-	require.NoError(t, err)
-	fmt.Printf("ws:0x%x exited:%t exit_status:%d signaled:%t signal:%d\n", ws, ws.Exited(), ws.ExitStatus(), ws.Signaled(), ws.Signal())
-
-	// NOTE it seems that the go test framework reaps all remaining children.
-	// It's reasonable that no process started from the tests will survive the test run.
 }

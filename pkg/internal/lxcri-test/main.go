@@ -25,5 +25,5 @@ func main() {
 
 	fmt.Printf("%#v\n", os.Args)
 	println("sleeping for 30 seconds")
-	time.Sleep(time.Second * 30)
+	time.Sleep(time.Second * 3)
 }
