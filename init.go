@@ -11,12 +11,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const (
-	// initDir is the working directory for lxcri-init.
-	// It contains the init binary itself and all files required for it.
-	initDir = "/.lxcri"
-)
-
 func createFifo(dst string, mode uint32) error {
 	if err := unix.Mkfifo(dst, mode); err != nil {
 		return errorf("mkfifo dst:%s failed: %w", dst, err)
@@ -40,23 +34,10 @@ func runAsRuntimeUser(spec *specs.Spec) bool {
 }
 
 func configureInit(rt *Runtime, c *Container) error {
-	runtimeInitDir := c.RuntimePath(initDir)
-	//rootfsInitDir := filepath.Join(c.Root.Path, initDir)
-
-	/*
-		err := os.MkdirAll(rootfsInitDir, 0755)
-		if err != nil {
-			return fmt.Errorf("failed to create init dir in rootfs %q: %w", rootfsInitDir, err)
-		}
-	*/
-	// #nosec
-	err := os.MkdirAll(runtimeInitDir, 0755)
-	if err != nil {
-		return fmt.Errorf("failed to create runtime init dir %q: %w", runtimeInitDir, err)
-	}
+	initDir := "/.lxcri"
 
 	c.Spec.Mounts = append(c.Spec.Mounts, specs.Mount{
-		Source:      runtimeInitDir,
+		Source:      c.RuntimePath(),
 		Destination: strings.TrimLeft(initDir, "/"),
 		Type:        "bind",
 		Options:     []string{"bind", "ro", "nodev", "nosuid", "create=dir"},
@@ -66,39 +47,13 @@ func configureInit(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	// create files required for lxcri-init
 	if runAsRuntimeUser(c.Spec) {
 		if err := createFifo(c.syncFifoPath(), 0600); err != nil {
 			return fmt.Errorf("failed to create sync fifo: %w", err)
 		}
-		if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Spec.Process.Args, 0400); err != nil {
-			return err
-		}
-		if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Spec.Process.Env, 0400); err != nil {
-			return err
-		}
 	} else {
 		if err := createFifo(c.syncFifoPath(), 0666); err != nil {
 			return fmt.Errorf("failed to create sync fifo: %w", err)
-		}
-		if err := createList(filepath.Join(runtimeInitDir, "cmdline"), c.Spec.Process.Args, 0444); err != nil {
-			return err
-		}
-		if err := createList(filepath.Join(runtimeInitDir, "environ"), c.Spec.Process.Env, 0444); err != nil {
-			return err
-		}
-	}
-
-	if err := os.Symlink(c.Spec.Process.Cwd, filepath.Join(runtimeInitDir, "cwd")); err != nil {
-		return err
-	}
-
-	if c.Spec.Annotations != nil {
-		msgPath := c.Spec.Annotations["io.kubernetes.container.terminationMessagePath"]
-		if msgPath != "" {
-			if err := os.Symlink(msgPath, filepath.Join(runtimeInitDir, "error.log")); err != nil {
-				return err
-			}
 		}
 	}
 
@@ -107,19 +62,19 @@ func configureInit(rt *Runtime, c *Container) error {
 	}
 
 	// bind mount lxcri-init into the container
-	initCmdPath := filepath.Join(runtimeInitDir, "init")
-	err = touchFile(initCmdPath, 0)
+	initCmdPath := c.RuntimePath("lxcri-init")
+	err := touchFile(initCmdPath, 0)
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", initCmdPath, err)
 	}
-	initCmd := filepath.Join(initDir, "init")
+	initCmd := filepath.Join(initDir, "lxcri-init")
 	c.Spec.Mounts = append(c.Spec.Mounts, specs.Mount{
 		Source:      rt.libexec(ExecInit),
 		Destination: strings.TrimLeft(initCmd, "/"),
 		Type:        "bind",
 		Options:     []string{"bind", "ro", "nosuid"},
 	})
-	return c.SetConfigItem("lxc.init.cmd", initCmd+" "+c.ContainerID)
+	return c.SetConfigItem("lxc.init.cmd", initCmd)
 }
 
 func touchFile(filePath string, perm os.FileMode) error {
@@ -129,34 +84,6 @@ func touchFile(filePath string, perm os.FileMode) error {
 		return f.Close()
 	}
 	return err
-}
-
-func createList(dst string, entries []string, mode uint32) error {
-	// #nosec
-	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
-	if err != nil {
-		return errorf("failed to create %s: %w", dst, err)
-	}
-
-	for _, arg := range entries {
-		_, err := f.WriteString(arg)
-		if err != nil {
-			f.Close()
-			return errorf("failed to write to %s: %w", dst, err)
-		}
-		_, err = f.Write([]byte{'\000'})
-		if err != nil {
-			f.Close()
-			return errorf("failed to write to %s: %w", dst, err)
-		}
-	}
-	if err := f.Close(); err != nil {
-		return errorf("failed to close %s: %w", dst, err)
-	}
-	if err := unix.Chmod(dst, mode); err != nil {
-		return errorf("failed to chmod %s mode:%o : %w", dst, mode, err)
-	}
-	return nil
 }
 
 func configureInitUser(c *Container) error {

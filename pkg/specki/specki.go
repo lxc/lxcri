@@ -289,6 +289,12 @@ func NewSpecProcess(cmd string, args ...string) *specs.Process {
 	return proc
 }
 
+func LoadSpecStateJSON(filename string) (*specs.State, error) {
+	state := new(specs.State)
+	err := DecodeJSONFile(filename, state)
+	return state, err
+}
+
 // ReadSpecStateJSON parses the JSON encoded specs.State from the given reader.
 func ReadSpecStateJSON(r io.Reader) (*specs.State, error) {
 	state := new(specs.State)
@@ -317,4 +323,33 @@ func InitHook(r io.Reader) (rootfs string, state *specs.State, spec *specs.Spec,
 		rootfs = filepath.Join(state.Bundle, rootfs)
 	}
 	return
+}
+
+// BindMount returns a specs.Mount to bind mount src to dest.
+// The given mount options opts are merged with the predefined options
+// ("bind", "nosuid", "nodev", "relatime")
+func BindMount(src string, dest string, opts ...string) specs.Mount {
+	return specs.Mount{
+		Source: src, Destination: dest, Type: "bind",
+		Options: append([]string{"bind", "nosuid", "nodev", "relatime"}, opts...),
+	}
+}
+
+func hasOption(m specs.Mount, opt string) bool {
+	for _, o := range m.Options {
+		if o == opt {
+			return true
+		}
+	}
+	return false
+}
+
+// HasOptions returns true if the given Mount has all provided options opts.
+func HasOptions(m specs.Mount, opts ...string) bool {
+	for _, o := range opts {
+		if !hasOption(m, o) {
+			return false
+		}
+	}
+	return true
 }

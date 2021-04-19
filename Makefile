@@ -42,8 +42,8 @@ lxcri: go.mod $(GO_SRC) Makefile
 lxcri-start: cmd/lxcri-start/lxcri-start.c
 	$(CC) -Werror -Wpedantic -o $@ $? $$(pkg-config --libs --cflags lxc)
 
-lxcri-init: cmd/lxcri-init/lxcri-init.c
-	$(MUSL_CC) -Werror -Wpedantic -static -o $@ $?
+lxcri-init: go.mod $(GO_SRC) Makefile
+	CGO_ENABLED=0 go build -o $@ ./cmd/lxcri-init
 	# this is paranoia - but ensure it is statically compiled
 	! ldd $@  2>/dev/null
 

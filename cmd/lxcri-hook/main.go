@@ -45,14 +45,12 @@ func main() {
 func run(ctx context.Context, env *Env) error {
 	runtimeDir := filepath.Dir(env.ConfigFile)
 
-	// TODO save hooks to hooks.json
 	var hooks specs.Hooks
 	err := specki.DecodeJSONFile(filepath.Join(runtimeDir, "hooks.json"), &hooks)
 	if err != nil {
 		return err
 	}
 
-	//  TODO save state to state.json
 	hooksToRun, status, err := ociHooksAndState(env.Type, &hooks)
 	if err != nil {
 		return err
@@ -90,8 +88,8 @@ func ociHooksAndState(t HookType, hooks *specs.Hooks) ([]specs.Hook, specs.Conta
 		return hooks.Prestart, specs.StateCreating, nil
 	case HookMount:
 		return hooks.CreateContainer, specs.StateCreating, nil
-	case HookStart:
-		return hooks.StartContainer, specs.StateCreated, nil
+	//case HookStart:
+	//	return hooks.StartContainer, specs.StateCreated, nil
 	// NOTE the following hooks are executed directly from lxcri
 	//case HookPostStart:
 	//	return hooks.Poststart, specs.StateRunning, nil

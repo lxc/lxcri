@@ -55,7 +55,7 @@ func (c Container) ConfigFilePath() string {
 }
 
 func (c Container) syncFifoPath() string {
-	return c.RuntimePath(initDir, "syncfifo")
+	return c.RuntimePath("syncfifo")
 }
 
 // RuntimePath returns the absolute path to the given sub path
@@ -247,7 +247,7 @@ func (c *Container) getContainerInitState() (specs.ContainerState, error) {
 		// init process died or returned
 		return specs.StateStopped, nil
 	}
-	initCmdline := fmt.Sprintf("/.lxcri/init\000%s\000", c.ContainerID)
+	initCmdline := fmt.Sprintf("/.lxcri/lxcri-init\000")
 	if string(cmdline) == initCmdline {
 		return specs.StateCreated, nil
 	}
@@ -341,45 +341,17 @@ func (c *Container) Release() error {
 }
 
 func (c *Container) start(ctx context.Context) error {
-	done := make(chan error)
-	go func() {
-		// FIXME fifo must be unblocked otherwise
-		// this may be a goroutine leak
-		done <- c.readFifo()
-	}()
-
-	select {
-	case <-ctx.Done():
-		return errorf("syncfifo timeout: %w", ctx.Err())
-		// TODO write to fifo here and fallthrough ?
-	case err := <-done:
-		if err != nil {
-			return errorf("failed to read from syncfifo: %w", err)
-		}
-	}
-	// wait for container state to change
-	return c.waitNot(ctx, specs.StateCreated)
-}
-
-func (c *Container) readFifo() error {
 	// #nosec
-	f, err := os.OpenFile(c.syncFifoPath(), os.O_RDONLY, 0)
+	fifo, err := os.OpenFile(c.syncFifoPath(), os.O_WRONLY, 0)
 	if err != nil {
 		return err
 	}
-	// NOTE it's not possible to set an IO deadline on a fifo
-	// #nosec
-	defer f.Close()
+	if err := fifo.Close(); err != nil {
+		return err
+	}
 
-	data := make([]byte, len(c.ContainerID))
-	_, err = f.Read(data)
-	if err != nil {
-		return fmt.Errorf("problem reading from fifo: %w", err)
-	}
-	if c.ContainerID != string(data) {
-		return fmt.Errorf("bad fifo content: %s", string(data))
-	}
-	return nil
+	// wait for container state to change
+	return c.waitNot(ctx, specs.StateCreated)
 }
 
 // ExecDetached executes the given process spec within the container.
