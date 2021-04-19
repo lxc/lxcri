@@ -290,7 +290,7 @@ func (c *Container) SetConfigItem(key, value string) error {
 	if err != nil {
 		return fmt.Errorf("failed to set config item '%s=%s': %w", key, value, err)
 	}
-	c.Log.Debug().Str("lxc.config", key).Str("val", value).Msg("set config item")
+	c.Log.Debug().Str(key, value).Msg("set config item")
 	return nil
 }
 
