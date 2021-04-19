@@ -63,12 +63,6 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return c, errorf("failed to run container process: %w", err)
 	}
 
-	p := c.RuntimePath("lxcri.json")
-	err = specki.EncodeJSONFile(p, c, os.O_EXCL|os.O_CREATE, 0440)
-	if err != nil {
-		return c, err
-	}
-
 	return c, err
 }
 

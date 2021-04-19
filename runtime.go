@@ -279,6 +279,16 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 		return err
 	}
 
+	c.CreatedAt = time.Now()
+	c.Pid = cmd.Process.Pid
+	rt.Log.Info().Int("pid", cmd.Process.Pid).Msg("monitor process started")
+
+	p := c.RuntimePath("lxcri.json")
+	err = specki.EncodeJSONFile(p, c, os.O_EXCL|os.O_CREATE, 0440)
+	if err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -287,9 +297,6 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 		return err
 	}
 
-	rt.Log.Info().Int("pid", cmd.Process.Pid).Msg("init process is running, container is created")
-	c.CreatedAt = time.Now()
-	c.Pid = cmd.Process.Pid
 	return nil
 }
 
