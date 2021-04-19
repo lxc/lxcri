@@ -40,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo add-apt-repository ppa:ubuntu-lxc/daily -y
-          sudo apt-get install -qq lxc-dev musl musl-tools libc6-dev pkg-config make
+          sudo apt-get install -qq lxc-dev libc6-dev pkg-config make
 
       - name: Build
         run: |
