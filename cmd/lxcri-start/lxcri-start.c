@@ -65,7 +65,7 @@ int main(int argc, char **argv)
 	c->daemonize = false;
 
 	if (!c->start(c, ENABLE_LXCINIT, NULL))
-		ERROR("failed to start container\n");
+		ERROR("monitor process pid=%d failed (container error_num:%d)\n", getpid(), c->error_num);
 
 	/* Try to die with the same signal the task did. */
 	/* FIXME error_num is zero if init was killed with SIGHUP */

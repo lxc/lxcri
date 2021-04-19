@@ -144,7 +144,7 @@ func (c *Container) waitCreated(ctx context.Context) error {
 			return ctx.Err()
 		default:
 			if err := unix.Kill(c.Pid, 0); err != nil {
-				return err
+				return fmt.Errorf("failed to get container process %d: %w", c.Pid, err)
 			}
 			state := c.LinuxContainer.State()
 			if !(state == lxc.RUNNING) {
@@ -171,7 +171,7 @@ func (c *Container) waitStarted(ctx context.Context) error {
 			return ctx.Err()
 		default:
 			if err := unix.Kill(c.Pid, 0); err != nil {
-				return err
+				return fmt.Errorf("failed to get container process %d: %w", c.Pid, err)
 			}
 			initState, _ := c.getContainerInitState()
 			if initState != specs.StateCreated {
