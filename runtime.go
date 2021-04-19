@@ -415,7 +415,7 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 			return errorf("failed to kill container: %w", err)
 		}
 		// wait until stopped
-		if !c.wait(ctx, lxc.STOPPED) {
+		if !c.waitStopped(ctx) {
 			return errorf("container not stopped")
 		}
 	}

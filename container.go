@@ -123,13 +123,13 @@ func (c *Container) load() error {
 	return nil
 }
 
-func (c *Container) wait(ctx context.Context, state lxc.State) bool {
+func (c *Container) waitStopped(ctx context.Context) bool {
 	for {
 		select {
 		case <-ctx.Done():
 			return false
 		default:
-			if c.LinuxContainer.State() == state {
+			if c.LinuxContainer.State() == lxc.STOPPED {
 				return true
 			}
 			time.Sleep(time.Millisecond * 100)
@@ -143,6 +143,9 @@ func (c *Container) waitCreated(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
+			if err := unix.Kill(c.Pid, 0); err != nil {
+				return err
+			}
 			state := c.LinuxContainer.State()
 			if !(state == lxc.RUNNING) {
 				c.Log.Debug().Stringer("state", state).Msg("wait for state lxc.RUNNING")
@@ -161,14 +164,17 @@ func (c *Container) waitCreated(ctx context.Context) error {
 	}
 }
 
-func (c *Container) waitNot(ctx context.Context, state specs.ContainerState) error {
+func (c *Container) waitStarted(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
+			if err := unix.Kill(c.Pid, 0); err != nil {
+				return err
+			}
 			initState, _ := c.getContainerInitState()
-			if initState != state {
+			if initState != specs.StateCreated {
 				return nil
 			}
 			time.Sleep(time.Millisecond * 10)
@@ -324,9 +330,7 @@ func (c *Container) start(ctx context.Context) error {
 	if err := fifo.Close(); err != nil {
 		return err
 	}
-
-	// wait for container state to change
-	return c.waitNot(ctx, specs.StateCreated)
+	return c.waitStarted(ctx)
 }
 
 // ExecDetached executes the given process spec within the container.
