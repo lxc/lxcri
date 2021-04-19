@@ -16,10 +16,27 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var logLevel = "info"
+var libexecDir = "/usr/local/libexec/lxcri"
+var tmpRoot = "."
+
+func init() {
+	// NOTE keep environment variables in sync with `lxcri` cli
+	if val, ok := os.LookupEnv("LXCRI_LOG_LEVEL"); ok {
+		logLevel = val
+	}
+	if val, ok := os.LookupEnv("LXCRI_LIBEXEC"); ok {
+		libexecDir = val
+	}
+	if val, ok := os.LookupEnv("HOME"); ok {
+		tmpRoot = val
+	}
+}
+
 func mkdirTemp() (string, error) {
 	// /tmp has permissions 1777
 	// it should never be used as runtime or rootfs parent
-	return os.MkdirTemp(os.Getenv("HOME"), "lxcri-test")
+	return os.MkdirTemp(tmpRoot, "lxcri-test")
 }
 
 func newRuntime(t *testing.T) *Runtime {
@@ -30,16 +47,16 @@ func newRuntime(t *testing.T) *Runtime {
 	err = unix.Chmod(runtimeRoot, 0755)
 	require.NoError(t, err)
 
+	level, err := log.ParseLevel(logLevel)
+	require.NoError(t, err)
+
 	rt := &Runtime{
-		Log:        log.ConsoleLogger(true, log.TraceLevel),
+		Log:        log.ConsoleLogger(true, level),
 		Root:       runtimeRoot,
-		LibexecDir: os.Getenv("LIBEXEC_DIR"),
+		LibexecDir: libexecDir,
 		//MonitorCgroup: "lxcri-monitor.slice",
 	}
-	if rt.LibexecDir == "" {
-		rt.LibexecDir = "/usr/local/libexec/lxcri"
-	}
-	//ExecInit = "lxcri-debug"
+
 	require.NoError(t, rt.Init())
 	return rt
 }
@@ -56,9 +73,15 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	err = exec.Command("cp", cmd, rootfs).Run()
 	require.NoError(t, err)
 
+	level, err := log.ParseLevel(logLevel)
+	require.NoError(t, err)
+
 	spec := specki.NewSpec(rootfs, filepath.Join("/"+filepath.Base(cmd)))
 	id := filepath.Base(rootfs)
-	cfg := ContainerConfig{ContainerID: id, Spec: spec, Log: log.ConsoleLogger(true, log.TraceLevel)}
+	cfg := ContainerConfig{
+		ContainerID: id, Spec: spec,
+		Log: log.ConsoleLogger(true, level),
+	}
 	cfg.Spec.Linux.CgroupsPath = id + ".slice" // use /proc/self/cgroup"
 
 	// FIXME /dev/stderr has perms 600
@@ -71,7 +94,7 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 		cfg.LogFile = filepath.Join(rootfs, "log")
 	}
 	t.Logf("liblxc log output is written to %s", cfg.LogFile)
-	cfg.LogLevel = "trace"
+	cfg.LogLevel = logLevel
 
 	return &cfg
 }
@@ -97,6 +120,9 @@ func TestEmptyNamespaces(t *testing.T) {
 }
 
 func TestSharedPIDNamespace(t *testing.T) {
+	if os.Getuid() != 0 {
+		t.Skipf("PID namespace sharing is only permitted as root.")
+	}
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
@@ -178,6 +204,11 @@ func TestRuntimePrivileged(t *testing.T) {
 // sudo chown -R $(whoami):$(whoami) /sys/fs/cgroup$(cat /proc/self/cgroup  | grep '^0:' | cut -d: -f3)
 //
 func TestRuntimeUnprivileged(t *testing.T) {
+
+	if os.Getuid() == 0 {
+		t.Skipf("This test only runs as non-root")
+	}
+
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
@@ -215,11 +246,11 @@ func TestRuntimeUnprivileged2(t *testing.T) {
 	if os.Getuid() != 0 {
 		cfg.Spec.Linux.UIDMappings = []specs.LinuxIDMapping{
 			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getuid()), Size: 1},
-			specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+			//specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
 		}
 		cfg.Spec.Linux.GIDMappings = []specs.LinuxIDMapping{
 			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getgid()), Size: 1},
-			specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+			//specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
 		}
 	}
 
