@@ -31,7 +31,7 @@ func newRuntime(t *testing.T) *Runtime {
 	require.NoError(t, err)
 
 	rt := &Runtime{
-		Log:        log.ConsoleLogger(true),
+		Log:        log.ConsoleLogger(true, log.TraceLevel),
 		Root:       runtimeRoot,
 		LibexecDir: os.Getenv("LIBEXEC_DIR"),
 		//MonitorCgroup: "lxcri-monitor.slice",
@@ -58,7 +58,7 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 
 	spec := specki.NewSpec(rootfs, filepath.Join("/"+filepath.Base(cmd)))
 	id := filepath.Base(rootfs)
-	cfg := ContainerConfig{ContainerID: id, Spec: spec, Log: log.ConsoleLogger(true)}
+	cfg := ContainerConfig{ContainerID: id, Spec: spec, Log: log.ConsoleLogger(true, log.TraceLevel)}
 	cfg.Spec.Linux.CgroupsPath = id + ".slice" // use /proc/self/cgroup"
 	cfg.LogFile = "/dev/stderr"
 	cfg.LogLevel = "trace"

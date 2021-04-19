@@ -13,6 +13,17 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// zerlog log levels are mirrored for convenience.
+const (
+	TraceLevel = zerolog.TraceLevel
+	DebugLevel = zerolog.DebugLevel
+	InfoLevel  = zerolog.InfoLevel
+	WarnLevel  = zerolog.WarnLevel
+	ErrorLevel = zerolog.ErrorLevel
+	FatalLevel = zerolog.FatalLevel
+	PanicLevel = zerolog.PanicLevel
+)
+
 func init() {
 	zerolog.LevelFieldName = "l"
 	zerolog.MessageFieldName = "m"
@@ -56,6 +67,6 @@ func NewLogger(out io.Writer, level zerolog.Level) zerolog.Context {
 }
 
 // ConsoleLogger returns a new zerlog.Logger suited for console usage (e.g unit tests)
-func ConsoleLogger(color bool) zerolog.Logger {
-	return zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: !color}).Level(zerolog.DebugLevel).With().Timestamp().Caller().Logger()
+func ConsoleLogger(color bool, level zerolog.Level) zerolog.Logger {
+	return zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout, NoColor: !color}).Level(level).With().Timestamp().Caller().Logger()
 }
