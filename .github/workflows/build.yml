@@ -32,6 +32,11 @@ jobs:
           GO111MODULE=off go get -u golang.org/x/lint/golint
           golint -set_exit_status ./...
 
+      - name: Run staticcheck
+        run: |
+          GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
+          staticcheck --unused.whole-program=true -- ./...
+
       - name: Install dependencies
         run: |
           sudo add-apt-repository ppa:ubuntu-lxc/daily -y
