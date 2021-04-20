@@ -15,6 +15,7 @@ LDFLAGS=-X main.version=$(COMMIT) -X main.libexecDir=$(LIBEXEC_DIR)
 CC ?= cc
 SHELL_SCRIPTS = $(shell find . -name \*.sh)
 GO_SRC = $(shell find . -name \*.go | grep -v _test.go)
+TESTCOUNT ?= 1
 
 all: fmt test
 
@@ -33,7 +34,7 @@ fmt:
 .PHONY: test
 test: build
 	go build ./pkg/internal/lxcri-test
-	go test --failfast --count 1 -v ./...
+	go test --failfast --count $(TESTCOUNT) -v ./...
 
 build: $(BINS) $(LIBEXEC_BINS)
 
