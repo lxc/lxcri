@@ -120,9 +120,12 @@ func (rt *Runtime) Init() error {
 	if err := isFilesystem("/proc", "proc"); err != nil {
 		return errorf("procfs not mounted on /proc: %w", err)
 	}
-	if err := isFilesystem(cgroupRoot, "cgroup2"); err != nil {
-		return errorf("ccgroup2 not mounted on %s: %w", cgroupRoot, err)
+
+	cgroupRoot, err = detectCgroupRoot()
+	if err != nil {
+		rt.Log.Warn().Msgf("cgroup root detection failed: %s", err)
 	}
+	rt.Log.Info().Msgf("using cgroup root %s", cgroupRoot)
 
 	if !lxc.VersionAtLeast(3, 1, 0) {
 		return errorf("liblxc runtime version is %s, but >= 3.1.0 is required", lxc.Version())

@@ -15,20 +15,52 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var cgroupRoot string
+var cgroupRoot = "/sys/fs/cgroup"
 
-func detectCgroupRoot() string {
+func detectCgroupRoot() (string, error) {
+	var cgroupRoot string
 	if err := isFilesystem("/sys/fs/cgroup", "cgroup2"); err == nil {
-		return "/sys/fs/cgroup"
+		cgroupRoot = "/sys/fs/cgroup"
 	}
 	if err := isFilesystem("/sys/fs/cgroup/unified", "cgroup2"); err == nil {
-		return "/sys/fs/cgroup/unified"
+		cgroupRoot = "/sys/fs/cgroup/unified"
 	}
-	return ""
+
+	// TODO use /proc/self/mounts to detect cgroupv2 root !
+
+	if os.Getuid() == 0 {
+		if cgroupRoot == "" {
+			return "", fmt.Errorf("failed to detect cgroupv2 root")
+		}
+		return cgroupRoot, nil
+	}
+
+	// Use the cgroup path of the runtime user if unprivileged.
+	data, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return cgroupRoot, fmt.Errorf("Failed to load /proc/self/cgroup: %s", err)
+	}
+	lines := strings.Split(string(data), "\n")
+	// get cgroup path from '0::/user.slice/user-0.slice/session-52.scope'
+	for _, line := range lines {
+		vals := strings.SplitN(line, ":", 3)
+		if len(vals) == 3 && vals[0] == "0" {
+			return filepath.Join(cgroupRoot, vals[2]), nil
+		}
+	}
+	return cgroupRoot, fmt.Errorf("Failed to parse cgroup from /proc/self/cgroup")
 }
 
-func init() {
-	cgroupRoot = detectCgroupRoot()
+// checkCgroup checks if the cgroup of the container is non-empty.
+func checkCgroup(c *Container) error {
+	ev, err := parseCgroupEvents(filepath.Join(cgroupRoot, c.CgroupDir, "cgroup.events"))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to parse cgroup events: %w", err)
+	}
+	if err == nil && ev.populated {
+		return fmt.Errorf("container cgroup %s is not empty", c.CgroupDir)
+	}
+	return nil
 }
 
 // https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md
@@ -39,13 +71,8 @@ func configureCgroup(rt *Runtime, c *Container) error {
 		return err
 	}
 
-	// refuse to run in a non-empty cgroup
-	ev, err := parseCgroupEvents(filepath.Join(cgroupRoot, c.CgroupDir, "cgroup.events"))
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to parse cgroup events: %w", err)
-	}
-	if err == nil && ev.populated {
-		return fmt.Errorf("container cgroup %s is not empty", c.CgroupDir)
+	if err := checkCgroup(c); err != nil {
+		return err
 	}
 
 	if devices := c.Spec.Linux.Resources.Devices; devices != nil {
