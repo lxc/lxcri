@@ -156,6 +156,9 @@ func TestSharedPIDNamespace(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, c)
 
+	err = c.Release()
+	require.NoError(t, err)
+
 	err = rt.Delete(ctx, c.ContainerID, true)
 	require.NoError(t, err)
 }
@@ -208,7 +211,13 @@ func TestNonEmptyCgroup(t *testing.T) {
 	require.Error(t, err)
 	t.Logf("create error: %s", err)
 
+	err = c.Release()
+	require.NoError(t, err)
+
 	err = rt.Delete(ctx, c.ContainerID, true)
+	require.NoError(t, err)
+
+	err = c2.Release()
 	require.NoError(t, err)
 
 	require.NotNil(t, c2)
