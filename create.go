@@ -395,7 +395,7 @@ func cleanenv(c *Container, overwrite bool) {
 	if len(env) < 2 {
 		return
 	}
-	newEnv := make([]string, len(env))
+	newEnv := make([]string, 0, len(env))
 	var exist bool
 	for _, kv := range env {
 		newEnv, exist = specki.Setenv(newEnv, kv, overwrite)
