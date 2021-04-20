@@ -153,6 +153,8 @@ func TestSharedPIDNamespace(t *testing.T) {
 
 // TODO test uts namespace (shared with host)
 
+// NOTE  works only if cgroup root is writable
+// sudo chown -R $(whoami):$(whoami) /sys/fs/cgroup/$(cat /proc/self/cgroup  | grep '^0:' | cut -d: -f3)
 func TestNonEmptyCgroup(t *testing.T) {
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
@@ -163,11 +165,9 @@ func TestNonEmptyCgroup(t *testing.T) {
 	if os.Getuid() != 0 {
 		cfg.Spec.Linux.UIDMappings = []specs.LinuxIDMapping{
 			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getuid()), Size: 1},
-			//specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
 		}
 		cfg.Spec.Linux.GIDMappings = []specs.LinuxIDMapping{
 			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getgid()), Size: 1},
-			//specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
 		}
 	}
 
@@ -178,16 +178,31 @@ func TestNonEmptyCgroup(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, c)
 
+	//t.Logf("sleeping for a minute")
+	//time.Sleep(60*time.Second)
+
 	cfg2 := newConfig(t, "lxcri-test")
 	defer os.RemoveAll(cfg.Spec.Root.Path)
 	cfg2.Spec.Linux.CgroupsPath = cfg.Spec.Linux.CgroupsPath
 
+	if os.Getuid() != 0 {
+		cfg2.Spec.Linux.UIDMappings = []specs.LinuxIDMapping{
+			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getuid()), Size: 1},
+		}
+		cfg2.Spec.Linux.GIDMappings = []specs.LinuxIDMapping{
+			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getgid()), Size: 1},
+		}
+	}
+
 	c2, err := rt.Create(ctx, cfg2)
 	require.Error(t, err)
 	t.Logf("create error: %s", err)
-	require.NotNil(t, c2)
 
 	err = rt.Delete(ctx, c.ContainerID, true)
+	require.NoError(t, err)
+
+	require.NotNil(t, c2)
+	err = rt.Delete(ctx, c2.ContainerID, true)
 	require.NoError(t, err)
 }
 

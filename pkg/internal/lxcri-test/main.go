@@ -2,14 +2,25 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
 
-func main() {
+var logPrefix string
 
+func init() {
+	logPrefix = fmt.Sprintf(">> %s(pid:%d) ", os.Args[0], os.Getpid())
+}
+
+func logf(format string, args ...interface{}) {
+	fmt.Printf(logPrefix+format+"\n", args...)
+}
+
+func main() {
 	sigs := make(chan os.Signal, 1)
 
 	// SIGHUP by default terminates the process, if the process does not catch it.
@@ -19,11 +30,30 @@ func main() {
 
 	go func() {
 		sig := <-sigs
-		fmt.Println()
-		fmt.Println("received signal:", sig)
+		logf("received signal %q", sig)
 	}()
 
-	fmt.Printf("%#v\n", os.Args)
-	println("sleeping for 30 seconds")
-	time.Sleep(time.Second * 3)
+	logf("begin")
+
+	sec := 3
+	if s, ok := os.LookupEnv("SLEEP"); ok {
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			panic(err)
+		}
+		logf("using env SLEEP value %s", s)
+		sec = n
+	}
+
+	f, err := os.Open("/proc/self/mounts")
+	if err != nil {
+		panic(err)
+	}
+	logf("writing /proc/self/mounts")
+	io.Copy(os.Stdout, f)
+
+	logf("sleeping for %d seconds", sec)
+	time.Sleep(time.Second * time.Duration(sec))
+
+	logf("end")
 }

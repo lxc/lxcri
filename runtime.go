@@ -388,7 +388,6 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 
 	if err := c.waitMonitorStopped(ctx); err != nil {
 		c.Log.Error().Msgf("failed to stop monitor process %d", c.Pid)
-		// unix.Kill(c.Pid, unix.SIGKILL)
 	}
 
 	// From OCI runtime spec
