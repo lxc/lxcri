@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -70,19 +69,27 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	t.Logf("container rootfs: %s", rootfs)
 
 	// copy test binary to rootfs
-	err = exec.Command("cp", cmd, rootfs).Run()
-	require.NoError(t, err)
+	//err = exec.Command("cp", cmd, rootfs).Run()
+	//require.NoError(t, err)
 
 	level, err := log.ParseLevel(logLevel)
 	require.NoError(t, err)
 
-	spec := specki.NewSpec(rootfs, filepath.Join("/"+filepath.Base(cmd)))
+	cmdAbs, err := filepath.Abs(cmd)
+	require.NoError(t, err)
+	cmdDest := "/" + filepath.Base(cmdAbs)
+
+	spec := specki.NewSpec(rootfs, cmdDest)
 	id := filepath.Base(rootfs)
 	cfg := ContainerConfig{
 		ContainerID: id, Spec: spec,
 		Log: log.ConsoleLogger(true, level),
 	}
 	cfg.Spec.Linux.CgroupsPath = id + ".slice" // use /proc/self/cgroup"
+
+	cfg.Spec.Mounts = append(cfg.Spec.Mounts,
+		specki.BindMount(cmdAbs, cmdDest),
+	)
 
 	// FIXME /dev/stderr has perms 600
 	// If container process user is not equal to the

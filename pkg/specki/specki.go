@@ -354,3 +354,13 @@ func Setenv(env []string, val string, overwrite bool) ([]string, bool) {
 	}
 	return append(env, val), false
 }
+
+// BindMount returns a specs.Mount to bind mount src to dest.
+// The given mount options opts are merged with the predefined options
+// ("bind", "nosuid", "nodev", "relatime")
+func BindMount(src string, dest string, opts ...string) specs.Mount {
+	return specs.Mount{
+		Source: src, Destination: dest, Type: "bind",
+		Options: append([]string{"bind", "nosuid", "nodev", "relatime"}, opts...),
+	}
+}
