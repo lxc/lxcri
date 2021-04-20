@@ -123,18 +123,52 @@ func (c *Container) load() error {
 	return nil
 }
 
-func (c *Container) waitStopped(ctx context.Context) bool {
+func (c *Container) waitMonitorStopped(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return false
+			return ctx.Err()
 		default:
-			if c.LinuxContainer.State() == lxc.STOPPED {
-				return true
+			if !c.isMonitorRunning() {
+				return nil
 			}
 			time.Sleep(time.Millisecond * 100)
 		}
 	}
+}
+
+func (c *Container) isMonitorRunning() bool {
+	if c.Pid < 2 {
+		return false
+	}
+
+	var ws unix.WaitStatus
+	pid, err := unix.Wait4(c.Pid, &ws, unix.WNOHANG, nil)
+	if pid == c.Pid {
+		c.Log.Info().Msgf("monitor %d died: exited:%t exit_status:%d signaled:%t signal:%s",
+			c.Pid, ws.Exited(), ws.ExitStatus(), ws.Signaled(), ws.Signal())
+		return false
+	}
+
+	// if WNOHANG was specified and one or more child(ren) specified by pid exist,
+	// but have not yet changed state, then 0 is returned
+	if pid == 0 {
+		return true
+	}
+
+	// This runtime process may not be the parent of the monitor process
+	if err == unix.ECHILD {
+		// check if the process is still runnning
+		err := unix.Kill(c.Pid, 0)
+		if err == nil {
+			return true
+		}
+		// it's not running
+		if err == unix.ESRCH {
+			return false
+		}
+	}
+	return false
 }
 
 func (c *Container) waitCreated(ctx context.Context) error {
@@ -143,8 +177,8 @@ func (c *Container) waitCreated(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			if err := unix.Kill(c.Pid, 0); err != nil {
-				return fmt.Errorf("failed to get container process %d: %w", c.Pid, err)
+			if !c.isMonitorRunning() {
+				return fmt.Errorf("monitor already died")
 			}
 			state := c.LinuxContainer.State()
 			if !(state == lxc.RUNNING) {
@@ -170,8 +204,8 @@ func (c *Container) waitStarted(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			if err := unix.Kill(c.Pid, 0); err != nil {
-				return fmt.Errorf("failed to get container process %d: %w", c.Pid, err)
+			if !c.isMonitorRunning() {
+				return fmt.Errorf("monitor already died")
 			}
 			initState, _ := c.getContainerInitState()
 			if initState != specs.StateCreated {

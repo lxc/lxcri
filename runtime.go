@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"time"
 
@@ -19,39 +18,6 @@ import (
 	"golang.org/x/sys/unix"
 	"gopkg.in/lxc/go-lxc.v2"
 )
-
-// waitForChildren consumes the process state of any exited child processes.
-//
-// Background:
-// The `lxcri-start` process is reparented if the runtime process dies.
-// It is reparented to either a parent subreaper process (see `man prctl` PR_SET_CHILD_SUBREAPER),
-// e.g conmon if the runtime was executed from cri-o, or directly to init (pid 1, e.g systemd).
-// Any (`lxcri-start`) child process that exits before the runtime will become orphaned / a zombie process.
-// The runtime has consume the process state of any (`lxcri-start`) child processes which exited
-// to avoid this.
-//
-// NOTE that unix.Kill(<pid>, 0) will return with success as long as the process state
-// of `<pid>` was not consumed with wait4|waitpid.
-func waitForChildren() {
-	// Set up channel on which to send signal notifications.
-	// We must use a buffered channel or risk missing the signal
-	// if we're not ready to receive when the signal is sent.
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, unix.SIGCHLD)
-
-	for range c {
-		// The manpage for 'wait4' suggests to use waitpid or waitid instead, but
-		// golang/x/sys/unix only implements 'Wait4'. See https://github.com/golang/go/issues/9176
-		// since lxcri-start creates a new session / process group with setsid
-		// we have to wait for any child process ('-1')
-		//var ws unix.WaitStatus
-		unix.Wait4(-1, nil, unix.WNOHANG, nil)
-	}
-}
-
-func init() {
-	go waitForChildren()
-}
 
 const (
 	// BundleConfigFile is the name of the OCI container bundle config file.
@@ -408,16 +374,18 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 		return err
 	}
 	if state != specs.StateStopped {
+		c.Log.Debug().Msgf("delete state:%s", state)
 		if !force {
 			return errorf("container is not not stopped (current state %s)", state)
 		}
 		if err := c.kill(ctx, unix.SIGKILL); err != nil {
 			return errorf("failed to kill container: %w", err)
 		}
-		// wait until stopped
-		if !c.waitStopped(ctx) {
-			return errorf("container not stopped")
-		}
+	}
+
+	if err := c.waitMonitorStopped(ctx); err != nil {
+		c.Log.Error().Msgf("failed to stop monitor process %d", c.Pid)
+		// unix.Kill(c.Pid, unix.SIGKILL)
 	}
 
 	// From OCI runtime spec

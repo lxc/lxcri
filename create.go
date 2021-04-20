@@ -63,6 +63,10 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 		return c, errorf("failed to run container process: %w", err)
 	}
 
+	if err != nil {
+		c.isMonitorRunning()
+	}
+
 	return c, err
 }
 
