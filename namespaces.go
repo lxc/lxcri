@@ -99,15 +99,6 @@ func getNamespace(spec *specs.Spec, nsType specs.LinuxNamespaceType) *specs.Linu
 	return nil
 }
 
-// isNamespaceCloned returns true if the given namespace
-// is not nil and the namespace path it not empty.
-func isNamespaceCloned(ns *specs.LinuxNamespace) bool {
-	if ns == nil {
-		return false
-	}
-	return ns.Path == ""
-}
-
 // isNamespaceSharedWithHost returns true if the given namespace is nil.
 // If the given namespace is not nil then the namespace then true is
 // returned if the namespace path refers to the host namespace and

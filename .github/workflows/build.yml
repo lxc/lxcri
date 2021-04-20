@@ -35,7 +35,7 @@ jobs:
       - name: Run staticcheck
         run: |
           GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
-          staticcheck --unused.whole-program=true -- ./...
+          staticcheck ./...
 
       - name: Install dependencies
         run: |

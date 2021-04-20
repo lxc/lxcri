@@ -38,7 +38,7 @@ func detectCgroupRoot() (string, error) {
 	// Use the cgroup path of the runtime user if unprivileged.
 	data, err := os.ReadFile("/proc/self/cgroup")
 	if err != nil {
-		return cgroupRoot, fmt.Errorf("Failed to load /proc/self/cgroup: %s", err)
+		return cgroupRoot, fmt.Errorf("failed to load /proc/self/cgroup: %s", err)
 	}
 	lines := strings.Split(string(data), "\n")
 	// get cgroup path from '0::/user.slice/user-0.slice/session-52.scope'
@@ -48,7 +48,7 @@ func detectCgroupRoot() (string, error) {
 			return filepath.Join(cgroupRoot, vals[2]), nil
 		}
 	}
-	return cgroupRoot, fmt.Errorf("Failed to parse cgroup from /proc/self/cgroup")
+	return cgroupRoot, fmt.Errorf("failed to parse cgroup from /proc/self/cgroup")
 }
 
 // checkCgroup checks if the cgroup of the container is non-empty.

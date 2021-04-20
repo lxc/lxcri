@@ -21,12 +21,14 @@ all: fmt test
 update-tools:
 	GO111MODULE=off go get -u mvdan.cc/sh/v3/cmd/shfmt
 	GO111MODULE=off go get -u golang.org/x/lint/golint
+	GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
 
 fmt:
 	go fmt ./...
 	shfmt -w $(SHELL_SCRIPTS)
 	golint ./...
 	go mod tidy
+	staticcheck ./...
 
 .PHONY: test
 test: build
