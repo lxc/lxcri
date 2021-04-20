@@ -16,7 +16,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var logLevel = "info"
+var logLevel = "debug"
 var libexecDir = "/usr/local/libexec/lxcri"
 var tmpRoot = "."
 
@@ -91,7 +91,7 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	if runAsRuntimeUser(cfg.Spec) {
 		cfg.LogFile = "/dev/stderr"
 	} else {
-		cfg.LogFile = filepath.Join(rootfs, "log")
+		cfg.LogFile = filepath.Join("/tmp", "log")
 	}
 	t.Logf("liblxc log output is written to %s", cfg.LogFile)
 	cfg.LogLevel = logLevel
@@ -159,6 +159,17 @@ func TestNonEmptyCgroup(t *testing.T) {
 
 	cfg := newConfig(t, "lxcri-test")
 	defer os.RemoveAll(cfg.Spec.Root.Path)
+
+	if os.Getuid() != 0 {
+		cfg.Spec.Linux.UIDMappings = []specs.LinuxIDMapping{
+			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getuid()), Size: 1},
+			//specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+		}
+		cfg.Spec.Linux.GIDMappings = []specs.LinuxIDMapping{
+			specs.LinuxIDMapping{ContainerID: 0, HostID: uint32(os.Getgid()), Size: 1},
+			//specs.LinuxIDMapping{ContainerID: 1, HostID: 20000, Size: 65536},
+		}
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
