@@ -330,27 +330,12 @@ func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 	require.NoError(t, err)
 	require.Equal(t, specs.StateRunning, state.SpecState.Status)
 
-	time.Sleep(time.Millisecond * 500)
-
-	// SIGHUP by default terminates a process if it is not ignored or catched by
-	// a signal handler
-	err = rt.Kill(ctx, c, unix.SIGKILL)
-	require.NoError(t, err)
-
-	time.Sleep(time.Millisecond * 50)
-
-	state, err = c.State()
-	require.NoError(t, err)
-	require.Equal(t, specs.StateStopped, state.SpecState.Status)
-
-	err = rt.Delete(ctx, c.ContainerID, false)
+	err = rt.Delete(ctx, c.ContainerID, true)
 	require.NoError(t, err)
 
 	state, err = c.State()
 	require.NoError(t, err)
 	require.Equal(t, specs.StateStopped, state.SpecState.Status)
-
-	t.Log("done")
 
 	err = c.Release()
 	require.NoError(t, err)
