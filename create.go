@@ -71,6 +71,10 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 }
 
 func configureContainer(rt *Runtime, c *Container) error {
+	if err := setLog(c); err != nil {
+		return errorf("failed to configure container log: %w", err)
+	}
+
 	if err := configureHostname(rt, c); err != nil {
 		return err
 	}
@@ -210,10 +214,6 @@ func configureContainer(rt *Runtime, c *Container) error {
 		if err := c.SetConfigItem("lxc.prlimit."+name, val); err != nil {
 			return err
 		}
-	}
-
-	if err := setLog(c); err != nil {
-		return errorf("failed to configure container log: %w", err)
 	}
 
 	if err := configureMounts(rt, c); err != nil {
