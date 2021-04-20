@@ -97,7 +97,7 @@ func (rt *Runtime) hasCapability(s string) bool {
 }
 
 // Init initializes the runtime instance.
-// It creates required directories and checks the hosts system configuration.
+// It creates required directories and checks the runtimes system configuration.
 // Unsupported runtime features are disabled and a warning message is logged.
 // Init must be called once for a runtime instance before calling any other method.
 func (rt *Runtime) Init() error {
@@ -174,17 +174,17 @@ func (rt *Runtime) checkSpec(spec *specs.Spec) error {
 		return errorf("failed to mount namespace: %s", err)
 	}
 	if yes {
-		return errorf("container wants to share the hosts mount namespace")
+		return errorf("container wants to share the runtimes mount namespace")
 	}
 
 	// It should be best practise not to do so, but there are containers that
-	// want to share the hosts PID namespaces. e.g sonobuoy/sonobuoy-systemd-logs-daemon-set
+	// want to share the runtimes PID namespaces. e.g sonobuoy/sonobuoy-systemd-logs-daemon-set
 	yes, err = isNamespaceSharedWithRuntime(getNamespace(spec, specs.PIDNamespace))
 	if err != nil {
 		return errorf("failed to check PID namespace: %s", err)
 	}
 	if yes {
-		rt.Log.Warn().Msg("container wil share the hosts PID namespace")
+		rt.Log.Warn().Msg("container shares the PID namespace with the runtime")
 	}
 	return nil
 }
