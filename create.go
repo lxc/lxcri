@@ -13,8 +13,9 @@ import (
 
 // Create creates a single container instance from the given ContainerConfig.
 // Create is the first runtime method to call within the lifecycle of a container.
-// You may have to call Runtime.Delete to cleanup container runtime state,
-// if Create returns with an error.
+// A created Container must be released with Container.Release after use.
+// You should call Runtime.Delete to cleanup container runtime state, even
+// if the Create returned with an error.
 func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container, error) {
 	if err := rt.checkConfig(cfg); err != nil {
 		return nil, err
@@ -62,12 +63,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 	if err := rt.runStartCmd(ctx, c); err != nil {
 		return c, errorf("failed to run container process: %w", err)
 	}
-
-	if err != nil {
-		c.isMonitorRunning()
-	}
-
-	return c, err
+	return c, nil
 }
 
 func configureContainer(rt *Runtime, c *Container) error {
@@ -223,7 +219,6 @@ func configureContainer(rt *Runtime, c *Container) error {
 	if err := configureReadonlyPaths(c); err != nil {
 		return fmt.Errorf("failed to configure read-only paths: %w", err)
 	}
-
 	return nil
 }
 

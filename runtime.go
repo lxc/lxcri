@@ -200,6 +200,7 @@ func (rt *Runtime) keepEnv(names ...string) {
 // Load loads a container from the runtime directory.
 // The container must have been created with Runtime.Create.
 // The logger Container.Log is set to Runtime.Log by default.
+// A loaded Container must be released with Container.Release after use.
 func (rt *Runtime) Load(containerID string) (*Container, error) {
 	dir := filepath.Join(rt.Root, containerID)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -372,6 +373,9 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 		rt.Log.Warn().Msgf("deleting runtime dir for unloadable container: %s", err)
 		return os.RemoveAll(filepath.Join(rt.Root, containerID))
 	}
+
+	defer c.Release()
+
 	state, err := c.ContainerState()
 	if err != nil {
 		return err
