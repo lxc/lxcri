@@ -107,6 +107,7 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 }
 
 func TestEmptyNamespaces(t *testing.T) {
+	t.Parallel()
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
@@ -127,6 +128,7 @@ func TestEmptyNamespaces(t *testing.T) {
 }
 
 func TestSharedPIDNamespace(t *testing.T) {
+	t.Parallel()
 	if os.Getuid() != 0 {
 		t.Skipf("PID namespace sharing is only permitted as root.")
 	}
@@ -163,6 +165,7 @@ func TestSharedPIDNamespace(t *testing.T) {
 // NOTE  works only if cgroup root is writable
 // sudo chown -R $(whoami):$(whoami) /sys/fs/cgroup/$(cat /proc/self/cgroup  | grep '^0:' | cut -d: -f3)
 func TestNonEmptyCgroup(t *testing.T) {
+	t.Parallel()
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
@@ -214,6 +217,7 @@ func TestNonEmptyCgroup(t *testing.T) {
 }
 
 func TestRuntimePrivileged(t *testing.T) {
+	t.Parallel()
 	if os.Getuid() != 0 {
 		t.Skipf("This tests only runs as root")
 	}
@@ -237,7 +241,7 @@ func TestRuntimePrivileged(t *testing.T) {
 // sudo chown -R $(whoami):$(whoami) /sys/fs/cgroup$(cat /proc/self/cgroup  | grep '^0:' | cut -d: -f3)
 //
 func TestRuntimeUnprivileged(t *testing.T) {
-
+	t.Parallel()
 	if os.Getuid() == 0 {
 		t.Skipf("This test only runs as non-root")
 	}
@@ -270,6 +274,7 @@ func TestRuntimeUnprivileged(t *testing.T) {
 }
 
 func TestRuntimeUnprivileged2(t *testing.T) {
+	t.Parallel()
 	rt := newRuntime(t)
 	defer os.RemoveAll(rt.Root)
 
@@ -309,9 +314,6 @@ func testRuntime(t *testing.T, rt *Runtime, cfg *ContainerConfig) {
 	require.NoError(t, err)
 	require.Equal(t, specs.StateRunning, state.SpecState.Status)
 
-	// Must wait otherwise init process signal handlers may not
-	// yet be established and then sending SIGHUP will kill the container
-	//
 	err = rt.Kill(ctx, c, unix.SIGUSR1)
 	require.NoError(t, err)
 
