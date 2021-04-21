@@ -1,3 +1,6 @@
+[![Go Reference](https://pkg.go.dev/badge/github.com/lxc/lxcri.svg)](https://pkg.go.dev/github.com/lxc/lxcri)
+![Build](https://github.com/lxc/lxcri/actions/workflows/build.yml/badge.svg)
+
 # About
 
 `lxcri` is a wrapper around [LXC](https://github.com/lxc/lxc) which can be used as
