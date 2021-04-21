@@ -1,3 +1,6 @@
+[![Go Reference](https://pkg.go.dev/badge/github.com/lxc/lxcri.svg)](https://pkg.go.dev/github.com/lxc/lxcri)
+![Build](https://github.com/lxc/lxcri/actions/workflows/build.yml/badge.svg)
+
 # About
 
 `lxcri` is a wrapper around [LXC](https://github.com/lxc/lxc) which can be used as
@@ -5,24 +8,31 @@ a drop-in container runtime replacement for use by [CRI-O](https://github.com/ku
 
 ### OCI compliance
 
-With liblxc >= https://github.com/lxc/lxc/commit/b5daeddc5afce1cad4915aef3e71fdfe0f428709
+With liblxc starting from [lxc-4.0.0-927-gb5daeddc5](https://github.com/lxc/lxc/commit/b5daeddc5afce1cad4915aef3e71fdfe0f428709)
 it passes all sonobuoy conformance tests.
 
-## Installation
+## Build
 
-For the installation of the runtime see [install.md](doc/install.md)</br>
-For the installation and initialization of a kubernetes cluster see [kubernetes.md](doc/kubernetes.md)
+You can use the provided [Dockerfile](Dockerfile) to build an</br>
 
-## Bugs
+runtime only image (`lxcri` + `lxc`)
 
-* cli: --help shows environment values not defaults https://github.com/urfave/cli/issues/1206
+`docker build --build-arg installcmd=install_runtime`
 
-## Requirements and restrictions
+or with everything required for a kubernetes node (kubelet, kubeadm, cri-o, lxcri, lxc ...)
 
-* Only cgroupv2 (unified cgroup hierarchy) is supported.
-* A recent kernel >= 5.8 is required for full cgroup support.
+`docker build`
 
-### Unimplemented features
+Note: The images are not pre-configured and you must follow the steps in setup for now.
 
-* [runtime: Implement POSIX platform hooks](https://github.com/Drachenfels-GmbH/lxcri/issues/10)
-* [runtime: Implement cgroup2 resource limits](https://github.com/Drachenfels-GmbH/lxcri/issues/11)
+## Setup
+
+To use `lxcri` as OCI runtime in `cri-o` see [setup.md](doc/setup.md)
+
+## API Usage
+
+Please have a look at the [runtime tests](runtime_test.go) for now.
+
+## Notes
+
+* It's currently only tested with cgroups v2.

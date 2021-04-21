@@ -10,9 +10,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/drachenfels-de/lxcri"
-	"github.com/drachenfels-de/lxcri/pkg/log"
-	"github.com/drachenfels-de/lxcri/pkg/specki"
+	"github.com/lxc/lxcri"
+	"github.com/lxc/lxcri/pkg/log"
+	"github.com/lxc/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli/v2"
 )
