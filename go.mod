@@ -1,4 +1,4 @@
-module github.com/drachenfels-de/lxcri
+module github.com/lxc/lxcri
 
 require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.0 // indirect

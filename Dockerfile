@@ -26,7 +26,7 @@ ENV K8S_URL="https://dl.k8s.io/v1.20.4/kubernetes-server-linux-amd64.tar.gz"
 ENV LXC_GIT_REPO=https://github.com/lxc/lxc.git
 ENV LXC_GIT_VERSION=master
 
-ENV LXCRI_GIT_REPO=https://github.com/drachenfels-de/lxcri.git
+ENV LXCRI_GIT_REPO=https://github.com/lxc/lxcri.git
 ENV LXCRI_GIT_VERSION=main
 
 COPY install.sh /

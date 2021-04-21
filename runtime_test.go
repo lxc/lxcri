@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/drachenfels-de/lxcri/pkg/log"
-	"github.com/drachenfels-de/lxcri/pkg/specki"
+	"github.com/lxc/lxcri/pkg/log"
+	"github.com/lxc/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/unix"
