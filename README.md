@@ -27,7 +27,7 @@ Note: The images are not pre-configured and you must follow the steps in setup f
 
 ## Setup
 
-To use `lxcri` as OCI runtime in `cri-o` see [install.md](doc/install.md)
+To use `lxcri` as OCI runtime in `cri-o` see [setup.md](doc/setup.md)
 
 ## API Usage
 

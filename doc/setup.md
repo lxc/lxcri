@@ -1,111 +1,72 @@
-## Glossary
+# Setup
 
-* `runtime` the lxcri binary and the command set that implement the [OCI runtime spec](https://github.com/opencontainers/runtime-spec/releases/download/v1.0.2/oci-runtime-spec-v1.0.2.html)
-* `container process`  the process that starts and runs the container using liblxc (lxcri-start)
-* `container config` the LXC config file
-* `bundle config` the lxcri container state (bundle path, pidfile ....)
-* `runtime spec` the OCI runtime spec from the bundle
+NOTE: This documentation is not yet complete and will be updated.
 
-## Setup 
+## cgroups
 
-The runtime binary implements flags that are required by the `OCI runtime spec`,</br>
-and flags that are runtime specific (timeouts, hooks, logging ...).
+Enable cgroupv2 unified hierarchy manually:
 
-Most of the runtime specific flags have corresponding environment variables. See `lxcri --help`.</br>
-The runtime evaluates the flag value in the following order (lower order takes precedence).
+`mount -t cgroup2 none /sys/fs/cgroup`
 
-1. cmdline flag from process arguments (overwrites process environment)
-2. process environment variable (overwrites environment file)
-3. environment file (overwrites cmdline flag default)
-4. cmdline flag default
+or permanent via kernel cmdline params:
 
-### Environment variables
+`systemd.unified_cgroup_hierarchy=1 cgroup_no_v1=all`
 
-Currently you have to compile to environment file yourself.</br>
-To list  all available variables:
+## cri-o
 
 ```
-grep EnvVars cmd/cli.go | grep -o LXCRI_[A-Za-z_]* | xargs -n1 -I'{}' echo "#{}="
+PREFIX=/usr/local
+LXCRI_ROOT=/run/lxcri
+
+# environment for `crio config`
+export CONTAINER_CONMON=${PREFIX}/bin/conmon
+export CONTAINER_PINNS_PATH=${PREFIX}/bin/pinns
+export CONTAINER_DEFAULT_RUNTIME=lxcri
+export CONTAINER_RUNTIMES=lxcri:${PREFIX}/bin/lxcri:$LXCRI_ROOT
+
+crio config > /etc/crio/crio.conf
 ```
 
-###  Environment file
+### cgroupv2 ebpf
 
-The default path to the environment file is `/etc/defaults/lxcri`.</br>
-It is loaded on every start of the `lxcri` binary, so changes take immediate effect.</br>
-Empty lines and those commented with a leading *#* are ignored.</br>
+Modify systemd service file to run with full privileges.</br>
+This is required for the runtime to set cgroupv2 device controller eBPF.</br>
+See https://github.com/cri-o/cri-o/pull/4272
 
-A malformed environment will let the next runtime call fail.</br>
-In production it's recommended that you replace the environment file atomically.</br>
-
-E.g the environment file `/etc/default/lxcri` could look like this:
-
-```sh
-LXCRI_LOG_LEVEL=debug
-LXCRI_CONTAINER_LOG_LEVEL=debug
-#LXCRI_LOG_FILE=
-#LXCRI_LOG_TIMESTAMP=
-#LXCRI_MONITOR_CGROUP=
-#LXCRI_LIBEXEC=
-#LXCRI_APPARMOR=
-#LXCRI_CAPABILITIES=
-#LXCRI_CGROUP_DEVICES=
-#LXCRI_SECCOMP=
-#LXCRI_CREATE_TIMEOUT=
-#LXCRI_CREATE_HOOK=/usr/local/bin/lxcri-backup.sh
-#LXCRI_CREATE_HOOK_TIMEOUT=
-#LXCRI_START_TIMEOUT=
-#LXCRI_KILL_TIMEOUT=
-#LXCRI_DELETE_TIMEOUT=
+```
+sed -i 's/ExecStart=\//ExecStart=+\//' /usr/local/lib/systemd/system/crio.service
+systemctl daemon-reload
+systemctl start crio
 ```
 
-### Runtime (security) features
+### HTTP proxy
 
-All supported runtime security features are enabled by default.</br>
-The following runtime (security) features can optionally be disabled.</br>
-Details see `lxcri --help`
+If you need a HTTP proxy for internet access you may have to set the proxy environment variables in `/etc/default/crio`
+for crio-o to be able to fetch images from remote repositories.
 
-* apparmor
-* capabilities
-* cgroup-devices
-* seccomp
-
-### Logging
-
-There is only a single log file for runtime and container process log output.</br>
-The log-level for the runtime and the container process can be set independently.
-
-* containers are ephemeral, but the log file should not be
-* a single logfile is easy to rotate and monitor
-* a single logfile is easy to tail (watch for errors / events ...)
-* robust implementation is easy
-
-#### Log Filtering
-
-Runtime log lines are written in JSON using [zerolog](https://github.com/rs/zerolog).</br>
-The log file can be easily filtered with [jq](https://stedolan.github.io/jq/).</br>
-For filtering with  `jq` you must strip the container process logs with `grep -v '^lxc'`</br>
-
-E.g Filter show only errors and warnings for runtime `create` command:
-
-```sh
- grep -v '^lxc ' /var/log/lxcri.log |\
-  jq -c 'select(.cmd == "create" and ( .l == "error or .l == "warn")'
+```
+http_proxy="http://myproxy:3128"
+https_proxy="http://myproxy:3128"
+no_proxy="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,127.0.0.1,localhost"
 ```
 
-#### Runtime log fields
+## /etc/containers
 
-Fields that are always present:
+### storage
 
-* `l` log level
-* `m` log message
-* `c` caller (source file and line number)
-* `cid` container ID
-* `cmd` runtime command
-* `t` timestamp in UTC (format matches container process output)
+If you're using `overlay` as storage driver cri-o may complain that it is not using `native diff` mode.</br>
+Update `/etc/containers/storage.conf` to fix this.
 
-### Debugging
+```
+# see https://github.com/containers/storage/blob/v1.20.2/docs/containers-storage.conf.5.md
+[storage]
+driver = "overlay"
 
-Apart from the logfile following resources are useful:
-
-* Systemd journal for cri-o and kubelet services
-* `coredumpctl` if runtime or container process segfaults.
+[storage.options.overlay]
+# see https://www.kernel.org/doc/Documentation/filesystems/overlayfs.txt, `modinfo overlay`
+# [ 8270.526807] overlayfs: conflicting options: metacopy=on,redirect_dir=off
+# NOTE: metacopy can only be enabled when redirect_dir is enabled
+# NOTE: storage driver name must be set or mountopt are not evaluated,
+# even when the driver is the default driver --> BUG ?
+mountopt = "nodev,redirect_dir=off,metacopy=off"
+```
