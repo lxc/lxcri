@@ -1,53 +1,28 @@
-# crio-lxc
+# About
 
-This is a wrapper around [LXC](https://github.com/lxc/lxc) which can be used as
-a drop-in container runtime replacement for use by
-[CRI-O](https://github.com/kubernetes-sigs/cri-o).
+`lxcri` is a wrapper around [LXC](https://github.com/lxc/lxc) which can be used as
+a drop-in container runtime replacement for use by [CRI-O](https://github.com/kubernetes-sigs/cri-o).
 
-To use this, simply build it:
+### OCI compliance
 
-```
-make
-```
+With liblxc >= https://github.com/lxc/lxc/commit/b5daeddc5afce1cad4915aef3e71fdfe0f428709
+it passes all sonobuoy conformance tests.
 
-Then specify the `crio-lxc` binary you just built as the value for
-`default_runtime` in the `crio.runtime` section of `/etc/crio/crio.conf`.
+## Installation
 
-## Notes
+For the installation of the runtime see [install.md](doc/install.md)</br>
+For the installation and initialization of a kubernetes cluster see [kubernetes.md](doc/kubernetes.md)
 
-Note that you must have a new enough liblxc, one which supports the
-"lxc.rootfs.managed" key.  3.0.3 is not new enough, 3.1 is.  On Ubuntu,
-you can upgrade using the ubuntu-lxc/lxc-git-master PPA.  Arch and
-OpenSUSE tumbleweed should be uptodate.
+## Bugs
 
-## Tests
+* cli: --help shows environment values not defaults https://github.com/urfave/cli/issues/1206
 
-To run the 'basic' test, you'll need to build cri-o and CNI.
+## Requirements and restrictions
 
-```
-mkdir ~/packages
-cd packages
-git clone https://github.com/kubernetes-sigs/cri-o
-cd cri-o
-make
-cd ..
-git clone https://github.com/containernetworking/cni
-git clone https://github.com/containernetworking/plugins cni-plugins
-cd cni-plugins
-./build_linux.sh
-```
+* Only cgroupv2 (unified cgroup hierarchy) is supported.
+* A recent kernel >= 5.8 is required for full cgroup support.
 
-You'll also need crictl.  Download the tarball, extract it, and
-copy crictl to somewhere in your path:
+### Unimplemented features
 
-```
-wget https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.14.0/crictl-v1.14.0-linux-amd64.tar.gz
-tar zxf crictl-v1.14.0-linux-amd64.tar.gz
-sudo cp crictl /usr/local/bin # or ~/.local/bin, etc.
-```
-
-You'll also need conntrack installed:
-
-```
-apt install conntrack
-```
+* [runtime: Implement POSIX platform hooks](https://github.com/Drachenfels-GmbH/lxcri/issues/10)
+* [runtime: Implement cgroup2 resource limits](https://github.com/Drachenfels-GmbH/lxcri/issues/11)

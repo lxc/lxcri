@@ -1,0 +1,68 @@
+---
+# see https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions
+name: Static check and build project
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Install Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.16.x
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Check format of go sources
+        run: |
+          go fmt ./...
+          git diff --exit-code
+
+      - name: Check format of shell scripts
+        run: |
+          GO111MODULE=off go get -u mvdan.cc/sh/v3/cmd/shfmt
+          find . -name \*.sh | xargs shfmt -d
+
+      - name: Lint go sources
+        run: |
+          GO111MODULE=off go get -u golang.org/x/lint/golint
+          golint -set_exit_status ./...
+
+      - name: Install dependencies
+        run: |
+          sudo add-apt-repository ppa:ubuntu-lxc/daily -y
+          sudo apt-get install -qq lxc-dev libc6-dev pkg-config make
+
+      - name: Build
+        run: |
+          make build
+          sudo -E "PATH=$PATH" make install
+
+      - name: Run staticcheck
+        run: |
+          GO111MODULE=off go get -u honnef.co/go/tools/cmd/staticcheck
+          staticcheck ./...
+
+
+      - name: Test unprivileged
+        run: |
+          # keep PATH to use go installed through actions/setup-go@v2
+          # and not the system version (which is currently go 1.15.x)
+          sudo /bin/sh -c "echo '$(whoami):1000:1' >> /etc/subuid"
+          sudo /bin/sh -c "echo '$(whoami):20000:65536' >> /etc/subuid"
+          sudo /bin/sh -c "echo '$(whoami):1000:1' >> /etc/subgid"
+          sudo /bin/sh -c "echo '$(whoami):20000:65536' >> /etc/subgid"
+          sudo chown -R $(whoami):$(whoami) /sys/fs/cgroup/unified$(cat /proc/self/cgroup  | grep '^0:' | cut -d: -f3)
+          # detect file descriptor leaks
+          ulimit -n 30
+          TESTCOUNT=10 make test
+
+      - name: Test privileged
+        run: |
+          # keep PATH to use go installed through actions/setup-go@v2
+          # and not the system version (which is currently go 1.15.x)
+          sudo -E "PATH=$PATH" make test
