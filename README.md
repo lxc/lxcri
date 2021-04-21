@@ -8,7 +8,7 @@ a drop-in container runtime replacement for use by [CRI-O](https://github.com/ku
 
 ### OCI compliance
 
-With liblxc >= https://github.com/lxc/lxc/commit/b5daeddc5afce1cad4915aef3e71fdfe0f428709
+With liblxc starting from [lxc-4.0.0-927-gb5daeddc5](https://github.com/lxc/lxc/commit/b5daeddc5afce1cad4915aef3e71fdfe0f428709)
 it passes all sonobuoy conformance tests.
 
 ## Installation
@@ -16,16 +16,10 @@ it passes all sonobuoy conformance tests.
 For the installation of the runtime see [install.md](doc/install.md)</br>
 For the installation and initialization of a kubernetes cluster see [kubernetes.md](doc/kubernetes.md)
 
-## Bugs
+## API Usage
 
-* cli: --help shows environment values not defaults https://github.com/urfave/cli/issues/1206
+Please have a look at the [runtime tests](runtime_test.go) for now.
 
-## Requirements and restrictions
+## Notes
 
-* Only cgroupv2 (unified cgroup hierarchy) is supported.
-* A recent kernel >= 5.8 is required for full cgroup support.
-
-### Unimplemented features
-
-* [runtime: Implement POSIX platform hooks](https://github.com/Drachenfels-GmbH/lxcri/issues/10)
-* [runtime: Implement cgroup2 resource limits](https://github.com/Drachenfels-GmbH/lxcri/issues/11)
+* It's currently only tested with cgroups v2.
