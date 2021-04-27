@@ -312,9 +312,9 @@ func (c *Container) kill(ctx context.Context, signum unix.Signal) error {
 	return nil
 }
 
-// GetConfigItem is a wrapper function and returns the
-// first value returned by  *lxc.Container.ConfigItem
-func (c *Container) GetConfigItem(key string) string {
+// getConfigItem is a wrapper function and returns the
+// first value returned by lxc.Container.ConfigItem
+func (c *Container) getConfigItem(key string) string {
 	vals := c.LinuxContainer.ConfigItem(key)
 	if len(vals) > 0 {
 		first := vals[0]
@@ -327,9 +327,9 @@ func (c *Container) GetConfigItem(key string) string {
 	return ""
 }
 
-// SetConfigItem is a wrapper for *lxc.Container.SetConfigItem.
+// setConfigItem is a wrapper for lxc.Container.setConfigItem.
 // and only adds additional logging.
-func (c *Container) SetConfigItem(key, value string) error {
+func (c *Container) setConfigItem(key, value string) error {
 	err := c.LinuxContainer.SetConfigItem(key, value)
 	if err != nil {
 		return fmt.Errorf("failed to set config item '%s=%s': %w", key, value, err)
@@ -338,8 +338,8 @@ func (c *Container) SetConfigItem(key, value string) error {
 	return nil
 }
 
-// SupportsConfigItem is a wrapper for *lxc.Container.IsSupportedConfig item.
-func (c *Container) SupportsConfigItem(keys ...string) bool {
+// supportsConfigItem is a wrapper for lxc.Container.IsSupportedConfig item.
+func (c *Container) supportsConfigItem(keys ...string) bool {
 	canCheck := lxc.VersionAtLeast(4, 0, 6)
 	if !canCheck {
 		c.Log.Warn().Msg("lxc.IsSupportedConfigItem is broken in liblxc < 4.0.6")

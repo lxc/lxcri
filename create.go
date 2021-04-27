@@ -97,13 +97,13 @@ func configureContainer(rt *Runtime, c *Container) error {
 	}
 
 	if c.Spec.Process.OOMScoreAdj != nil {
-		if err := c.SetConfigItem("lxc.proc.oom_score_adj", fmt.Sprintf("%d", *c.Spec.Process.OOMScoreAdj)); err != nil {
+		if err := c.setConfigItem("lxc.proc.oom_score_adj", fmt.Sprintf("%d", *c.Spec.Process.OOMScoreAdj)); err != nil {
 			return err
 		}
 	}
 
 	if c.Spec.Process.NoNewPrivileges {
-		if err := c.SetConfigItem("lxc.no_new_privs", "1"); err != nil {
+		if err := c.setConfigItem("lxc.no_new_privs", "1"); err != nil {
 			return err
 		}
 	}
@@ -122,7 +122,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 			if err := writeSeccompProfile(profilePath, c.Spec.Linux.Seccomp); err != nil {
 				return err
 			}
-			if err := c.SetConfigItem("lxc.seccomp.profile", profilePath); err != nil {
+			if err := c.setConfigItem("lxc.seccomp.profile", profilePath); err != nil {
 				return err
 			}
 		}
@@ -139,7 +139,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 	}
 
 	// make sure autodev is disabled
-	if err := c.SetConfigItem("lxc.autodev", "0"); err != nil {
+	if err := c.setConfigItem("lxc.autodev", "0"); err != nil {
 		return err
 	}
 
@@ -190,7 +190,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 	}
 
 	for key, val := range c.Spec.Linux.Sysctl {
-		if err := c.SetConfigItem("lxc.sysctl."+key, val); err != nil {
+		if err := c.setConfigItem("lxc.sysctl."+key, val); err != nil {
 			return err
 		}
 	}
@@ -207,7 +207,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 		}
 		seenLimits = append(seenLimits, name)
 		val := fmt.Sprintf("%d:%d", limit.Soft, limit.Hard)
-		if err := c.SetConfigItem("lxc.prlimit."+name, val); err != nil {
+		if err := c.setConfigItem("lxc.prlimit."+name, val); err != nil {
 			return err
 		}
 	}
@@ -226,7 +226,7 @@ func configureHostname(rt *Runtime, c *Container) error {
 	if c.Spec.Hostname == "" {
 		return nil
 	}
-	if err := c.SetConfigItem("lxc.uts.name", c.Spec.Hostname); err != nil {
+	if err := c.setConfigItem("lxc.uts.name", c.Spec.Hostname); err != nil {
 		return err
 	}
 
@@ -256,20 +256,20 @@ func configureRootfs(rt *Runtime, c *Container) error {
 	if !filepath.IsAbs(rootfs) {
 		rootfs = filepath.Join(c.BundlePath, rootfs)
 	}
-	if err := c.SetConfigItem("lxc.rootfs.path", rootfs); err != nil {
+	if err := c.setConfigItem("lxc.rootfs.path", rootfs); err != nil {
 		return err
 	}
 
-	if err := c.SetConfigItem("lxc.rootfs.mount", rootfs); err != nil {
+	if err := c.setConfigItem("lxc.rootfs.mount", rootfs); err != nil {
 		return err
 	}
 
-	if err := c.SetConfigItem("lxc.rootfs.managed", "0"); err != nil {
+	if err := c.setConfigItem("lxc.rootfs.managed", "0"); err != nil {
 		return err
 	}
 
 	// Resources not created by the container runtime MUST NOT be deleted by it.
-	if err := c.SetConfigItem("lxc.ephemeral", "0"); err != nil {
+	if err := c.setConfigItem("lxc.ephemeral", "0"); err != nil {
 		return err
 	}
 
@@ -280,20 +280,20 @@ func configureRootfs(rt *Runtime, c *Container) error {
 	if c.Spec.Root.Readonly {
 		rootfsOptions = append(rootfsOptions, "ro")
 	}
-	if err := c.SetConfigItem("lxc.rootfs.options", strings.Join(rootfsOptions, ",")); err != nil {
+	if err := c.setConfigItem("lxc.rootfs.options", strings.Join(rootfsOptions, ",")); err != nil {
 		return err
 	}
 	return nil
 }
 
 func configureReadonlyPaths(c *Container) error {
-	rootmnt := c.GetConfigItem("lxc.rootfs.mount")
+	rootmnt := c.getConfigItem("lxc.rootfs.mount")
 	if rootmnt == "" {
 		return fmt.Errorf("lxc.rootfs.mount unavailable")
 	}
 	for _, p := range c.Spec.Linux.ReadonlyPaths {
 		mnt := fmt.Sprintf("%s %s %s %s", filepath.Join(rootmnt, p), strings.TrimPrefix(p, "/"), "bind", "bind,ro,optional")
-		if err := c.SetConfigItem("lxc.mount.entry", mnt); err != nil {
+		if err := c.setConfigItem("lxc.mount.entry", mnt); err != nil {
 			return fmt.Errorf("failed to make path readonly: %w", err)
 		}
 	}
@@ -306,7 +306,7 @@ func configureApparmor(c *Container) error {
 	if aaprofile == "" {
 		aaprofile = "unconfined"
 	}
-	return c.SetConfigItem("lxc.apparmor.profile", aaprofile)
+	return c.setConfigItem("lxc.apparmor.profile", aaprofile)
 }
 
 // configureCapabilities configures the linux capabilities / privileges granted to the container processes.
@@ -326,7 +326,7 @@ func configureCapabilities(c *Container) error {
 		}
 	}
 
-	return c.SetConfigItem("lxc.cap.keep", keepCaps)
+	return c.setConfigItem("lxc.cap.keep", keepCaps)
 }
 
 // NOTE keep in sync with cmd/lxcri-hook#ociHooksAndState
@@ -359,22 +359,22 @@ func configureHooks(rt *Runtime, c *Container) error {
 	c.Spec.Hooks = &hooks
 
 	// pass context information as environment variables to hook scripts
-	if err := c.SetConfigItem("lxc.hook.version", "1"); err != nil {
+	if err := c.setConfigItem("lxc.hook.version", "1"); err != nil {
 		return err
 	}
 
 	if len(c.Spec.Hooks.Prestart) > 0 || len(c.Spec.Hooks.CreateRuntime) > 0 {
-		if err := c.SetConfigItem("lxc.hook.pre-mount", rt.libexec(ExecHook)); err != nil {
+		if err := c.setConfigItem("lxc.hook.pre-mount", rt.libexec(ExecHook)); err != nil {
 			return err
 		}
 	}
 	if len(c.Spec.Hooks.CreateContainer) > 0 {
-		if err := c.SetConfigItem("lxc.hook.mount", rt.libexec(ExecHook)); err != nil {
+		if err := c.setConfigItem("lxc.hook.mount", rt.libexec(ExecHook)); err != nil {
 			return err
 		}
 	}
 	if len(c.Spec.Hooks.StartContainer) > 0 {
-		if err := c.SetConfigItem("lxc.hook.start", rt.libexec(ExecHook)); err != nil {
+		if err := c.setConfigItem("lxc.hook.start", rt.libexec(ExecHook)); err != nil {
 			return err
 		}
 	}

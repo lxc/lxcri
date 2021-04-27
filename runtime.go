@@ -262,7 +262,7 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	if c.ConsoleSocket == "" && !c.Spec.Process.Terminal {
 		// Inherit stdio from calling process (conmon).
 		// lxc.console.path must be set to 'none' or stdio of init process is replaced with a PTY by lxc
-		if err := c.SetConfigItem("lxc.console.path", "none"); err != nil {
+		if err := c.setConfigItem("lxc.console.path", "none"); err != nil {
 			return err
 		}
 		cmd.Stdin = os.Stdin
@@ -270,7 +270,7 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 		cmd.Stderr = os.Stderr
 	}
 
-	// NOTE any config change via clxc.SetConfigItem
+	// NOTE any config change via clxc.setConfigItem
 	// must be done before calling SaveConfigFile
 	err = c.LinuxContainer.SaveConfigFile(c.ConfigFilePath())
 	if err != nil {

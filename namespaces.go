@@ -73,12 +73,12 @@ func configureNamespaces(c *Container) error {
 		}
 
 		configKey := fmt.Sprintf("lxc.namespace.share.%s", n.Name)
-		if err := c.SetConfigItem(configKey, ns.Path); err != nil {
+		if err := c.setConfigItem(configKey, ns.Path); err != nil {
 			return err
 		}
 	}
 
-	return c.SetConfigItem("lxc.namespace.clone", strings.Join(cloneNamespaces, " "))
+	return c.setConfigItem("lxc.namespace.clone", strings.Join(cloneNamespaces, " "))
 }
 
 func isNamespaceEnabled(spec *specs.Spec, nsType specs.LinuxNamespaceType) bool {
