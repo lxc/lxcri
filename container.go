@@ -31,17 +31,21 @@ type ContainerConfig struct {
 	// The ContainerID should match the following pattern `[a-z][a-z0-9-_]+`
 	ContainerID string
 
-	BundlePath    string
+	// BundlePath is the OCI bundle path.
+	BundlePath string
+
 	ConsoleSocket string `json:",omitempty"`
 
-	// PidFile is the absolute PID file path
-	// for the container monitor process (ExecStart)
+	// MonitorCgroupDir is the cgroup directory path
+	// for the liblxc monitor process `lxcri-start`
+	// relative to the cgroup root.
 	MonitorCgroupDir string
 
 	CgroupDir string
 
 	// LogFile is the liblxc log file path
 	LogFile string
+
 	// LogLevel is the liblxc log level
 	LogLevel string
 
@@ -59,7 +63,7 @@ func (c Container) syncFifoPath() string {
 }
 
 // RuntimePath returns the absolute path to the given sub path
-// within the container root.
+// within the container runtime directory.
 func (c Container) RuntimePath(subPath ...string) string {
 	return filepath.Join(c.runtimeDir, filepath.Join(subPath...))
 }
