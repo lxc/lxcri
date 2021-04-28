@@ -155,7 +155,7 @@ func (c *Container) isMonitorRunning() bool {
 	}
 
 	// if WNOHANG was specified and one or more child(ren) specified by pid exist,
-	// but have not yet changed state, then 0 is returned
+	// but have not yet exited, then 0 is returned
 	if pid == 0 {
 		return true
 	}
@@ -209,7 +209,7 @@ func (c *Container) waitStarted(ctx context.Context) error {
 			return ctx.Err()
 		default:
 			if !c.isMonitorRunning() {
-				return fmt.Errorf("monitor already died")
+				return nil
 			}
 			initState, _ := c.getContainerInitState()
 			if initState != specs.StateCreated {
