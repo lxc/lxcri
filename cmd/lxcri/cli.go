@@ -86,6 +86,7 @@ func main() {
 		&deleteCmd,
 		&execCmd,
 		&inspectCmd,
+		&listCmd,
 		// TODO extend urfave/cli to render a default environment file.
 	}
 
@@ -218,11 +219,13 @@ func main() {
 	}
 
 	setupCmd := func(ctx *cli.Context) error {
-		containerID := ctx.Args().Get(0)
-		if len(containerID) == 0 {
-			return fmt.Errorf("missing container ID")
+		if clxc.command != "list" {
+			containerID := ctx.Args().Get(0)
+			if len(containerID) == 0 {
+				return fmt.Errorf("missing container ID")
+			}
+			clxc.cfg.ContainerID = containerID
 		}
-		clxc.cfg.ContainerID = containerID
 
 		if err := clxc.configureLogger(); err != nil {
 			return fmt.Errorf("failed to configure logger: %w", err)
@@ -572,7 +575,7 @@ func doExec(ctxcli *cli.Context) error {
 
 var inspectCmd = cli.Command{
 	Name:   "inspect",
-	Usage:  "returns inspect of a container",
+	Usage:  "display the status of one or more containers",
 	Action: doInspect,
 	ArgsUsage: `containerID [containerID...]
 
@@ -581,7 +584,7 @@ var inspectCmd = cli.Command{
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "template",
-			Usage: "Use this go template to to format output.",
+			Usage: "Use this go template to format the output.",
 		},
 	},
 }
@@ -599,6 +602,47 @@ func doInspect(ctxcli *cli.Context) (err error) {
 	for _, id := range ctxcli.Args().Slice() {
 		if err := inspectContainer(id, t); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+var listCmd = cli.Command{
+	Name:   "list",
+	Usage:  "list available containers",
+	Action: doList,
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "template",
+			Usage: "Use this go template to format the output.",
+			// e.g `{{ printf "%s %s\n" .Container.ContainerID .State.ContainerState }}`,
+		},
+	},
+}
+
+func doList(ctxcli *cli.Context) (err error) {
+	tmpl := ctxcli.String("template")
+	var t *template.Template
+	if tmpl != "" {
+		t, err = template.New("list").Parse(tmpl)
+		if err != nil {
+			return err
+		}
+	}
+
+	all, err := clxc.List()
+	if err != nil {
+		return err
+	}
+
+	for _, id := range all {
+		if t == nil {
+			fmt.Println(id)
+		} else {
+			err := inspectContainer(id, t)
+			if err != nil && !errors.Is(err, lxcri.ErrNotExist) {
+				return err
+			}
 		}
 	}
 	return nil
