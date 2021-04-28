@@ -43,7 +43,7 @@ func configureInit(rt *Runtime, c *Container) error {
 		Options:     []string{"bind", "ro", "nodev", "nosuid", "create=dir"},
 	})
 
-	if err := c.SetConfigItem("lxc.init.cwd", initDir); err != nil {
+	if err := c.setConfigItem("lxc.init.cwd", initDir); err != nil {
 		return err
 	}
 
@@ -74,7 +74,7 @@ func configureInit(rt *Runtime, c *Container) error {
 		Type:        "bind",
 		Options:     []string{"bind", "ro", "nosuid"},
 	})
-	return c.SetConfigItem("lxc.init.cmd", initCmd)
+	return c.setConfigItem("lxc.init.cmd", initCmd)
 }
 
 func touchFile(filePath string, perm os.FileMode) error {
@@ -90,25 +90,25 @@ func configureInitUser(c *Container) error {
 	// TODO ensure that the user namespace is enabled
 	// See `man lxc.container.conf` lxc.idmap.
 	for _, m := range c.Spec.Linux.UIDMappings {
-		if err := c.SetConfigItem("lxc.idmap", fmt.Sprintf("u %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
+		if err := c.setConfigItem("lxc.idmap", fmt.Sprintf("u %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
 			return err
 		}
 	}
 
 	for _, m := range c.Spec.Linux.GIDMappings {
-		if err := c.SetConfigItem("lxc.idmap", fmt.Sprintf("g %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
+		if err := c.setConfigItem("lxc.idmap", fmt.Sprintf("g %d %d %d", m.ContainerID, m.HostID, m.Size)); err != nil {
 			return err
 		}
 	}
 
-	if err := c.SetConfigItem("lxc.init.uid", fmt.Sprintf("%d", c.Spec.Process.User.UID)); err != nil {
+	if err := c.setConfigItem("lxc.init.uid", fmt.Sprintf("%d", c.Spec.Process.User.UID)); err != nil {
 		return err
 	}
-	if err := c.SetConfigItem("lxc.init.gid", fmt.Sprintf("%d", c.Spec.Process.User.GID)); err != nil {
+	if err := c.setConfigItem("lxc.init.gid", fmt.Sprintf("%d", c.Spec.Process.User.GID)); err != nil {
 		return err
 	}
 
-	if len(c.Spec.Process.User.AdditionalGids) > 0 && c.SupportsConfigItem("lxc.init.groups") {
+	if len(c.Spec.Process.User.AdditionalGids) > 0 && c.supportsConfigItem("lxc.init.groups") {
 		var b strings.Builder
 		for i, gid := range c.Spec.Process.User.AdditionalGids {
 			if i > 0 {
@@ -116,7 +116,7 @@ func configureInitUser(c *Container) error {
 			}
 			fmt.Fprintf(&b, "%d", gid)
 		}
-		if err := c.SetConfigItem("lxc.init.groups", b.String()); err != nil {
+		if err := c.setConfigItem("lxc.init.groups", b.String()); err != nil {
 			return err
 		}
 	}

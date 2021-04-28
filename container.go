@@ -31,17 +31,21 @@ type ContainerConfig struct {
 	// The ContainerID should match the following pattern `[a-z][a-z0-9-_]+`
 	ContainerID string
 
-	BundlePath    string
+	// BundlePath is the OCI bundle path.
+	BundlePath string
+
 	ConsoleSocket string `json:",omitempty"`
 
-	// PidFile is the absolute PID file path
-	// for the container monitor process (ExecStart)
+	// MonitorCgroupDir is the cgroup directory path
+	// for the liblxc monitor process `lxcri-start`
+	// relative to the cgroup root.
 	MonitorCgroupDir string
 
 	CgroupDir string
 
 	// LogFile is the liblxc log file path
 	LogFile string
+
 	// LogLevel is the liblxc log level
 	LogLevel string
 
@@ -59,7 +63,7 @@ func (c Container) syncFifoPath() string {
 }
 
 // RuntimePath returns the absolute path to the given sub path
-// within the container root.
+// within the container runtime directory.
 func (c Container) RuntimePath(subPath ...string) string {
 	return filepath.Join(c.runtimeDir, filepath.Join(subPath...))
 }
@@ -151,7 +155,7 @@ func (c *Container) isMonitorRunning() bool {
 	}
 
 	// if WNOHANG was specified and one or more child(ren) specified by pid exist,
-	// but have not yet changed state, then 0 is returned
+	// but have not yet exited, then 0 is returned
 	if pid == 0 {
 		return true
 	}
@@ -205,7 +209,7 @@ func (c *Container) waitStarted(ctx context.Context) error {
 			return ctx.Err()
 		default:
 			if !c.isMonitorRunning() {
-				return fmt.Errorf("monitor already died")
+				return nil
 			}
 			initState, _ := c.getContainerInitState()
 			if initState != specs.StateCreated {
@@ -308,9 +312,9 @@ func (c *Container) kill(ctx context.Context, signum unix.Signal) error {
 	return nil
 }
 
-// GetConfigItem is a wrapper function and returns the
-// first value returned by  *lxc.Container.ConfigItem
-func (c *Container) GetConfigItem(key string) string {
+// getConfigItem is a wrapper function and returns the
+// first value returned by lxc.Container.ConfigItem
+func (c *Container) getConfigItem(key string) string {
 	vals := c.LinuxContainer.ConfigItem(key)
 	if len(vals) > 0 {
 		first := vals[0]
@@ -323,9 +327,9 @@ func (c *Container) GetConfigItem(key string) string {
 	return ""
 }
 
-// SetConfigItem is a wrapper for *lxc.Container.SetConfigItem.
+// setConfigItem is a wrapper for lxc.Container.setConfigItem.
 // and only adds additional logging.
-func (c *Container) SetConfigItem(key, value string) error {
+func (c *Container) setConfigItem(key, value string) error {
 	err := c.LinuxContainer.SetConfigItem(key, value)
 	if err != nil {
 		return fmt.Errorf("failed to set config item '%s=%s': %w", key, value, err)
@@ -334,8 +338,8 @@ func (c *Container) SetConfigItem(key, value string) error {
 	return nil
 }
 
-// SupportsConfigItem is a wrapper for *lxc.Container.IsSupportedConfig item.
-func (c *Container) SupportsConfigItem(keys ...string) bool {
+// supportsConfigItem is a wrapper for lxc.Container.IsSupportedConfig item.
+func (c *Container) supportsConfigItem(keys ...string) bool {
 	canCheck := lxc.VersionAtLeast(4, 0, 6)
 	if !canCheck {
 		c.Log.Warn().Msg("lxc.IsSupportedConfigItem is broken in liblxc < 4.0.6")

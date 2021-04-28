@@ -44,7 +44,7 @@ func filterMountOptions(rt *Runtime, fs string, opts []string) []string {
 
 func configureMounts(rt *Runtime, c *Container) error {
 	// excplicitly disable auto-mounting
-	if err := c.SetConfigItem("lxc.mount.auto", ""); err != nil {
+	if err := c.setConfigItem("lxc.mount.auto", ""); err != nil {
 		return err
 	}
 
@@ -83,7 +83,7 @@ func configureMounts(rt *Runtime, c *Container) error {
 
 		mnt := fmt.Sprintf("%s %s %s %s", ms.Source, ms.Destination, ms.Type, strings.Join(ms.Options, ","))
 
-		if err := c.SetConfigItem("lxc.mount.entry", mnt); err != nil {
+		if err := c.setConfigItem("lxc.mount.entry", mnt); err != nil {
 			return err
 		}
 	}

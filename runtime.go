@@ -58,19 +58,24 @@ type RuntimeFeatures struct {
 type Runtime struct {
 	// Log is the logger used by the runtime.
 	Log zerolog.Logger `json:"-"`
+
 	// Root is the file path to the runtime directory.
 	// Directories for containers created by the runtime
 	// are created within this directory.
 	Root string
+
 	// Use systemd encoded cgroup path (from crio-o/conmon)
 	// is true if /etc/crio/crio.conf#cgroup_manager = "systemd"
 	SystemdCgroup bool
+
 	// Path for lxc monitor cgroup (lxc specific feature).
 	// This is the cgroup where the liblxc monitor process (lxcri-start)
 	// will be placed in. It's similar to /etc/crio/crio.conf#conmon_cgroup
 	MonitorCgroup string
+
 	// LibexecDir is the the directory that contains the runtime executables.
 	LibexecDir string
+
 	// Featuress are runtime (security) features that apply to all containers
 	// created by the runtime.
 	Features RuntimeFeatures
@@ -219,8 +224,8 @@ func (rt *Runtime) Load(containerID string) (*Container, error) {
 }
 
 // Start starts the given container.
-// Start simply unblocks the container init process `lxcri-init`,
-// which then executes the actuall container process.
+// Start simply unblocks the init process `lxcri-init`,
+// which then executes the container process.
 // The given container must have been created with Runtime.Create.
 func (rt *Runtime) Start(ctx context.Context, c *Container) error {
 	rt.Log.Info().Msg("notify init to start container process")
@@ -257,7 +262,7 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 	if c.ConsoleSocket == "" && !c.Spec.Process.Terminal {
 		// Inherit stdio from calling process (conmon).
 		// lxc.console.path must be set to 'none' or stdio of init process is replaced with a PTY by lxc
-		if err := c.SetConfigItem("lxc.console.path", "none"); err != nil {
+		if err := c.setConfigItem("lxc.console.path", "none"); err != nil {
 			return err
 		}
 		cmd.Stdin = os.Stdin
@@ -265,7 +270,7 @@ func (rt *Runtime) runStartCmd(ctx context.Context, c *Container) (err error) {
 		cmd.Stderr = os.Stderr
 	}
 
-	// NOTE any config change via clxc.SetConfigItem
+	// NOTE any config change via clxc.setConfigItem
 	// must be done before calling SaveConfigFile
 	err = c.LinuxContainer.SaveConfigFile(c.ConfigFilePath())
 	if err != nil {

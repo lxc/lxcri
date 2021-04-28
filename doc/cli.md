@@ -22,41 +22,24 @@ The runtime evaluates the flag value in the following order (lower order takes p
 ### Environment variables
 
 Currently you have to compile to environment file yourself.</br>
-To list  all available variables:
+
+All environment variables are listed in the cmline help `lxcri --help`
+
+To compile a list of all available variables:
 
 ```
-grep EnvVars cmd/cli.go | grep -o LXCRI_[A-Za-z_]* | xargs -n1 -I'{}' echo "#{}="
+grep EnvVars cmd/lxcri/* | grep -o LXCRI_[A-Za-z_]* | xargs -I'{}' echo "#{}="
 ```
 
 ###  Environment file
 
 The default path to the environment file is `/etc/defaults/lxcri`.</br>
-It is loaded on every start of the `lxcri` binary, so changes take immediate effect.</br>
+It is loaded on every start of the `lxcri` binary, so changes take immediate effect
+for the next `lxcri` process started by `cri-o`.</br>
 Empty lines and those commented with a leading *#* are ignored.</br>
 
 A malformed environment will let the next runtime call fail.</br>
 In production it's recommended that you replace the environment file atomically.</br>
-
-E.g the environment file `/etc/default/lxcri` could look like this:
-
-```sh
-LXCRI_LOG_LEVEL=debug
-LXCRI_CONTAINER_LOG_LEVEL=debug
-#LXCRI_LOG_FILE=
-#LXCRI_LOG_TIMESTAMP=
-#LXCRI_MONITOR_CGROUP=
-#LXCRI_LIBEXEC=
-#LXCRI_APPARMOR=
-#LXCRI_CAPABILITIES=
-#LXCRI_CGROUP_DEVICES=
-#LXCRI_SECCOMP=
-#LXCRI_CREATE_TIMEOUT=
-#LXCRI_CREATE_HOOK=/usr/local/bin/lxcri-backup.sh
-#LXCRI_CREATE_HOOK_TIMEOUT=
-#LXCRI_START_TIMEOUT=
-#LXCRI_KILL_TIMEOUT=
-#LXCRI_DELETE_TIMEOUT=
-```
 
 ### Runtime (security) features
 
