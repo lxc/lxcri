@@ -26,15 +26,16 @@ case "$DISTRIBUTION" in
 	PKGS="$PKGS $PKGS_RUNTIME"
 	;;
 "arch")
+	# NOTE official archlinux images are really large
+	# archlinux:latest unpacked image size is > 400MB (vs ubuntu:latest ~ 75MB)
 	INSTALL_PKGS=pacman_install
 	CLEAN_PKGS=pacman_clean
 
-	BUILD_PKGS=""
-	BUILD_PKGS="$PKGS_PKGS "
+	PKGS_BUILD="base-devel wget git libtool m4 automake autoconf"
 
-	PKGS_RUNTIME=""
-	PKGS=""
-	PKGS="$PKGS "
+	PKGS_RUNTIME="libseccomp apparmor btrfs-progs device-mapper libcap"
+	PKGS="conntrack-tools ethtool iproute2 ebtables iptables-nft socat"
+	PKGS="$PKGS ca-certificates glib2 systemd tzdata"
 	PKGS="$PKGS $PKGS_RUNTIME"
 	;;
 "alpine")
@@ -48,8 +49,6 @@ case "$DISTRIBUTION" in
 	PKGS="conntrack-tools ebtables ethtool iproute2 iptables ip6tables socat"
 	PKGS="$PKGS ca-certificates glib runit tzdata"
 	PKGS="$PKGS $PKGS_RUNTIME"
-
-	export MUSL_CC="cc"
 	;;
 *)
 	echo "unsupported distribution '$DISTRIBUTION'"
@@ -84,13 +83,16 @@ apt_clean() {
 }
 
 pacman_install() {
-	echo "not implemented"
-	exit 1
+	pacman -Sy
+	# NOTE: the option '--ask 4' is undocumented but the only way to let pacman
+	# resolve conflicts (e.g iptables and iptables-nft)
+	# see https://unix.stackexchange.com/questions/274727/how-to-force-pacman-to-answer-yes-to-all-questions
+	pacman -S --noconfirm --needed $@ --ask 4
 }
 
 pacman_clean() {
-	echo "not implemented"
-	exit 1
+	pacman -R -ss --unneeded --noconfirm $@
+	pacman -Scc
 }
 
 apk_install() {
