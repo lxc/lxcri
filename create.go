@@ -67,7 +67,7 @@ func (rt *Runtime) Create(ctx context.Context, cfg *ContainerConfig) (*Container
 }
 
 func configureContainer(rt *Runtime, c *Container) error {
-	if err := setLog(c); err != nil {
+	if err := c.SetLog(c.LogFile, c.LogLevel); err != nil {
 		return errorf("failed to configure container log: %w", err)
 	}
 

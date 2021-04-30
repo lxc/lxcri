@@ -464,16 +464,19 @@ func (c *Container) attachOptions(procSpec *specs.Process, execOpts *ExecOptions
 	return opts, nil
 }
 
-func setLog(c *Container) error {
-	// Never let lxc write to stdout, stdout belongs to the container init process.
+// SetLog changes log file path and log level of the container (liblxc) instance.
+// The settings are only valid until Release is called on this instance.
+// The log settings applied at Runtime.Create are active until SetLog is called.
+func (c *Container) SetLog(filename string, level string) error {
+	// Do not write to stdout by default.
+	// Stdout belongs to the container process.
 	// Explicitly disable it - allthough it is currently the default.
 	c.LinuxContainer.SetVerbosity(lxc.Quiet)
-	// The log level for a running container is set, and may change, per runtime call.
-	err := c.LinuxContainer.SetLogLevel(parseContainerLogLevel(c.LogLevel))
+	err := c.LinuxContainer.SetLogLevel(parseContainerLogLevel(level))
 	if err != nil {
 		return fmt.Errorf("failed to set container loglevel: %w", err)
 	}
-	if err := c.LinuxContainer.SetLogFile(c.LogFile); err != nil {
+	if err := c.LinuxContainer.SetLogFile(filename); err != nil {
 		return fmt.Errorf("failed to set container log file: %w", err)
 	}
 	return nil

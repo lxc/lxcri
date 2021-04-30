@@ -31,10 +31,11 @@ type app struct {
 	cfg lxcri.ContainerConfig
 
 	logConfig struct {
-		File      *os.File
-		FilePath  string
-		Level     string
-		Timestamp string
+		File       *os.File
+		FilePath   string
+		Level      string
+		Timestamp  string
+		LogConsole bool
 	}
 
 	command string
@@ -43,21 +44,27 @@ type app struct {
 var clxc = app{}
 
 func (app *app) configureLogger() error {
-	// TODO use console logger if filepath is /dev/stdout or /dev/stderr ?
-	l, err := log.OpenFile(app.logConfig.FilePath, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to open log file: %w", err)
-	}
-	app.logConfig.File = l
-
 	level, err := log.ParseLevel(app.logConfig.Level)
 	if err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
-	logCtx := log.NewLogger(app.logConfig.File, level)
-	app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.cfg.ContainerID).Logger()
-	app.cfg.Log = app.Runtime.Log
 
+	if app.logConfig.LogConsole {
+		app.Runtime.Log = log.ConsoleLogger(true, level)
+		app.cfg.LogFile = "/dev/stdout"
+	} else {
+		// TODO use console logger if filepath is /dev/stdout or /dev/stderr ?
+		l, err := log.OpenFile(app.logConfig.FilePath, 0600)
+		if err != nil {
+			return fmt.Errorf("failed to open log file: %w", err)
+		}
+		app.logConfig.File = l
+		logCtx := log.NewLogger(app.logConfig.File, level)
+
+		app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.cfg.ContainerID).Logger()
+	}
+
+	app.cfg.Log = app.Runtime.Log
 	return nil
 }
 
@@ -93,14 +100,14 @@ func main() {
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
 			Name:        "log-level",
-			Usage:       "set the runtime log level (trace|debug|info|warn|error)",
+			Usage:       "set the runtime (lxcri) log level (trace|debug|info|warn|error)",
 			EnvVars:     []string{"LXCRI_LOG_LEVEL"},
 			Value:       "info",
 			Destination: &clxc.logConfig.Level,
 		},
 		&cli.StringFlag{
 			Name:        "log-file",
-			Usage:       "path to the log file for runtime and container output",
+			Usage:       "set the runtime (lxcri) log file path",
 			EnvVars:     []string{"LXCRI_LOG_FILE"},
 			Value:       defaultLogFile,
 			Destination: &clxc.logConfig.FilePath,
@@ -113,17 +120,22 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "container-log-level",
-			Usage:       "set the container process (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
+			Usage:       "set the container (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_LEVEL"},
 			Value:       "warn",
 			Destination: &clxc.cfg.LogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-file",
-			Usage:       "path to the log file for runtime and container output",
+			Usage:       "set the container (liblxc) log file path",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_FILE"},
 			Value:       defaultLogFile,
 			Destination: &clxc.cfg.LogFile,
+		},
+		&cli.BoolFlag{
+			Name:        "log-console",
+			Usage:       "write log output to stdout. --log-file and --container-log-file options are ignored",
+			Destination: &clxc.logConfig.LogConsole,
 		},
 		&cli.StringFlag{
 			Name:  "root",
@@ -139,7 +151,7 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "monitor-cgroup",
-			Usage:       "cgroup slice for liblxc monitor process and pivot path",
+			Usage:       "cgroup path for liblxc monitor process",
 			Destination: &clxc.MonitorCgroup,
 			EnvVars:     []string{"LXCRI_MONITOR_CGROUP"},
 			Value:       "lxcri-monitor.slice",
@@ -595,6 +607,11 @@ func doExec(ctxcli *cli.Context) error {
 	}
 
 	c, err := clxc.Load(clxc.cfg.ContainerID)
+	if err != nil {
+		return err
+	}
+
+	err = c.SetLog(clxc.cfg.LogFile, clxc.cfg.LogLevel)
 	if err != nil {
 		return err
 	}
