@@ -298,7 +298,7 @@ func doCreate(ctxcli *cli.Context) error {
 		return err
 	}
 	specPath := filepath.Join(clxc.cfg.BundlePath, lxcri.BundleConfigFile)
-	spec, err := specki.ReadSpecJSON(specPath)
+	spec, err := specki.LoadSpecJSON(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
@@ -530,6 +530,19 @@ func (e execError) Error() string {
 	}
 }
 
+// loadSpecProcess calls ReadSpecProcessJSON if the given specProcessPath is not empty,
+// otherwise it creates a new specs.Process from the given args.
+// It's an error if both values are empty.
+func loadSpecProcess(specProcessPath string, args []string) (*specs.Process, error) {
+	if specProcessPath != "" {
+		return specki.LoadSpecProcessJSON(specProcessPath)
+	}
+	if len(args) == 0 {
+		return nil, fmt.Errorf("spec process path and args are empty")
+	}
+	return &specs.Process{Cwd: "/", Args: args}, nil
+}
+
 func doExec(ctxcli *cli.Context) error {
 	var args []string
 	if ctxcli.Args().Len() > 1 {
@@ -543,7 +556,7 @@ func doExec(ctxcli *cli.Context) error {
 		clxc.Log.Warn().Msg("detaching process but pid-file value is unset")
 	}
 
-	procSpec, err := specki.LoadSpecProcess(ctxcli.String("process"), args)
+	procSpec, err := loadSpecProcess(ctxcli.String("process"), args)
 	if err != nil {
 		return err
 	}

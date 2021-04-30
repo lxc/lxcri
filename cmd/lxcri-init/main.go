@@ -23,7 +23,7 @@ func main() {
 	}
 
 	specPath := filepath.Join(runtimeDir, "config.json")
-	spec, err := specki.ReadSpecJSON(specPath)
+	spec, err := specki.LoadSpecJSON(specPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
 		os.Exit(3)

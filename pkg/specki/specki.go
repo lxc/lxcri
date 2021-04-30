@@ -208,35 +208,29 @@ func IsDeviceEnabled(spec *specs.Spec, dev specs.LinuxDevice) (bool, error) {
 	return false, nil
 }
 
-// ReadSpecJSON reads the JSON encoded OCI
+// LoadSpecJSON reads the JSON encoded OCI
 // spec from the given path.
 // This is a convenience function for the cli.
-func ReadSpecJSON(p string) (*specs.Spec, error) {
+func LoadSpecJSON(p string) (*specs.Spec, error) {
 	spec := new(specs.Spec)
 	err := DecodeJSONFile(p, spec)
 	return spec, err
 }
 
-// ReadSpecProcessJSON reads the JSON encoded OCI
+// LoadSpecProcessJSON reads the JSON encoded OCI
 // spec process definition from the given path.
 // This is a convenience function for the cli.
-func ReadSpecProcessJSON(src string) (*specs.Process, error) {
+func LoadSpecProcessJSON(src string) (*specs.Process, error) {
 	proc := new(specs.Process)
 	err := DecodeJSONFile(src, proc)
 	return proc, err
 }
 
-// LoadSpecProcess calls ReadSpecProcessJSON if the given specProcessPath is not empty,
-// otherwise it creates a new specs.Process from the given args.
-// It's an error if both values are empty.
-func LoadSpecProcess(specProcessPath string, args []string) (*specs.Process, error) {
-	if specProcessPath != "" {
-		return ReadSpecProcessJSON(specProcessPath)
-	}
-	if len(args) == 0 {
-		return nil, fmt.Errorf("spec process path and args are empty")
-	}
-	return &specs.Process{Cwd: "/", Args: args}, nil
+// LoadSpecStateJSON parses specs.State from the JSON encoded file filename.
+func LoadSpecStateJSON(filename string) (*specs.State, error) {
+	state := new(specs.State)
+	err := DecodeJSONFile(filename, state)
+	return state, err
 }
 
 // NewSpec returns a minimal spec.Spec instance, which is
@@ -287,13 +281,6 @@ func NewSpecProcess(cmd string, args ...string) *specs.Process {
 	return proc
 }
 
-// LoadSpecStateJSON parses specs.State from the JSON encoded file filename.
-func LoadSpecStateJSON(filename string) (*specs.State, error) {
-	state := new(specs.State)
-	err := DecodeJSONFile(filename, state)
-	return state, err
-}
-
 // ReadSpecStateJSON parses the JSON encoded specs.State from the given reader.
 func ReadSpecStateJSON(r io.Reader) (*specs.State, error) {
 	state := new(specs.State)
@@ -310,7 +297,7 @@ func InitHook(r io.Reader) (rootfs string, state *specs.State, spec *specs.Spec,
 	if err != nil {
 		return
 	}
-	spec, err = ReadSpecJSON(filepath.Join(state.Bundle, "config.json"))
+	spec, err = LoadSpecJSON(filepath.Join(state.Bundle, "config.json"))
 
 	// quote from https://github.com/opencontainers/runtime-spec/blob/master/config.md#root
 	// > On POSIX platforms, path is either an absolute path or a relative path to the bundle.
