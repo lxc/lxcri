@@ -384,7 +384,7 @@ type ExecOptions struct {
 // The container state must be either specs.StateCreated or specs.StateRunning
 // The given ExecOptions execOpts, control the execution environment of the the process.
 func (c *Container) ExecDetached(proc *specs.Process, execOpts *ExecOptions) (pid int, err error) {
-	opts, err := attachOptions(proc, execOpts)
+	opts, err := c.attachOptions(proc, execOpts)
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}
@@ -405,7 +405,7 @@ func (c *Container) ExecDetached(proc *specs.Process, execOpts *ExecOptions) (pi
 // The container state must either be specs.StateCreated or specs.StateRunning
 // The given ExecOptions execOpts control the execution environment of the the process.
 func (c *Container) Exec(proc *specs.Process, execOpts *ExecOptions) (exitStatus int, err error) {
-	opts, err := attachOptions(proc, execOpts)
+	opts, err := c.attachOptions(proc, execOpts)
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}
@@ -416,7 +416,7 @@ func (c *Container) Exec(proc *specs.Process, execOpts *ExecOptions) (exitStatus
 	return exitStatus, nil
 }
 
-func attachOptions(procSpec *specs.Process, execOpts *ExecOptions) (lxc.AttachOptions, error) {
+func (c *Container) attachOptions(procSpec *specs.Process, execOpts *ExecOptions) (lxc.AttachOptions, error) {
 	opts := lxc.AttachOptions{
 		StdinFd:  0,
 		StdoutFd: 1,
@@ -440,15 +440,24 @@ func attachOptions(procSpec *specs.Process, execOpts *ExecOptions) (lxc.AttachOp
 		}
 	}
 
-	if execOpts == nil || len(execOpts.Namespaces) == 0 {
-		opts.Namespaces = cloneAll
-	} else {
+	if execOpts == nil {
+		execOpts = new(ExecOptions)
+	}
+
+	if len(execOpts.Namespaces) == 0 {
+		for t := range namespaceMap {
+			execOpts.Namespaces = append(execOpts.Namespaces, t)
+		}
+	}
+	c.Log.Debug().Msgf("attaching to namespaces %#v\n", execOpts.Namespaces)
+
+	for _, n := range c.Spec.Linux.Namespaces {
 		for _, t := range execOpts.Namespaces {
-			n, exist := namespaceMap[t]
-			if !exist {
-				return opts, fmt.Errorf("namespace %s is not supported", t)
+			if n.Type == t {
+				if n, ok := namespaceMap[t]; ok {
+					opts.Namespaces |= n.CloneFlag
+				}
 			}
-			opts.Namespaces |= n.CloneFlag
 		}
 	}
 

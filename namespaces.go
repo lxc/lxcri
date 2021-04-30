@@ -34,15 +34,11 @@ var (
 		specs.MountNamespace:   mountNamespace,
 		specs.NetworkNamespace: networkNamespace,
 		specs.PIDNamespace:     pidNamespace,
-		// specs.timeNamespace:     timeNamespace,
+		// specs.TimeNamespace:     timeNamespace,
 		specs.UserNamespace: userNamespace,
 		specs.UTSNamespace:  utsNamespace,
 	}
 )
-
-const cloneAll = unix.CLONE_NEWCGROUP | unix.CLONE_NEWIPC | unix.CLONE_NEWNS |
-	unix.CLONE_NEWNET | unix.CLONE_NEWPID | unix.CLONE_NEWTIME |
-	unix.CLONE_NEWUSER | unix.CLONE_NEWUTS
 
 func configureNamespaces(c *Container) error {
 	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}

@@ -505,6 +505,39 @@ var execCmd = cli.Command{
 			Aliases: []string{"d"},
 			Usage:   "detach from the executed process",
 		},
+		&cli.BoolFlag{
+			Name:  "cgroup",
+			Usage: "run in container cgroup namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "ipc",
+			Usage: "run in container IPC namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "mnt",
+			Usage: "run in container mount namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "net",
+			Usage: "run in container network namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "pid",
+			Usage: "run in container PID namespace",
+		},
+		//&cli.BoolFlag{
+		//	Name:  "time",
+		//	Usage: "run in container time namespace",
+		//	Value: true,
+		//},
+		&cli.BoolFlag{
+			Name:  "user",
+			Usage: "run in container user namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "uts",
+			Usage: "run in container UTS namespace",
+		},
 	},
 }
 
@@ -575,7 +608,34 @@ func doExec(ctxcli *cli.Context) error {
 			return createPidFile(pidFile, pid)
 		}
 	} else {
-		status, err := c.Exec(procSpec, nil)
+		opts := lxcri.ExecOptions{}
+
+		if ctxcli.Bool("cgroup") {
+			opts.Namespaces = append(opts.Namespaces, specs.CgroupNamespace)
+		}
+		if ctxcli.Bool("ipc") {
+			opts.Namespaces = append(opts.Namespaces, specs.IPCNamespace)
+		}
+		if ctxcli.Bool("mnt") {
+			opts.Namespaces = append(opts.Namespaces, specs.MountNamespace)
+		}
+		if ctxcli.Bool("net") {
+			opts.Namespaces = append(opts.Namespaces, specs.NetworkNamespace)
+		}
+		if ctxcli.Bool("pid") {
+			opts.Namespaces = append(opts.Namespaces, specs.PIDNamespace)
+		}
+		//if ctxcli.Bool("time") {
+		//	opts.Namespaces = append(opts.Namespaces, specs.TimeNamespace)
+		//}
+		if ctxcli.Bool("user") {
+			opts.Namespaces = append(opts.Namespaces, specs.UserNamespace)
+		}
+		if ctxcli.Bool("uts") {
+			opts.Namespaces = append(opts.Namespaces, specs.UTSNamespace)
+		}
+
+		status, err := c.Exec(procSpec, &opts)
 		if err != nil {
 			return err
 		}
