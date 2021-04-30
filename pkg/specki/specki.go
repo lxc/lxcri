@@ -149,7 +149,10 @@ func modep(m os.FileMode) *os.FileMode {
 // `man 2 mount` | devpts
 // ` To use this option effectively, /dev/ptmx must be a symbolic link to pts/ptmx.
 // See Documentation/filesystems/devpts.txt in the Linux kernel source tree for details.`
+
 var (
+	// EssentialDevices is the minimum set of device files that must exist in an OCI compliant container.
+	// https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md#default-devices
 	EssentialDevices = []specs.LinuxDevice{
 		specs.LinuxDevice{Type: "c", Major: 1, Minor: 3, FileMode: modep(0666), Path: "/dev/null"},
 		specs.LinuxDevice{Type: "c", Major: 1, Minor: 5, FileMode: modep(0666), Path: "/dev/zero"},
@@ -159,6 +162,7 @@ var (
 		specs.LinuxDevice{Type: "c", Major: 5, Minor: 0, FileMode: modep(0666), Path: "/dev/tty"},
 	}
 
+	// EssentialDevicesAllow are the cgroup device permissions required for EssentialDevices.
 	EssentialDevicesAllow = []specs.LinuxDeviceCgroup{
 		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(1), Minor: int64p(3), Access: "rwm"}, // null
 		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(1), Minor: int64p(5), Access: "rwm"}, // zero
@@ -327,7 +331,7 @@ func Getenv(env []string, key string) (string, bool) {
 // The variable is only added if it is not yet defined
 // or if overwrite is set to true.
 // Setenv returns the modified environment and
-// true the variable is already defined or false otherwise.
+// true if the variable is already defined or false otherwise.
 func Setenv(env []string, val string, overwrite bool) ([]string, bool) {
 	a := strings.Split(val, "=")
 	key := a[0]
