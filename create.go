@@ -162,7 +162,7 @@ func configureContainer(rt *Runtime, c *Container) error {
 			}
 			newMounts = append(newMounts, m)
 		}
-		c.Spec.Mounts = append(c.Spec.Mounts,
+		newMounts = append(newMounts,
 			specs.Mount{
 				Destination: "/dev", Source: "tmpfs", Type: "tmpfs",
 				Options: []string{"rw", "nosuid", "noexec", "relatime"},
