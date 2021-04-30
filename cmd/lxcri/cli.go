@@ -68,9 +68,27 @@ func (app *app) configureLogger() error {
 	return nil
 }
 
-func (app *app) release() error {
-	if app.logConfig.File != nil {
-		return app.logConfig.File.Close()
+func (app *app) loadContainer() (*lxcri.Container, error) {
+	c, err := clxc.Load(app.cfg.ContainerID)
+	if err != nil {
+		return c, err
+	}
+	err = c.SetLog(app.cfg.LogFile, app.cfg.LogLevel)
+	return c, err
+}
+
+func (app *app) releaseContainer(c *lxcri.Container) {
+	if c == nil {
+		return
+	}
+	if err := c.Release(); err != nil {
+		app.Runtime.Log.Error().Msgf("failed to release container: %s", err)
+	}
+}
+
+func (app *app) releaseLog() error {
+	if clxc.logConfig.File != nil {
+		return clxc.logConfig.File.Close()
 	}
 	return nil
 }
@@ -256,7 +274,7 @@ func main() {
 
 	if err != nil {
 		clxc.Log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
-		clxc.release()
+		clxc.releaseLog()
 		// write diagnostics message to stderr for crio/kubelet
 		println(err.Error())
 
@@ -269,7 +287,7 @@ func main() {
 	}
 
 	clxc.Log.Debug().Dur("duration", cmdDuration).Msg("cmd completed")
-	if clxc.release(); err != nil {
+	if err := clxc.releaseLog(); err != nil {
 		println(err.Error())
 		os.Exit(1)
 	}
@@ -338,13 +356,15 @@ func doCreateInternal(ctx context.Context, pidFile string) error {
 	if err != nil {
 		return err
 	}
+	defer clxc.releaseContainer(c)
+
 	if pidFile != "" {
 		err := createPidFile(pidFile, c.Pid)
 		if err != nil {
 			return err
 		}
 	}
-	return c.Release()
+	return nil
 }
 
 var startCmd = cli.Command{
@@ -384,11 +404,11 @@ func doStart(ctxcli *cli.Context) error {
 }
 
 func doStartInternal(ctx context.Context) error {
-	c, err := clxc.Load(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer()
 	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
+		return err
 	}
-
+	defer clxc.releaseContainer(c)
 	return clxc.Start(ctx, c)
 }
 
@@ -404,10 +424,11 @@ var stateCmd = cli.Command{
 }
 
 func doState(unused *cli.Context) error {
-	c, err := clxc.Load(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer()
 	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
+		return err
 	}
+	defer clxc.releaseContainer(c)
 	state, err := c.State()
 	if err != nil {
 		return err
@@ -447,10 +468,11 @@ func doKill(ctxcli *cli.Context) error {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
 
-	c, err := clxc.Load(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer()
 	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
+		return err
 	}
+	defer clxc.releaseContainer(c)
 
 	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -606,15 +628,11 @@ func doExec(ctxcli *cli.Context) error {
 		return err
 	}
 
-	c, err := clxc.Load(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer()
 	if err != nil {
 		return err
 	}
-
-	err = c.SetLog(clxc.cfg.LogFile, clxc.cfg.LogLevel)
-	if err != nil {
-		return err
-	}
+	defer clxc.releaseContainer(c)
 
 	if detach {
 		pid, err := c.ExecDetached(procSpec, nil)
@@ -739,10 +757,11 @@ func doList(ctxcli *cli.Context) (err error) {
 }
 
 func inspectContainer(id string, t *template.Template) error {
-	c, err := clxc.Load(id)
+	c, err := clxc.loadContainer()
 	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
+		return err
 	}
+	defer clxc.releaseContainer(c)
 	state, err := c.State()
 	if err != nil {
 		return fmt.Errorf("failed ot get container state: %w", err)
