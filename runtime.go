@@ -433,3 +433,24 @@ func (rt *Runtime) Delete(ctx context.Context, containerID string, force bool) e
 
 	return os.RemoveAll(c.RuntimePath())
 }
+
+// List returns the IDs for all existing containers.
+func (rt *Runtime) List() ([]string, error) {
+	dir, err := os.Open(rt.Root)
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	names, err := dir.Readdirnames(-1)
+	if err != nil {
+		return nil, err
+	}
+	// ignore hidden elements
+	visible := make([]string, 0, len(names))
+	for _, name := range names {
+		if name[0] != '.' {
+			visible = append(visible, name)
+		}
+	}
+	return visible, nil
+}

@@ -31,10 +31,11 @@ type app struct {
 	cfg lxcri.ContainerConfig
 
 	logConfig struct {
-		File      *os.File
-		FilePath  string
-		Level     string
-		Timestamp string
+		File       *os.File
+		FilePath   string
+		Level      string
+		Timestamp  string
+		LogConsole bool
 	}
 
 	command string
@@ -43,27 +44,51 @@ type app struct {
 var clxc = app{}
 
 func (app *app) configureLogger() error {
-	// TODO use console logger if filepath is /dev/stdout or /dev/stderr ?
-	l, err := log.OpenFile(app.logConfig.FilePath, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to open log file: %w", err)
-	}
-	app.logConfig.File = l
-
 	level, err := log.ParseLevel(app.logConfig.Level)
 	if err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
-	logCtx := log.NewLogger(app.logConfig.File, level)
-	app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.cfg.ContainerID).Logger()
-	app.cfg.Log = app.Runtime.Log
 
+	if app.logConfig.LogConsole {
+		app.Runtime.Log = log.ConsoleLogger(true, level)
+		app.cfg.LogFile = "/dev/stdout"
+	} else {
+		// TODO use console logger if filepath is /dev/stdout or /dev/stderr ?
+		l, err := log.OpenFile(app.logConfig.FilePath, 0600)
+		if err != nil {
+			return fmt.Errorf("failed to open log file: %w", err)
+		}
+		app.logConfig.File = l
+		logCtx := log.NewLogger(app.logConfig.File, level)
+
+		app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.cfg.ContainerID).Logger()
+	}
+
+	app.cfg.Log = app.Runtime.Log
 	return nil
 }
 
-func (app *app) release() error {
-	if app.logConfig.File != nil {
-		return app.logConfig.File.Close()
+func (app *app) loadContainer() (*lxcri.Container, error) {
+	c, err := clxc.Load(app.cfg.ContainerID)
+	if err != nil {
+		return c, err
+	}
+	err = c.SetLog(app.cfg.LogFile, app.cfg.LogLevel)
+	return c, err
+}
+
+func (app *app) releaseContainer(c *lxcri.Container) {
+	if c == nil {
+		return
+	}
+	if err := c.Release(); err != nil {
+		app.Runtime.Log.Error().Msgf("failed to release container: %s", err)
+	}
+}
+
+func (app *app) releaseLog() error {
+	if clxc.logConfig.File != nil {
+		return clxc.logConfig.File.Close()
 	}
 	return nil
 }
@@ -86,20 +111,21 @@ func main() {
 		&deleteCmd,
 		&execCmd,
 		&inspectCmd,
+		&listCmd,
 		// TODO extend urfave/cli to render a default environment file.
 	}
 
 	app.Flags = []cli.Flag{
 		&cli.StringFlag{
 			Name:        "log-level",
-			Usage:       "set the runtime log level (trace|debug|info|warn|error)",
+			Usage:       "set the runtime (lxcri) log level (trace|debug|info|warn|error)",
 			EnvVars:     []string{"LXCRI_LOG_LEVEL"},
 			Value:       "info",
 			Destination: &clxc.logConfig.Level,
 		},
 		&cli.StringFlag{
 			Name:        "log-file",
-			Usage:       "path to the log file for runtime and container output",
+			Usage:       "set the runtime (lxcri) log file path",
 			EnvVars:     []string{"LXCRI_LOG_FILE"},
 			Value:       defaultLogFile,
 			Destination: &clxc.logConfig.FilePath,
@@ -112,17 +138,22 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "container-log-level",
-			Usage:       "set the container process (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
+			Usage:       "set the container (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_LEVEL"},
 			Value:       "warn",
 			Destination: &clxc.cfg.LogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-file",
-			Usage:       "path to the log file for runtime and container output",
+			Usage:       "set the container (liblxc) log file path",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_FILE"},
 			Value:       defaultLogFile,
 			Destination: &clxc.cfg.LogFile,
+		},
+		&cli.BoolFlag{
+			Name:        "log-console",
+			Usage:       "write log output to stdout. --log-file and --container-log-file options are ignored",
+			Destination: &clxc.logConfig.LogConsole,
 		},
 		&cli.StringFlag{
 			Name:  "root",
@@ -138,7 +169,7 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "monitor-cgroup",
-			Usage:       "cgroup slice for liblxc monitor process and pivot path",
+			Usage:       "cgroup path for liblxc monitor process",
 			Destination: &clxc.MonitorCgroup,
 			EnvVars:     []string{"LXCRI_MONITOR_CGROUP"},
 			Value:       "lxcri-monitor.slice",
@@ -218,11 +249,13 @@ func main() {
 	}
 
 	setupCmd := func(ctx *cli.Context) error {
-		containerID := ctx.Args().Get(0)
-		if len(containerID) == 0 {
-			return fmt.Errorf("missing container ID")
+		if clxc.command != "list" {
+			containerID := ctx.Args().Get(0)
+			if len(containerID) == 0 {
+				return fmt.Errorf("missing container ID")
+			}
+			clxc.cfg.ContainerID = containerID
 		}
-		clxc.cfg.ContainerID = containerID
 
 		if err := clxc.configureLogger(); err != nil {
 			return fmt.Errorf("failed to configure logger: %w", err)
@@ -241,7 +274,7 @@ func main() {
 
 	if err != nil {
 		clxc.Log.Error().Err(err).Dur("duration", cmdDuration).Msg("cmd failed")
-		clxc.release()
+		clxc.releaseLog()
 		// write diagnostics message to stderr for crio/kubelet
 		println(err.Error())
 
@@ -254,7 +287,7 @@ func main() {
 	}
 
 	clxc.Log.Debug().Dur("duration", cmdDuration).Msg("cmd completed")
-	if clxc.release(); err != nil {
+	if err := clxc.releaseLog(); err != nil {
 		println(err.Error())
 		os.Exit(1)
 	}
@@ -295,7 +328,7 @@ func doCreate(ctxcli *cli.Context) error {
 		return err
 	}
 	specPath := filepath.Join(clxc.cfg.BundlePath, lxcri.BundleConfigFile)
-	spec, err := specki.ReadSpecJSON(specPath)
+	spec, err := specki.LoadSpecJSON(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
@@ -323,13 +356,15 @@ func doCreateInternal(ctx context.Context, pidFile string) error {
 	if err != nil {
 		return err
 	}
+	defer clxc.releaseContainer(c)
+
 	if pidFile != "" {
 		err := createPidFile(pidFile, c.Pid)
 		if err != nil {
 			return err
 		}
 	}
-	return c.Release()
+	return nil
 }
 
 var startCmd = cli.Command{
@@ -369,11 +404,11 @@ func doStart(ctxcli *cli.Context) error {
 }
 
 func doStartInternal(ctx context.Context) error {
-	c, err := clxc.Load(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer()
 	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
+		return err
 	}
-
+	defer clxc.releaseContainer(c)
 	return clxc.Start(ctx, c)
 }
 
@@ -389,10 +424,11 @@ var stateCmd = cli.Command{
 }
 
 func doState(unused *cli.Context) error {
-	c, err := clxc.Load(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer()
 	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
+		return err
 	}
+	defer clxc.releaseContainer(c)
 	state, err := c.State()
 	if err != nil {
 		return err
@@ -432,10 +468,11 @@ func doKill(ctxcli *cli.Context) error {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
 
-	c, err := clxc.Load(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer()
 	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
+		return err
 	}
+	defer clxc.releaseContainer(c)
 
 	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -502,6 +539,39 @@ var execCmd = cli.Command{
 			Aliases: []string{"d"},
 			Usage:   "detach from the executed process",
 		},
+		&cli.BoolFlag{
+			Name:  "cgroup",
+			Usage: "run in container cgroup namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "ipc",
+			Usage: "run in container IPC namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "mnt",
+			Usage: "run in container mount namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "net",
+			Usage: "run in container network namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "pid",
+			Usage: "run in container PID namespace",
+		},
+		//&cli.BoolFlag{
+		//	Name:  "time",
+		//	Usage: "run in container time namespace",
+		//	Value: true,
+		//},
+		&cli.BoolFlag{
+			Name:  "user",
+			Usage: "run in container user namespace",
+		},
+		&cli.BoolFlag{
+			Name:  "uts",
+			Usage: "run in container UTS namespace",
+		},
 	},
 }
 
@@ -527,6 +597,19 @@ func (e execError) Error() string {
 	}
 }
 
+// loadSpecProcess calls ReadSpecProcessJSON if the given specProcessPath is not empty,
+// otherwise it creates a new specs.Process from the given args.
+// It's an error if both values are empty.
+func loadSpecProcess(specProcessPath string, args []string) (*specs.Process, error) {
+	if specProcessPath != "" {
+		return specki.LoadSpecProcessJSON(specProcessPath)
+	}
+	if len(args) == 0 {
+		return nil, fmt.Errorf("spec process path and args are empty")
+	}
+	return &specs.Process{Cwd: "/", Args: args}, nil
+}
+
 func doExec(ctxcli *cli.Context) error {
 	var args []string
 	if ctxcli.Args().Len() > 1 {
@@ -540,18 +623,19 @@ func doExec(ctxcli *cli.Context) error {
 		clxc.Log.Warn().Msg("detaching process but pid-file value is unset")
 	}
 
-	procSpec, err := specki.LoadSpecProcess(ctxcli.String("process"), args)
+	procSpec, err := loadSpecProcess(ctxcli.String("process"), args)
 	if err != nil {
 		return err
 	}
 
-	c, err := clxc.Load(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer()
 	if err != nil {
 		return err
 	}
+	defer clxc.releaseContainer(c)
 
 	if detach {
-		pid, err := c.ExecDetached(procSpec)
+		pid, err := c.ExecDetached(procSpec, nil)
 		if err != nil {
 			return err
 		}
@@ -559,7 +643,34 @@ func doExec(ctxcli *cli.Context) error {
 			return createPidFile(pidFile, pid)
 		}
 	} else {
-		status, err := c.Exec(procSpec)
+		opts := lxcri.ExecOptions{}
+
+		if ctxcli.Bool("cgroup") {
+			opts.Namespaces = append(opts.Namespaces, specs.CgroupNamespace)
+		}
+		if ctxcli.Bool("ipc") {
+			opts.Namespaces = append(opts.Namespaces, specs.IPCNamespace)
+		}
+		if ctxcli.Bool("mnt") {
+			opts.Namespaces = append(opts.Namespaces, specs.MountNamespace)
+		}
+		if ctxcli.Bool("net") {
+			opts.Namespaces = append(opts.Namespaces, specs.NetworkNamespace)
+		}
+		if ctxcli.Bool("pid") {
+			opts.Namespaces = append(opts.Namespaces, specs.PIDNamespace)
+		}
+		//if ctxcli.Bool("time") {
+		//	opts.Namespaces = append(opts.Namespaces, specs.TimeNamespace)
+		//}
+		if ctxcli.Bool("user") {
+			opts.Namespaces = append(opts.Namespaces, specs.UserNamespace)
+		}
+		if ctxcli.Bool("uts") {
+			opts.Namespaces = append(opts.Namespaces, specs.UTSNamespace)
+		}
+
+		status, err := c.Exec(procSpec, &opts)
 		if err != nil {
 			return err
 		}
@@ -572,7 +683,7 @@ func doExec(ctxcli *cli.Context) error {
 
 var inspectCmd = cli.Command{
 	Name:   "inspect",
-	Usage:  "returns inspect of a container",
+	Usage:  "display the status of one or more containers",
 	Action: doInspect,
 	ArgsUsage: `containerID [containerID...]
 
@@ -581,7 +692,7 @@ var inspectCmd = cli.Command{
 	Flags: []cli.Flag{
 		&cli.StringFlag{
 			Name:  "template",
-			Usage: "Use this go template to to format output.",
+			Usage: "Use this go template to format the output.",
 		},
 	},
 }
@@ -604,11 +715,53 @@ func doInspect(ctxcli *cli.Context) (err error) {
 	return nil
 }
 
-func inspectContainer(id string, t *template.Template) error {
-	c, err := clxc.Load(id)
-	if err != nil {
-		return fmt.Errorf("failed to load container: %w", err)
+var listCmd = cli.Command{
+	Name:   "list",
+	Usage:  "list available containers",
+	Action: doList,
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "template",
+			Usage: "Use this go template to format the output.",
+			// e.g `{{ printf "%s %s\n" .Container.ContainerID .State.ContainerState }}`,
+		},
+	},
+}
+
+func doList(ctxcli *cli.Context) (err error) {
+	tmpl := ctxcli.String("template")
+	var t *template.Template
+	if tmpl != "" {
+		t, err = template.New("list").Parse(tmpl)
+		if err != nil {
+			return err
+		}
 	}
+
+	all, err := clxc.List()
+	if err != nil {
+		return err
+	}
+
+	for _, id := range all {
+		if t == nil {
+			fmt.Println(id)
+		} else {
+			err := inspectContainer(id, t)
+			if err != nil && !errors.Is(err, lxcri.ErrNotExist) {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func inspectContainer(id string, t *template.Template) error {
+	c, err := clxc.loadContainer()
+	if err != nil {
+		return err
+	}
+	defer clxc.releaseContainer(c)
 	state, err := c.State()
 	if err != nil {
 		return fmt.Errorf("failed ot get container state: %w", err)

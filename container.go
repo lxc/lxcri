@@ -371,12 +371,20 @@ func (c *Container) start(ctx context.Context) error {
 	return c.waitStarted(ctx)
 }
 
+// ExecOptions contains options for Container.Exec and Container.ExecDetached
+type ExecOptions struct {
+	// Namespaces is the list of container namespaces that the process is attached to.
+	// The process will is attached to all container namespaces if Namespaces is empty.
+	Namespaces []specs.LinuxNamespaceType
+}
+
 // ExecDetached executes the given process spec within the container.
 // The given process is started and the process PID is returned.
 // It's up to the caller to wait for the process to exit using the returned PID.
 // The container state must be either specs.StateCreated or specs.StateRunning
-func (c *Container) ExecDetached(proc *specs.Process) (pid int, err error) {
-	opts, err := attachOptions(proc, c.Spec.Linux.Namespaces)
+// The given ExecOptions execOpts, control the execution environment of the the process.
+func (c *Container) ExecDetached(proc *specs.Process, execOpts *ExecOptions) (pid int, err error) {
+	opts, err := c.attachOptions(proc, execOpts)
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}
@@ -395,8 +403,9 @@ func (c *Container) ExecDetached(proc *specs.Process) (pid int, err error) {
 // Exec executes the given process spec within the container.
 // It waits for the process to exit and returns its exit code.
 // The container state must either be specs.StateCreated or specs.StateRunning
-func (c *Container) Exec(proc *specs.Process) (exitStatus int, err error) {
-	opts, err := attachOptions(proc, c.Spec.Linux.Namespaces)
+// The given ExecOptions execOpts control the execution environment of the the process.
+func (c *Container) Exec(proc *specs.Process, execOpts *ExecOptions) (exitStatus int, err error) {
+	opts, err := c.attachOptions(proc, execOpts)
 	if err != nil {
 		return 0, errorf("failed to create attach options: %w", err)
 	}
@@ -407,47 +416,67 @@ func (c *Container) Exec(proc *specs.Process) (exitStatus int, err error) {
 	return exitStatus, nil
 }
 
-func attachOptions(procSpec *specs.Process, ns []specs.LinuxNamespace) (lxc.AttachOptions, error) {
+func (c *Container) attachOptions(procSpec *specs.Process, execOpts *ExecOptions) (lxc.AttachOptions, error) {
 	opts := lxc.AttachOptions{
 		StdinFd:  0,
 		StdoutFd: 1,
 		StderrFd: 2,
 	}
 
-	clone, err := cloneFlags(ns)
-	if err != nil {
-		return opts, err
+	if procSpec == nil {
+		return opts, fmt.Errorf("process spec is nil")
 	}
-	opts.Namespaces = clone
+	opts.Cwd = procSpec.Cwd
+	// Use the environment defined by the process spec.
+	opts.ClearEnv = true
+	opts.Env = procSpec.Env
 
-	if procSpec != nil {
-		opts.Cwd = procSpec.Cwd
-		// Use the environment defined by the process spec.
-		opts.ClearEnv = true
-		opts.Env = procSpec.Env
+	opts.UID = int(procSpec.User.UID)
+	opts.GID = int(procSpec.User.GID)
+	if n := len(procSpec.User.AdditionalGids); n > 0 {
+		opts.Groups = make([]int, n)
+		for i, g := range procSpec.User.AdditionalGids {
+			opts.Groups[i] = int(g)
+		}
+	}
 
-		opts.UID = int(procSpec.User.UID)
-		opts.GID = int(procSpec.User.GID)
-		if n := len(procSpec.User.AdditionalGids); n > 0 {
-			opts.Groups = make([]int, n)
-			for i, g := range procSpec.User.AdditionalGids {
-				opts.Groups[i] = int(g)
+	if execOpts == nil {
+		execOpts = new(ExecOptions)
+	}
+
+	if len(execOpts.Namespaces) == 0 {
+		for t := range namespaceMap {
+			execOpts.Namespaces = append(execOpts.Namespaces, t)
+		}
+	}
+	c.Log.Debug().Msgf("attaching to namespaces %#v\n", execOpts.Namespaces)
+
+	for _, n := range c.Spec.Linux.Namespaces {
+		for _, t := range execOpts.Namespaces {
+			if n.Type == t {
+				if n, ok := namespaceMap[t]; ok {
+					opts.Namespaces |= n.CloneFlag
+				}
 			}
 		}
 	}
+
 	return opts, nil
 }
 
-func setLog(c *Container) error {
-	// Never let lxc write to stdout, stdout belongs to the container init process.
+// SetLog changes log file path and log level of the container (liblxc) instance.
+// The settings are only valid until Release is called on this instance.
+// The log settings applied at Runtime.Create are active until SetLog is called.
+func (c *Container) SetLog(filename string, level string) error {
+	// Do not write to stdout by default.
+	// Stdout belongs to the container process.
 	// Explicitly disable it - allthough it is currently the default.
 	c.LinuxContainer.SetVerbosity(lxc.Quiet)
-	// The log level for a running container is set, and may change, per runtime call.
-	err := c.LinuxContainer.SetLogLevel(parseContainerLogLevel(c.LogLevel))
+	err := c.LinuxContainer.SetLogLevel(parseContainerLogLevel(level))
 	if err != nil {
 		return fmt.Errorf("failed to set container loglevel: %w", err)
 	}
-	if err := c.LinuxContainer.SetLogFile(c.LogFile); err != nil {
+	if err := c.LinuxContainer.SetLogFile(filename); err != nil {
 		return fmt.Errorf("failed to set container log file: %w", err)
 	}
 	return nil

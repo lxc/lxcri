@@ -149,7 +149,10 @@ func modep(m os.FileMode) *os.FileMode {
 // `man 2 mount` | devpts
 // ` To use this option effectively, /dev/ptmx must be a symbolic link to pts/ptmx.
 // See Documentation/filesystems/devpts.txt in the Linux kernel source tree for details.`
+
 var (
+	// EssentialDevices is the minimum set of device files that must exist in an OCI compliant container.
+	// https://github.com/opencontainers/runtime-spec/blob/v1.0.2/config-linux.md#default-devices
 	EssentialDevices = []specs.LinuxDevice{
 		specs.LinuxDevice{Type: "c", Major: 1, Minor: 3, FileMode: modep(0666), Path: "/dev/null"},
 		specs.LinuxDevice{Type: "c", Major: 1, Minor: 5, FileMode: modep(0666), Path: "/dev/zero"},
@@ -159,6 +162,7 @@ var (
 		specs.LinuxDevice{Type: "c", Major: 5, Minor: 0, FileMode: modep(0666), Path: "/dev/tty"},
 	}
 
+	// EssentialDevicesAllow are the cgroup device permissions required for EssentialDevices.
 	EssentialDevicesAllow = []specs.LinuxDeviceCgroup{
 		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(1), Minor: int64p(3), Access: "rwm"}, // null
 		specs.LinuxDeviceCgroup{Allow: true, Type: "c", Major: int64p(1), Minor: int64p(5), Access: "rwm"}, // zero
@@ -208,35 +212,29 @@ func IsDeviceEnabled(spec *specs.Spec, dev specs.LinuxDevice) (bool, error) {
 	return false, nil
 }
 
-// ReadSpecJSON reads the JSON encoded OCI
+// LoadSpecJSON reads the JSON encoded OCI
 // spec from the given path.
 // This is a convenience function for the cli.
-func ReadSpecJSON(p string) (*specs.Spec, error) {
+func LoadSpecJSON(p string) (*specs.Spec, error) {
 	spec := new(specs.Spec)
 	err := DecodeJSONFile(p, spec)
 	return spec, err
 }
 
-// ReadSpecProcessJSON reads the JSON encoded OCI
+// LoadSpecProcessJSON reads the JSON encoded OCI
 // spec process definition from the given path.
 // This is a convenience function for the cli.
-func ReadSpecProcessJSON(src string) (*specs.Process, error) {
+func LoadSpecProcessJSON(src string) (*specs.Process, error) {
 	proc := new(specs.Process)
 	err := DecodeJSONFile(src, proc)
 	return proc, err
 }
 
-// LoadSpecProcess calls ReadSpecProcessJSON if the given specProcessPath is not empty,
-// otherwise it creates a new specs.Process from the given args.
-// It's an error if both values are empty.
-func LoadSpecProcess(specProcessPath string, args []string) (*specs.Process, error) {
-	if specProcessPath != "" {
-		return ReadSpecProcessJSON(specProcessPath)
-	}
-	if len(args) == 0 {
-		return nil, fmt.Errorf("spec process path and args are empty")
-	}
-	return &specs.Process{Cwd: "/", Args: args}, nil
+// LoadSpecStateJSON parses specs.State from the JSON encoded file filename.
+func LoadSpecStateJSON(filename string) (*specs.State, error) {
+	state := new(specs.State)
+	err := DecodeJSONFile(filename, state)
+	return state, err
 }
 
 // NewSpec returns a minimal spec.Spec instance, which is
@@ -287,13 +285,6 @@ func NewSpecProcess(cmd string, args ...string) *specs.Process {
 	return proc
 }
 
-// LoadSpecStateJSON parses specs.State from the JSON encoded file filename.
-func LoadSpecStateJSON(filename string) (*specs.State, error) {
-	state := new(specs.State)
-	err := DecodeJSONFile(filename, state)
-	return state, err
-}
-
 // ReadSpecStateJSON parses the JSON encoded specs.State from the given reader.
 func ReadSpecStateJSON(r io.Reader) (*specs.State, error) {
 	state := new(specs.State)
@@ -310,7 +301,7 @@ func InitHook(r io.Reader) (rootfs string, state *specs.State, spec *specs.Spec,
 	if err != nil {
 		return
 	}
-	spec, err = ReadSpecJSON(filepath.Join(state.Bundle, "config.json"))
+	spec, err = LoadSpecJSON(filepath.Join(state.Bundle, "config.json"))
 
 	// quote from https://github.com/opencontainers/runtime-spec/blob/master/config.md#root
 	// > On POSIX platforms, path is either an absolute path or a relative path to the bundle.
@@ -340,7 +331,7 @@ func Getenv(env []string, key string) (string, bool) {
 // The variable is only added if it is not yet defined
 // or if overwrite is set to true.
 // Setenv returns the modified environment and
-// true the variable is already defined or false otherwise.
+// true if the variable is already defined or false otherwise.
 func Setenv(env []string, val string, overwrite bool) ([]string, bool) {
 	a := strings.Split(val, "=")
 	key := a[0]

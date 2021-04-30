@@ -34,23 +34,11 @@ var (
 		specs.MountNamespace:   mountNamespace,
 		specs.NetworkNamespace: networkNamespace,
 		specs.PIDNamespace:     pidNamespace,
-		// specs.timeNamespace:     timeNamespace,
+		// specs.TimeNamespace:     timeNamespace,
 		specs.UserNamespace: userNamespace,
 		specs.UTSNamespace:  utsNamespace,
 	}
 )
-
-func cloneFlags(namespaces []specs.LinuxNamespace) (int, error) {
-	flags := 0
-	for _, ns := range namespaces {
-		n, exist := namespaceMap[ns.Type]
-		if !exist {
-			return 0, fmt.Errorf("namespace %s is not supported", ns.Type)
-		}
-		flags |= n.CloneFlag
-	}
-	return flags, nil
-}
 
 func configureNamespaces(c *Container) error {
 	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
