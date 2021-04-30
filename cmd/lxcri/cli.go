@@ -567,7 +567,7 @@ func doExec(ctxcli *cli.Context) error {
 	}
 
 	if detach {
-		pid, err := c.ExecDetached(procSpec)
+		pid, err := c.ExecDetached(procSpec, nil)
 		if err != nil {
 			return err
 		}
@@ -575,7 +575,7 @@ func doExec(ctxcli *cli.Context) error {
 			return createPidFile(pidFile, pid)
 		}
 	} else {
-		status, err := c.Exec(procSpec)
+		status, err := c.Exec(procSpec, nil)
 		if err != nil {
 			return err
 		}

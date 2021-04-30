@@ -40,17 +40,9 @@ var (
 	}
 )
 
-func cloneFlags(namespaces []specs.LinuxNamespace) (int, error) {
-	flags := 0
-	for _, ns := range namespaces {
-		n, exist := namespaceMap[ns.Type]
-		if !exist {
-			return 0, fmt.Errorf("namespace %s is not supported", ns.Type)
-		}
-		flags |= n.CloneFlag
-	}
-	return flags, nil
-}
+const cloneAll = unix.CLONE_NEWCGROUP | unix.CLONE_NEWIPC | unix.CLONE_NEWNS |
+	unix.CLONE_NEWNET | unix.CLONE_NEWPID | unix.CLONE_NEWTIME |
+	unix.CLONE_NEWUSER | unix.CLONE_NEWUTS
 
 func configureNamespaces(c *Container) error {
 	seenNamespaceTypes := map[specs.LinuxNamespaceType]bool{}
