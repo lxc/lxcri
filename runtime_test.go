@@ -79,26 +79,15 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	id := filepath.Base(rootfs)
 	cfg := ContainerConfig{
 		ContainerID: id, Spec: spec,
-		Log: log.ConsoleLogger(true, level),
+		Log:      log.ConsoleLogger(true, level),
+		LogFile:  "/dev/stderr",
+		LogLevel: logLevel,
 	}
 	cfg.Spec.Linux.CgroupsPath = id + ".slice" // use /proc/self/cgroup"
 
 	cfg.Spec.Mounts = append(cfg.Spec.Mounts,
 		specki.BindMount(cmdAbs, cmdDest),
 	)
-
-	// FIXME /dev/stderr has perms 600
-	// If container process user is not equal to the
-	// runtime process user then setting lxc log file will fail
-	// because of missing permissions.
-	if runAsRuntimeUser(cfg.Spec) {
-		cfg.LogFile = "/dev/stderr"
-	} else {
-		cfg.LogFile = filepath.Join("/tmp", "log")
-	}
-	t.Logf("liblxc log output is written to %s", cfg.LogFile)
-	cfg.LogLevel = logLevel
-
 	return &cfg
 }
 
