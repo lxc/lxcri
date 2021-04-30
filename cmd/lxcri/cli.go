@@ -68,8 +68,8 @@ func (app *app) configureLogger() error {
 	return nil
 }
 
-func (app *app) loadContainer() (*lxcri.Container, error) {
-	c, err := clxc.Load(app.cfg.ContainerID)
+func (app *app) loadContainer(containerID string) (*lxcri.Container, error) {
+	c, err := clxc.Load(containerID)
 	if err != nil {
 		return c, err
 	}
@@ -404,7 +404,7 @@ func doStart(ctxcli *cli.Context) error {
 }
 
 func doStartInternal(ctx context.Context) error {
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
 	if err != nil {
 		return err
 	}
@@ -424,7 +424,7 @@ var stateCmd = cli.Command{
 }
 
 func doState(unused *cli.Context) error {
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
 	if err != nil {
 		return err
 	}
@@ -468,7 +468,7 @@ func doKill(ctxcli *cli.Context) error {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
 
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
 	if err != nil {
 		return err
 	}
@@ -628,7 +628,7 @@ func doExec(ctxcli *cli.Context) error {
 		return err
 	}
 
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
 	if err != nil {
 		return err
 	}
@@ -757,7 +757,7 @@ func doList(ctxcli *cli.Context) (err error) {
 }
 
 func inspectContainer(id string, t *template.Template) error {
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(id)
 	if err != nil {
 		return err
 	}
