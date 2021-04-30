@@ -68,10 +68,6 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	require.NoError(t, err)
 	t.Logf("container rootfs: %s", rootfs)
 
-	// copy test binary to rootfs
-	//err = exec.Command("cp", cmd, rootfs).Run()
-	//require.NoError(t, err)
-
 	level, err := log.ParseLevel(logLevel)
 	require.NoError(t, err)
 
@@ -195,7 +191,8 @@ func TestNonEmptyCgroup(t *testing.T) {
 	//time.Sleep(60*time.Second)
 
 	cfg2 := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Spec.Root.Path)
+	defer os.RemoveAll(cfg2.Spec.Root.Path)
+
 	cfg2.Spec.Linux.CgroupsPath = cfg.Spec.Linux.CgroupsPath
 
 	if os.Getuid() != 0 {
