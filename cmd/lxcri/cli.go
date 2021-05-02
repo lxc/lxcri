@@ -157,14 +157,14 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:  "root",
-			Usage: "container runtime root where (logs, init and hook scripts). tmpfs is recommended.",
+			Usage: "root directory for storage of container runtime state (tmpfs is recommended)",
 			// exec permissions are not required because init is bind mounted into the root
 			Value:       "/run/lxcri",
 			Destination: &clxc.Root,
 		},
 		&cli.BoolFlag{
 			Name:        "systemd-cgroup",
-			Usage:       "enable support for systemd encoded cgroup path",
+			Usage:       "cgroup path in container spec is systemd encoded and must be expanded",
 			Destination: &clxc.SystemdCgroup,
 		},
 		&cli.StringFlag{
@@ -176,7 +176,7 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "libexec",
-			Usage:       "directory to load runtime executables from",
+			Usage:       "path to directory that contains the runtime executables",
 			EnvVars:     []string{"LXCRI_LIBEXEC"},
 			Value:       libexecDir,
 			Destination: &clxc.LibexecDir,
