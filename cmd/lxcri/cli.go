@@ -273,6 +273,34 @@ func main() {
 			Value:       clxc.Features.Seccomp,
 			Destination: &clxc.Features.Seccomp,
 		},
+		&cli.UintFlag{
+			Name:        "create-timeout",
+			Usage:       "maximum duration in seconds for create to complete",
+			EnvVars:     []string{"LXCRI_CREATE_TIMEOUT"},
+			Value:       clxc.Timeouts.CreateTimeout,
+			Destination: &clxc.Timeouts.CreateTimeout,
+		},
+		&cli.UintFlag{
+			Name:        "start-timeout",
+			Usage:       "maximum duration in seconds for start to complete",
+			EnvVars:     []string{"LXCRI_START_TIMEOUT"},
+			Value:       clxc.Timeouts.StartTimeout,
+			Destination: &clxc.Timeouts.StartTimeout,
+		},
+		&cli.UintFlag{
+			Name:        "kill-timeout",
+			Usage:       "timeout for killing all processes in container cgroup",
+			EnvVars:     []string{"LXCRI_KILL_TIMEOUT"},
+			Value:       clxc.Timeouts.KillTimeout,
+			Destination: &clxc.Timeouts.KillTimeout,
+		},
+		&cli.UintFlag{
+			Name:        "delete-timeout",
+			Usage:       "maximum duration in seconds for delete to complete",
+			EnvVars:     []string{"LXCRI_DELETE_TIMEOUT"},
+			Value:       clxc.Timeouts.DeleteTimeout,
+			Destination: &clxc.Timeouts.DeleteTimeout,
+		},
 	}
 
 	startTime := time.Now()
