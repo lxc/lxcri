@@ -70,7 +70,7 @@ var defaultApp = app{
 		LogFile:           "/var/log/lxcri/lxcri.log",
 		LogLevel:          "info",
 		ContainerLogFile:  "/var/log/lxcri/lxcri.log",
-		ContainerLogLevel: "info",
+		ContainerLogLevel: "warn",
 	},
 
 	Timeouts: timeouts{
