@@ -15,6 +15,7 @@ import (
 	"github.com/lxc/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli/v2"
+	"sigs.k8s.io/yaml"
 )
 
 var (
@@ -118,6 +119,24 @@ func (app *app) releaseLog() error {
 	return nil
 }
 
+func loadConfig() error {
+	clxc.configFile = defaultConfigFile
+	if val, ok := os.LookupEnv("LXCRI_CONFIG"); ok {
+		clxc.configFile = val
+	}
+
+	data, err := os.ReadFile(clxc.configFile)
+	// Don't fail if the default config file does not exist.
+	if os.IsNotExist(err) && clxc.configFile == defaultConfigFile {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	return yaml.Unmarshal(data, &clxc)
+}
+
 func main() {
 	app := cli.NewApp()
 	app.Name = "lxcri"
@@ -137,7 +156,12 @@ func main() {
 		&execCmd,
 		&inspectCmd,
 		&listCmd,
-		// TODO extend urfave/cli to render a default environment file.
+		&configCmd,
+	}
+
+	err := loadConfig()
+	if err != nil {
+		panic(fmt.Errorf("failed to read config file: %w", err))
 	}
 
 	app.Flags = []cli.Flag{
@@ -814,4 +838,54 @@ func inspectContainer(id string, t *template.Template) error {
 	}
 	_, err = fmt.Fprint(os.Stdout, string(j))
 	return err
+}
+
+var configCmd = cli.Command{
+	Name:   "config",
+	Usage:  "Output a config file for lxcri. Global options modify the output.",
+	Action: doConfig,
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "out",
+			Usage: "write config to file",
+		},
+		&cli.BoolFlag{
+			Name:  "default",
+			Usage: "use the builtin default configuration",
+		},
+		&cli.BoolFlag{
+			Name:  "update-current",
+			Usage: "write to the current config file (--out is ignored)",
+		},
+		&cli.BoolFlag{
+			Name:  "quiet",
+			Usage: "do not print config to stdout",
+		},
+	},
+}
+
+// NOTE lxcri config  > /etc/lxcri/lxcri.yaml does not work
+func doConfig(ctxcli *cli.Context) (err error) {
+	// generate yaml
+	c := clxc
+	if ctxcli.Bool("default") {
+		c = defaultApp
+	}
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return err
+	}
+	if !ctxcli.Bool("quiet") {
+		fmt.Printf("---\n%s---\n", string(data))
+	}
+
+	out := ctxcli.String("out")
+	if ctxcli.Bool("update-current") {
+		out = clxc.configFile
+	}
+	if out != "" {
+		fmt.Printf("Writing to file %s\n", out)
+		return os.WriteFile(out, data, 0640)
+	}
+	return nil
 }
