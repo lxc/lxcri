@@ -18,51 +18,77 @@ import (
 )
 
 var (
-	defaultLogFile = "/var/log/lxcri/lxcri.log"
-	version        = "undefined"
-	libexecDir     = "/usr/libexec/lxcri"
+	defaultConfigFile = "/etc/lxcri/lxcri.yaml"
+	version           = "undefined"
+	defaultLibexecDir = "/usr/libexec/lxcri"
 )
 
 type app struct {
 	lxcri.Runtime
 
-	logConfig struct {
-		File       *os.File
-		FilePath   string
-		Level      string
-		Timestamp  string
-		LogConsole bool
-	}
+	LogConfig logConfig
 
+	configFile  string
 	command     string
 	containerID string
+}
+
+type logConfig struct {
+	file       *os.File
+	logConsole bool
+
+	LogFile   string `json:",omitempty"`
+	LogLevel  string `json:",omitempty"`
+	Timestamp string `json:",omitempty"`
+
+	ContainerLogLevel string `json:",omitempty"`
+	ContainerLogFile  string `json:",omitempty"`
+}
+
+var defaultApp = app{
+	Runtime: lxcri.Runtime{
+		Root:          "/run/lxcri",
+		MonitorCgroup: "lxcri-monitor.slice",
+		LibexecDir:    defaultLibexecDir,
+		Features: lxcri.RuntimeFeatures{
+			Apparmor:      true,
+			Capabilities:  true,
+			CgroupDevices: true,
+			Seccomp:       true,
+		},
+	},
+	LogConfig: logConfig{
+		LogFile:           "/var/log/lxcri/lxcri.log",
+		LogLevel:          "info",
+		ContainerLogFile:  "/var/log/lxcri/lxcri.log",
+		ContainerLogLevel: "info",
+	},
 
 }
 
-var clxc = app{}
+var clxc = defaultApp
 
 func (app *app) configureLogger() error {
-	level, err := log.ParseLevel(app.logConfig.Level)
+	level, err := log.ParseLevel(app.LogConfig.LogLevel)
 	if err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
 
-	if app.logConfig.LogConsole {
+	if app.LogConfig.logConsole {
 		app.Runtime.Log = log.ConsoleLogger(true, level)
-		app.cfg.LogFile = "/dev/stdout"
+		app.LogConfig.ContainerLogFile = "/dev/stdout"
 	} else {
 		// TODO use console logger if filepath is /dev/stdout or /dev/stderr ?
-		l, err := log.OpenFile(app.logConfig.FilePath, 0600)
+		l, err := log.OpenFile(app.LogConfig.LogFile, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %w", err)
 		}
-		app.logConfig.File = l
-		logCtx := log.NewLogger(app.logConfig.File, level)
+		app.LogConfig.file = l
+		logCtx := log.NewLogger(app.LogConfig.file, level)
 
 		app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.containerID).Logger()
 	}
 
-	app.cfg.Log = app.Runtime.Log
 	return nil
 }
 
@@ -71,7 +97,8 @@ func (app *app) loadContainer(containerID string) (*lxcri.Container, error) {
 	if err != nil {
 		return c, err
 	}
-	err = c.SetLog(app.cfg.LogFile, app.cfg.LogLevel)
+	c.Log = app.Runtime.Log
+	err = c.SetLog(app.LogConfig.ContainerLogFile, app.LogConfig.ContainerLogLevel)
 	return c, err
 }
 
@@ -85,8 +112,8 @@ func (app *app) releaseContainer(c *lxcri.Container) {
 }
 
 func (app *app) releaseLog() error {
-	if clxc.logConfig.File != nil {
-		return clxc.logConfig.File.Close()
+	if clxc.LogConfig.file != nil {
+		return clxc.LogConfig.file.Close()
 	}
 	return nil
 }
@@ -118,46 +145,48 @@ func main() {
 			Name:        "log-level",
 			Usage:       "set the runtime (lxcri) log level (trace|debug|info|warn|error)",
 			EnvVars:     []string{"LXCRI_LOG_LEVEL"},
-			Value:       "info",
-			Destination: &clxc.logConfig.Level,
+			Value:       clxc.LogConfig.LogLevel,
+			Destination: &clxc.LogConfig.LogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "log-file",
 			Usage:       "set the runtime (lxcri) log file path",
 			EnvVars:     []string{"LXCRI_LOG_FILE"},
-			Value:       defaultLogFile,
-			Destination: &clxc.logConfig.FilePath,
+			Value:       clxc.LogConfig.LogFile,
+			Destination: &clxc.LogConfig.LogFile,
 		},
 		&cli.StringFlag{
 			Name:        "log-timestamp",
 			Usage:       "timestamp format for the runtime log (see golang time package), default matches liblxc timestamp",
 			EnvVars:     []string{"LXCRI_LOG_TIMESTAMP"}, // e.g  '0102 15:04:05.000'
-			Destination: &clxc.logConfig.Timestamp,
+			Value:       clxc.LogConfig.Timestamp,
+			Destination: &clxc.LogConfig.Timestamp,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-level",
 			Usage:       "set the container (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_LEVEL"},
-			Value:       "warn",
-			Destination: &clxc.cfg.LogLevel,
+			Value:       clxc.LogConfig.ContainerLogLevel,
+			Destination: &clxc.LogConfig.ContainerLogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-file",
 			Usage:       "set the container (liblxc) log file path",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_FILE"},
-			Value:       defaultLogFile,
-			Destination: &clxc.cfg.LogFile,
+			Value:       clxc.LogConfig.ContainerLogFile,
+			Destination: &clxc.LogConfig.ContainerLogFile,
 		},
 		&cli.BoolFlag{
 			Name:        "log-console",
 			Usage:       "write log output to stdout. --log-file and --container-log-file options are ignored",
-			Destination: &clxc.logConfig.LogConsole,
+			Destination: &clxc.LogConfig.logConsole,
 		},
 		&cli.StringFlag{
-			Name:  "root",
-			Usage: "root directory for storage of container runtime state (tmpfs is recommended)",
+			Name:    "root",
+			Usage:   "root directory for storage of container runtime state (tmpfs is recommended)",
+			EnvVars: []string{"LXCRI_ROOT"},
 			// exec permissions are not required because init is bind mounted into the root
-			Value:       "/run/lxcri",
+			Value:       clxc.Root,
 			Destination: &clxc.Root,
 		},
 		&cli.BoolFlag{
@@ -167,44 +196,44 @@ func main() {
 		&cli.StringFlag{
 			Name:        "monitor-cgroup",
 			Usage:       "cgroup path for liblxc monitor process",
-			Destination: &clxc.MonitorCgroup,
 			EnvVars:     []string{"LXCRI_MONITOR_CGROUP"},
-			Value:       "lxcri-monitor.slice",
+			Value:       clxc.MonitorCgroup,
+			Destination: &clxc.MonitorCgroup,
 		},
 		&cli.StringFlag{
 			Name:        "libexec",
 			Usage:       "path to directory that contains the runtime executables",
 			EnvVars:     []string{"LXCRI_LIBEXEC"},
-			Value:       libexecDir,
+			Value:       clxc.LibexecDir,
 			Destination: &clxc.LibexecDir,
 		},
 		&cli.BoolFlag{
 			Name:        "apparmor",
 			Usage:       "set apparmor profile defined in container spec",
-			Destination: &clxc.Features.Apparmor,
 			EnvVars:     []string{"LXCRI_APPARMOR"},
-			Value:       true,
+			Value:       clxc.Features.Apparmor,
+			Destination: &clxc.Features.Apparmor,
 		},
 		&cli.BoolFlag{
 			Name:        "capabilities",
 			Usage:       "keep capabilities defined in container spec",
-			Destination: &clxc.Features.Capabilities,
 			EnvVars:     []string{"LXCRI_CAPABILITIES"},
-			Value:       true,
+			Value:       clxc.Features.Capabilities,
+			Destination: &clxc.Features.Capabilities,
 		},
 		&cli.BoolFlag{
 			Name:        "cgroup-devices",
 			Usage:       "allow only devices permitted by container spec",
-			Destination: &clxc.Features.CgroupDevices,
 			EnvVars:     []string{"LXCRI_CGROUP_DEVICES"},
-			Value:       true,
+			Value:       clxc.Features.CgroupDevices,
+			Destination: &clxc.Features.CgroupDevices,
 		},
 		&cli.BoolFlag{
 			Name:        "seccomp",
 			Usage:       "Generate and apply seccomp profile for lxc from container spec",
-			Destination: &clxc.Features.Seccomp,
 			EnvVars:     []string{"LXCRI_SECCOMP"},
-			Value:       true,
+			Value:       clxc.Features.Seccomp,
+			Destination: &clxc.Features.Seccomp,
 		},
 	}
 
@@ -311,6 +340,9 @@ func doCreate(ctxcli *cli.Context) error {
 		BundlePath:    ctxcli.String("bundle"),
 		ConsoleSocket: ctxcli.String("console-socket"),
 		SystemdCgroup: ctxcli.Bool("systemd-cgroup"),
+		Log:           clxc.Runtime.Log,
+		LogFile:       clxc.LogConfig.ContainerLogFile,
+		LogLevel:      clxc.LogConfig.ContainerLogLevel,
 	}
 
 	specPath := filepath.Join(cfg.BundlePath, lxcri.BundleConfigFile)
