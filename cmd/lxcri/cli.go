@@ -634,8 +634,40 @@ func doExec(ctxcli *cli.Context) error {
 	}
 	defer clxc.releaseContainer(c)
 
+	opts := lxcri.ExecOptions{}
+
+	if ctxcli.Bool("cgroup") {
+		opts.Namespaces = append(opts.Namespaces, specs.CgroupNamespace)
+	}
+	if ctxcli.Bool("ipc") {
+		opts.Namespaces = append(opts.Namespaces, specs.IPCNamespace)
+	}
+	if ctxcli.Bool("mnt") {
+		opts.Namespaces = append(opts.Namespaces, specs.MountNamespace)
+	}
+	if ctxcli.Bool("net") {
+		opts.Namespaces = append(opts.Namespaces, specs.NetworkNamespace)
+	}
+	if ctxcli.Bool("pid") {
+		opts.Namespaces = append(opts.Namespaces, specs.PIDNamespace)
+	}
+	//if ctxcli.Bool("time") {
+	//	opts.Namespaces = append(opts.Namespaces, specs.TimeNamespace)
+	//}
+	if ctxcli.Bool("user") {
+		opts.Namespaces = append(opts.Namespaces, specs.UserNamespace)
+	}
+	if ctxcli.Bool("uts") {
+		opts.Namespaces = append(opts.Namespaces, specs.UTSNamespace)
+	}
+
+	c.Log.Info().Str("cmd", procSpec.Args[0]).
+		Uint32("uid", procSpec.User.UID).Uint32("gid", procSpec.User.GID).
+		Uints32("groups", procSpec.User.AdditionalGids).
+		Str("namespaces", fmt.Sprintf("%s", opts.Namespaces)).Msg("execute cmd")
+
 	if detach {
-		pid, err := c.ExecDetached(procSpec, nil)
+		pid, err := c.ExecDetached(procSpec, &opts)
 		if err != nil {
 			return err
 		}
@@ -643,33 +675,6 @@ func doExec(ctxcli *cli.Context) error {
 			return createPidFile(pidFile, pid)
 		}
 	} else {
-		opts := lxcri.ExecOptions{}
-
-		if ctxcli.Bool("cgroup") {
-			opts.Namespaces = append(opts.Namespaces, specs.CgroupNamespace)
-		}
-		if ctxcli.Bool("ipc") {
-			opts.Namespaces = append(opts.Namespaces, specs.IPCNamespace)
-		}
-		if ctxcli.Bool("mnt") {
-			opts.Namespaces = append(opts.Namespaces, specs.MountNamespace)
-		}
-		if ctxcli.Bool("net") {
-			opts.Namespaces = append(opts.Namespaces, specs.NetworkNamespace)
-		}
-		if ctxcli.Bool("pid") {
-			opts.Namespaces = append(opts.Namespaces, specs.PIDNamespace)
-		}
-		//if ctxcli.Bool("time") {
-		//	opts.Namespaces = append(opts.Namespaces, specs.TimeNamespace)
-		//}
-		if ctxcli.Bool("user") {
-			opts.Namespaces = append(opts.Namespaces, specs.UserNamespace)
-		}
-		if ctxcli.Bool("uts") {
-			opts.Namespaces = append(opts.Namespaces, specs.UTSNamespace)
-		}
-
 		status, err := c.Exec(procSpec, &opts)
 		if err != nil {
 			return err
