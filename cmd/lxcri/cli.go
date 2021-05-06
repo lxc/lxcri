@@ -18,9 +18,6 @@ import (
 )
 
 var (
-	// Environment variables are populated by default from this environment file.
-	// Existing environment variables are preserved.
-	envFile        = "/etc/default/lxcri"
 	defaultLogFile = "/var/log/lxcri/lxcri.log"
 	version        = "undefined"
 	libexecDir     = "/usr/libexec/lxcri"
@@ -212,24 +209,6 @@ func main() {
 	}
 
 	startTime := time.Now()
-
-	// Environment variables must be injected from file before app.Run() is called.
-	// Otherwise the values are not set to the crioLXC instance.
-	// FIXME when calling '--help' defaults are overwritten with environment variables.
-	// So you will never see the real default value if either an environment file is present
-	// or an environment variable is set.
-	env, err := loadEnvFile(envFile)
-	if err != nil {
-		println(err.Error())
-		os.Exit(1)
-	}
-	for key, val := range env {
-		if err := setEnv(key, val, false); err != nil {
-			err = fmt.Errorf("failed to set environment variable \"%s=%s\": %w", key, val, err)
-			println(err.Error())
-			os.Exit(1)
-		}
-	}
 
 	app.CommandNotFound = func(ctx *cli.Context, cmd string) {
 		fmt.Fprintf(os.Stderr, "undefined subcommand %q cmdline%s\n", cmd, os.Args)

@@ -10,48 +10,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func setEnv(key, val string, overwrite bool) error {
-	_, exist := os.LookupEnv(key)
-	if !exist || overwrite {
-		return os.Setenv(key, val)
-	}
-	return nil
-}
-
-func loadEnvFile(envFile string) (map[string]string, error) {
-	// don't fail if environment file does not exist
-	_, err := os.Stat(envFile)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	// #nosec
-	data, err := os.ReadFile(envFile)
-	if err != nil {
-		return nil, err
-	}
-	lines := strings.Split(string(data), "\n")
-	env := make(map[string]string, len(lines))
-	for n, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		// skip over comments and blank lines
-		if len(trimmed) == 0 || trimmed[0] == '#' {
-			continue
-		}
-		vals := strings.SplitN(trimmed, "=", 2)
-		if len(vals) != 2 {
-			return nil, fmt.Errorf("invalid environment variable at line %s:%d", envFile, n+1)
-		}
-		key := strings.TrimSpace(vals[0])
-		val := strings.Trim(strings.TrimSpace(vals[1]), `"'`)
-		env[key] = val
-	}
-	return env, nil
-}
-
 func parseSignal(sig string) unix.Signal {
 	if sig == "" {
 		return unix.SIGTERM
