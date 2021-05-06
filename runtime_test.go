@@ -38,6 +38,11 @@ func mkdirTemp() (string, error) {
 	return os.MkdirTemp(tmpRoot, "lxcri-test")
 }
 
+func removeAll(t *testing.T, filename string) {
+	err := os.RemoveAll(filename)
+	require.NoError(t, err)
+}
+
 func newRuntime(t *testing.T) *Runtime {
 	runtimeRoot, err := mkdirTemp()
 	require.NoError(t, err)
@@ -68,10 +73,6 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	require.NoError(t, err)
 	t.Logf("container rootfs: %s", rootfs)
 
-	// copy test binary to rootfs
-	//err = exec.Command("cp", cmd, rootfs).Run()
-	//require.NoError(t, err)
-
 	level, err := log.ParseLevel(logLevel)
 	require.NoError(t, err)
 
@@ -83,36 +84,25 @@ func newConfig(t *testing.T, cmd string, args ...string) *ContainerConfig {
 	id := filepath.Base(rootfs)
 	cfg := ContainerConfig{
 		ContainerID: id, Spec: spec,
-		Log: log.ConsoleLogger(true, level),
+		Log:      log.ConsoleLogger(true, level),
+		LogFile:  "/dev/stderr",
+		LogLevel: logLevel,
 	}
 	cfg.Spec.Linux.CgroupsPath = id + ".slice" // use /proc/self/cgroup"
 
 	cfg.Spec.Mounts = append(cfg.Spec.Mounts,
 		specki.BindMount(cmdAbs, cmdDest),
 	)
-
-	// FIXME /dev/stderr has perms 600
-	// If container process user is not equal to the
-	// runtime process user then setting lxc log file will fail
-	// because of missing permissions.
-	if runAsRuntimeUser(cfg.Spec) {
-		cfg.LogFile = "/dev/stderr"
-	} else {
-		cfg.LogFile = filepath.Join("/tmp", "log")
-	}
-	t.Logf("liblxc log output is written to %s", cfg.LogFile)
-	cfg.LogLevel = logLevel
-
 	return &cfg
 }
 
 func TestEmptyNamespaces(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t)
-	defer os.RemoveAll(rt.Root)
+	defer removeAll(t, rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Spec.Root.Path)
+	defer removeAll(t, cfg.Spec.Root.Path)
 
 	// Clearing all namespaces should not work,
 	// since the mount namespace must never be shared with the host.
@@ -133,10 +123,10 @@ func TestSharedPIDNamespace(t *testing.T) {
 		t.Skipf("PID namespace sharing is only permitted as root.")
 	}
 	rt := newRuntime(t)
-	defer os.RemoveAll(rt.Root)
+	defer removeAll(t, rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Spec.Root.Path)
+	defer removeAll(t, cfg.Spec.Root.Path)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
@@ -170,10 +160,10 @@ func TestSharedPIDNamespace(t *testing.T) {
 func TestNonEmptyCgroup(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t)
-	defer os.RemoveAll(rt.Root)
+	defer removeAll(t, rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Spec.Root.Path)
+	defer removeAll(t, cfg.Spec.Root.Path)
 
 	if os.Getuid() != 0 {
 		cfg.Spec.Linux.UIDMappings = []specs.LinuxIDMapping{
@@ -195,7 +185,8 @@ func TestNonEmptyCgroup(t *testing.T) {
 	//time.Sleep(60*time.Second)
 
 	cfg2 := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Spec.Root.Path)
+	defer removeAll(t, cfg2.Spec.Root.Path)
+
 	cfg2.Spec.Linux.CgroupsPath = cfg.Spec.Linux.CgroupsPath
 
 	if os.Getuid() != 0 {
@@ -232,10 +223,10 @@ func TestRuntimePrivileged(t *testing.T) {
 	}
 
 	rt := newRuntime(t)
-	defer os.RemoveAll(rt.Root)
+	defer removeAll(t, rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Spec.Root.Path)
+	defer removeAll(t, cfg.Spec.Root.Path)
 
 	testRuntime(t, rt, cfg)
 }
@@ -256,10 +247,10 @@ func TestRuntimeUnprivileged(t *testing.T) {
 	}
 
 	rt := newRuntime(t)
-	defer os.RemoveAll(rt.Root)
+	defer removeAll(t, rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Spec.Root.Path)
+	defer removeAll(t, cfg.Spec.Root.Path)
 
 	// The container UID must have full access to the rootfs.
 	// MkdirTemp sets directory permissions to 0700.
@@ -285,10 +276,10 @@ func TestRuntimeUnprivileged(t *testing.T) {
 func TestRuntimeUnprivileged2(t *testing.T) {
 	t.Parallel()
 	rt := newRuntime(t)
-	defer os.RemoveAll(rt.Root)
+	defer removeAll(t, rt.Root)
 
 	cfg := newConfig(t, "lxcri-test")
-	defer os.RemoveAll(cfg.Spec.Root.Path)
+	defer removeAll(t, cfg.Spec.Root.Path)
 
 	if os.Getuid() != 0 {
 		cfg.Spec.Linux.UIDMappings = []specs.LinuxIDMapping{

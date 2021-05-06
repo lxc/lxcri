@@ -389,10 +389,6 @@ func (c *Container) ExecDetached(proc *specs.Process, execOpts *ExecOptions) (pi
 		return 0, errorf("failed to create attach options: %w", err)
 	}
 
-	c.Log.Info().Strs("args", proc.Args).
-		Int("uid", opts.UID).Int("gid", opts.GID).
-		Ints("groups", opts.Groups).Msg("execute cmd")
-
 	pid, err = c.LinuxContainer.RunCommandNoWait(proc.Args, opts)
 	if err != nil {
 		return pid, errorf("failed to run exec cmd detached: %w", err)

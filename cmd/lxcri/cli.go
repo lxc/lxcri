@@ -68,8 +68,8 @@ func (app *app) configureLogger() error {
 	return nil
 }
 
-func (app *app) loadContainer() (*lxcri.Container, error) {
-	c, err := clxc.Load(app.cfg.ContainerID)
+func (app *app) loadContainer(containerID string) (*lxcri.Container, error) {
+	c, err := clxc.Load(containerID)
 	if err != nil {
 		return c, err
 	}
@@ -157,14 +157,14 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:  "root",
-			Usage: "container runtime root where (logs, init and hook scripts). tmpfs is recommended.",
+			Usage: "root directory for storage of container runtime state (tmpfs is recommended)",
 			// exec permissions are not required because init is bind mounted into the root
 			Value:       "/run/lxcri",
 			Destination: &clxc.Root,
 		},
 		&cli.BoolFlag{
 			Name:        "systemd-cgroup",
-			Usage:       "enable support for systemd encoded cgroup path",
+			Usage:       "cgroup path in container spec is systemd encoded and must be expanded",
 			Destination: &clxc.SystemdCgroup,
 		},
 		&cli.StringFlag{
@@ -176,7 +176,7 @@ func main() {
 		},
 		&cli.StringFlag{
 			Name:        "libexec",
-			Usage:       "directory to load runtime executables from",
+			Usage:       "path to directory that contains the runtime executables",
 			EnvVars:     []string{"LXCRI_LIBEXEC"},
 			Value:       libexecDir,
 			Destination: &clxc.LibexecDir,
@@ -404,7 +404,7 @@ func doStart(ctxcli *cli.Context) error {
 }
 
 func doStartInternal(ctx context.Context) error {
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
 	if err != nil {
 		return err
 	}
@@ -424,7 +424,7 @@ var stateCmd = cli.Command{
 }
 
 func doState(unused *cli.Context) error {
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
 	if err != nil {
 		return err
 	}
@@ -468,7 +468,7 @@ func doKill(ctxcli *cli.Context) error {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
 
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
 	if err != nil {
 		return err
 	}
@@ -628,14 +628,46 @@ func doExec(ctxcli *cli.Context) error {
 		return err
 	}
 
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
 	if err != nil {
 		return err
 	}
 	defer clxc.releaseContainer(c)
 
+	opts := lxcri.ExecOptions{}
+
+	if ctxcli.Bool("cgroup") {
+		opts.Namespaces = append(opts.Namespaces, specs.CgroupNamespace)
+	}
+	if ctxcli.Bool("ipc") {
+		opts.Namespaces = append(opts.Namespaces, specs.IPCNamespace)
+	}
+	if ctxcli.Bool("mnt") {
+		opts.Namespaces = append(opts.Namespaces, specs.MountNamespace)
+	}
+	if ctxcli.Bool("net") {
+		opts.Namespaces = append(opts.Namespaces, specs.NetworkNamespace)
+	}
+	if ctxcli.Bool("pid") {
+		opts.Namespaces = append(opts.Namespaces, specs.PIDNamespace)
+	}
+	//if ctxcli.Bool("time") {
+	//	opts.Namespaces = append(opts.Namespaces, specs.TimeNamespace)
+	//}
+	if ctxcli.Bool("user") {
+		opts.Namespaces = append(opts.Namespaces, specs.UserNamespace)
+	}
+	if ctxcli.Bool("uts") {
+		opts.Namespaces = append(opts.Namespaces, specs.UTSNamespace)
+	}
+
+	c.Log.Info().Str("cmd", procSpec.Args[0]).
+		Uint32("uid", procSpec.User.UID).Uint32("gid", procSpec.User.GID).
+		Uints32("groups", procSpec.User.AdditionalGids).
+		Str("namespaces", fmt.Sprintf("%s", opts.Namespaces)).Msg("execute cmd")
+
 	if detach {
-		pid, err := c.ExecDetached(procSpec, nil)
+		pid, err := c.ExecDetached(procSpec, &opts)
 		if err != nil {
 			return err
 		}
@@ -643,33 +675,6 @@ func doExec(ctxcli *cli.Context) error {
 			return createPidFile(pidFile, pid)
 		}
 	} else {
-		opts := lxcri.ExecOptions{}
-
-		if ctxcli.Bool("cgroup") {
-			opts.Namespaces = append(opts.Namespaces, specs.CgroupNamespace)
-		}
-		if ctxcli.Bool("ipc") {
-			opts.Namespaces = append(opts.Namespaces, specs.IPCNamespace)
-		}
-		if ctxcli.Bool("mnt") {
-			opts.Namespaces = append(opts.Namespaces, specs.MountNamespace)
-		}
-		if ctxcli.Bool("net") {
-			opts.Namespaces = append(opts.Namespaces, specs.NetworkNamespace)
-		}
-		if ctxcli.Bool("pid") {
-			opts.Namespaces = append(opts.Namespaces, specs.PIDNamespace)
-		}
-		//if ctxcli.Bool("time") {
-		//	opts.Namespaces = append(opts.Namespaces, specs.TimeNamespace)
-		//}
-		if ctxcli.Bool("user") {
-			opts.Namespaces = append(opts.Namespaces, specs.UserNamespace)
-		}
-		if ctxcli.Bool("uts") {
-			opts.Namespaces = append(opts.Namespaces, specs.UTSNamespace)
-		}
-
 		status, err := c.Exec(procSpec, &opts)
 		if err != nil {
 			return err
@@ -757,7 +762,7 @@ func doList(ctxcli *cli.Context) (err error) {
 }
 
 func inspectContainer(id string, t *template.Template) error {
-	c, err := clxc.loadContainer()
+	c, err := clxc.loadContainer(id)
 	if err != nil {
 		return err
 	}
