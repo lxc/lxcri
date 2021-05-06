@@ -15,56 +15,95 @@ import (
 	"github.com/lxc/lxcri/pkg/specki"
 	"github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/urfave/cli/v2"
+	"sigs.k8s.io/yaml"
 )
 
 var (
-	// Environment variables are populated by default from this environment file.
-	// Existing environment variables are preserved.
-	envFile        = "/etc/default/lxcri"
-	defaultLogFile = "/var/log/lxcri/lxcri.log"
-	version        = "undefined"
-	libexecDir     = "/usr/libexec/lxcri"
+	defaultConfigFile = "/etc/lxcri/lxcri.yaml"
+	version           = "undefined"
+	defaultLibexecDir = "/usr/libexec/lxcri"
 )
 
 type app struct {
 	lxcri.Runtime
-	cfg lxcri.ContainerConfig
 
-	logConfig struct {
-		File       *os.File
-		FilePath   string
-		Level      string
-		Timestamp  string
-		LogConsole bool
-	}
+	LogConfig logConfig
+	Timeouts  timeouts
 
-	command string
+	configFile  string
+	command     string
+	containerID string
 }
 
-var clxc = app{}
+type logConfig struct {
+	file       *os.File
+	logConsole bool
+
+	LogFile   string `json:",omitempty"`
+	LogLevel  string `json:",omitempty"`
+	Timestamp string `json:",omitempty"`
+
+	ContainerLogLevel string `json:",omitempty"`
+	ContainerLogFile  string `json:",omitempty"`
+}
+
+type timeouts struct {
+	CreateTimeout uint `json:",omitempty"`
+	StartTimeout  uint `json:",omitempty"`
+	KillTimeout   uint `json:",omitempty"`
+	DeleteTimeout uint `json:",omitempty"`
+}
+
+var defaultApp = app{
+	Runtime: lxcri.Runtime{
+		Root:          "/run/lxcri",
+		MonitorCgroup: "lxcri-monitor.slice",
+		LibexecDir:    defaultLibexecDir,
+		Features: lxcri.RuntimeFeatures{
+			Apparmor:      true,
+			Capabilities:  true,
+			CgroupDevices: true,
+			Seccomp:       true,
+		},
+	},
+	LogConfig: logConfig{
+		LogFile:           "/var/log/lxcri/lxcri.log",
+		LogLevel:          "info",
+		ContainerLogFile:  "/var/log/lxcri/lxcri.log",
+		ContainerLogLevel: "warn",
+	},
+
+	Timeouts: timeouts{
+		CreateTimeout: 60,
+		StartTimeout:  30,
+		KillTimeout:   10,
+		DeleteTimeout: 10,
+	},
+}
+
+var clxc = defaultApp
 
 func (app *app) configureLogger() error {
-	level, err := log.ParseLevel(app.logConfig.Level)
+	level, err := log.ParseLevel(app.LogConfig.LogLevel)
 	if err != nil {
 		return fmt.Errorf("failed to parse log level: %w", err)
 	}
 
-	if app.logConfig.LogConsole {
+	if app.LogConfig.logConsole {
 		app.Runtime.Log = log.ConsoleLogger(true, level)
-		app.cfg.LogFile = "/dev/stdout"
+		app.LogConfig.ContainerLogFile = "/dev/stdout"
 	} else {
 		// TODO use console logger if filepath is /dev/stdout or /dev/stderr ?
-		l, err := log.OpenFile(app.logConfig.FilePath, 0600)
+		l, err := log.OpenFile(app.LogConfig.LogFile, 0600)
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %w", err)
 		}
-		app.logConfig.File = l
-		logCtx := log.NewLogger(app.logConfig.File, level)
+		app.LogConfig.file = l
+		logCtx := log.NewLogger(app.LogConfig.file, level)
 
-		app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.cfg.ContainerID).Logger()
+		app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.containerID).Logger()
 	}
 
-	app.cfg.Log = app.Runtime.Log
 	return nil
 }
 
@@ -73,7 +112,8 @@ func (app *app) loadContainer(containerID string) (*lxcri.Container, error) {
 	if err != nil {
 		return c, err
 	}
-	err = c.SetLog(app.cfg.LogFile, app.cfg.LogLevel)
+	c.Log = app.Runtime.Log
+	err = c.SetLog(app.LogConfig.ContainerLogFile, app.LogConfig.ContainerLogLevel)
 	return c, err
 }
 
@@ -87,10 +127,28 @@ func (app *app) releaseContainer(c *lxcri.Container) {
 }
 
 func (app *app) releaseLog() error {
-	if clxc.logConfig.File != nil {
-		return clxc.logConfig.File.Close()
+	if clxc.LogConfig.file != nil {
+		return clxc.LogConfig.file.Close()
 	}
 	return nil
+}
+
+func loadConfig() error {
+	clxc.configFile = defaultConfigFile
+	if val, ok := os.LookupEnv("LXCRI_CONFIG"); ok {
+		clxc.configFile = val
+	}
+
+	data, err := os.ReadFile(clxc.configFile)
+	// Don't fail if the default config file does not exist.
+	if os.IsNotExist(err) && clxc.configFile == defaultConfigFile {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	return yaml.Unmarshal(data, &clxc)
 }
 
 func main() {
@@ -112,7 +170,12 @@ func main() {
 		&execCmd,
 		&inspectCmd,
 		&listCmd,
-		// TODO extend urfave/cli to render a default environment file.
+		&configCmd,
+	}
+
+	err := loadConfig()
+	if err != nil {
+		panic(fmt.Errorf("failed to read config file: %w", err))
 	}
 
 	app.Flags = []cli.Flag{
@@ -120,116 +183,127 @@ func main() {
 			Name:        "log-level",
 			Usage:       "set the runtime (lxcri) log level (trace|debug|info|warn|error)",
 			EnvVars:     []string{"LXCRI_LOG_LEVEL"},
-			Value:       "info",
-			Destination: &clxc.logConfig.Level,
+			Value:       clxc.LogConfig.LogLevel,
+			Destination: &clxc.LogConfig.LogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "log-file",
 			Usage:       "set the runtime (lxcri) log file path",
 			EnvVars:     []string{"LXCRI_LOG_FILE"},
-			Value:       defaultLogFile,
-			Destination: &clxc.logConfig.FilePath,
+			Value:       clxc.LogConfig.LogFile,
+			Destination: &clxc.LogConfig.LogFile,
 		},
 		&cli.StringFlag{
 			Name:        "log-timestamp",
 			Usage:       "timestamp format for the runtime log (see golang time package), default matches liblxc timestamp",
 			EnvVars:     []string{"LXCRI_LOG_TIMESTAMP"}, // e.g  '0102 15:04:05.000'
-			Destination: &clxc.logConfig.Timestamp,
+			Value:       clxc.LogConfig.Timestamp,
+			Destination: &clxc.LogConfig.Timestamp,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-level",
 			Usage:       "set the container (liblxc) log level (trace|debug|info|notice|warn|error|crit|alert|fatal)",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_LEVEL"},
-			Value:       "warn",
-			Destination: &clxc.cfg.LogLevel,
+			Value:       clxc.LogConfig.ContainerLogLevel,
+			Destination: &clxc.LogConfig.ContainerLogLevel,
 		},
 		&cli.StringFlag{
 			Name:        "container-log-file",
 			Usage:       "set the container (liblxc) log file path",
 			EnvVars:     []string{"LXCRI_CONTAINER_LOG_FILE"},
-			Value:       defaultLogFile,
-			Destination: &clxc.cfg.LogFile,
+			Value:       clxc.LogConfig.ContainerLogFile,
+			Destination: &clxc.LogConfig.ContainerLogFile,
 		},
 		&cli.BoolFlag{
 			Name:        "log-console",
 			Usage:       "write log output to stdout. --log-file and --container-log-file options are ignored",
-			Destination: &clxc.logConfig.LogConsole,
+			Destination: &clxc.LogConfig.logConsole,
 		},
 		&cli.StringFlag{
-			Name:  "root",
-			Usage: "root directory for storage of container runtime state (tmpfs is recommended)",
+			Name:    "root",
+			Usage:   "root directory for storage of container runtime state (tmpfs is recommended)",
+			EnvVars: []string{"LXCRI_ROOT"},
 			// exec permissions are not required because init is bind mounted into the root
-			Value:       "/run/lxcri",
+			Value:       clxc.Root,
 			Destination: &clxc.Root,
 		},
 		&cli.BoolFlag{
-			Name:        "systemd-cgroup",
-			Usage:       "cgroup path in container spec is systemd encoded and must be expanded",
-			Destination: &clxc.SystemdCgroup,
+			Name:  "systemd-cgroup",
+			Usage: "cgroup path in container spec is systemd encoded and must be expanded",
 		},
 		&cli.StringFlag{
 			Name:        "monitor-cgroup",
 			Usage:       "cgroup path for liblxc monitor process",
-			Destination: &clxc.MonitorCgroup,
 			EnvVars:     []string{"LXCRI_MONITOR_CGROUP"},
-			Value:       "lxcri-monitor.slice",
+			Value:       clxc.MonitorCgroup,
+			Destination: &clxc.MonitorCgroup,
 		},
 		&cli.StringFlag{
 			Name:        "libexec",
 			Usage:       "path to directory that contains the runtime executables",
 			EnvVars:     []string{"LXCRI_LIBEXEC"},
-			Value:       libexecDir,
+			Value:       clxc.LibexecDir,
 			Destination: &clxc.LibexecDir,
 		},
 		&cli.BoolFlag{
 			Name:        "apparmor",
 			Usage:       "set apparmor profile defined in container spec",
-			Destination: &clxc.Features.Apparmor,
 			EnvVars:     []string{"LXCRI_APPARMOR"},
-			Value:       true,
+			Value:       clxc.Features.Apparmor,
+			Destination: &clxc.Features.Apparmor,
 		},
 		&cli.BoolFlag{
 			Name:        "capabilities",
 			Usage:       "keep capabilities defined in container spec",
-			Destination: &clxc.Features.Capabilities,
 			EnvVars:     []string{"LXCRI_CAPABILITIES"},
-			Value:       true,
+			Value:       clxc.Features.Capabilities,
+			Destination: &clxc.Features.Capabilities,
 		},
 		&cli.BoolFlag{
 			Name:        "cgroup-devices",
 			Usage:       "allow only devices permitted by container spec",
-			Destination: &clxc.Features.CgroupDevices,
 			EnvVars:     []string{"LXCRI_CGROUP_DEVICES"},
-			Value:       true,
+			Value:       clxc.Features.CgroupDevices,
+			Destination: &clxc.Features.CgroupDevices,
 		},
 		&cli.BoolFlag{
 			Name:        "seccomp",
 			Usage:       "Generate and apply seccomp profile for lxc from container spec",
-			Destination: &clxc.Features.Seccomp,
 			EnvVars:     []string{"LXCRI_SECCOMP"},
-			Value:       true,
+			Value:       clxc.Features.Seccomp,
+			Destination: &clxc.Features.Seccomp,
+		},
+		&cli.UintFlag{
+			Name:        "create-timeout",
+			Usage:       "maximum duration in seconds for create to complete",
+			EnvVars:     []string{"LXCRI_CREATE_TIMEOUT"},
+			Value:       clxc.Timeouts.CreateTimeout,
+			Destination: &clxc.Timeouts.CreateTimeout,
+		},
+		&cli.UintFlag{
+			Name:        "start-timeout",
+			Usage:       "maximum duration in seconds for start to complete",
+			EnvVars:     []string{"LXCRI_START_TIMEOUT"},
+			Value:       clxc.Timeouts.StartTimeout,
+			Destination: &clxc.Timeouts.StartTimeout,
+		},
+		&cli.UintFlag{
+			Name:        "kill-timeout",
+			Usage:       "timeout for killing all processes in container cgroup",
+			EnvVars:     []string{"LXCRI_KILL_TIMEOUT"},
+			Value:       clxc.Timeouts.KillTimeout,
+			Destination: &clxc.Timeouts.KillTimeout,
+		},
+		&cli.UintFlag{
+			Name:        "delete-timeout",
+			Usage:       "maximum duration in seconds for delete to complete",
+			EnvVars:     []string{"LXCRI_DELETE_TIMEOUT"},
+			Value:       clxc.Timeouts.DeleteTimeout,
+			Destination: &clxc.Timeouts.DeleteTimeout,
 		},
 	}
 
 	startTime := time.Now()
-
-	// Environment variables must be injected from file before app.Run() is called.
-	// Otherwise the values are not set to the crioLXC instance.
-	// FIXME when calling '--help' defaults are overwritten with environment variables.
-	// So you will never see the real default value if either an environment file is present
-	// or an environment variable is set.
-	env, err := loadEnvFile(envFile)
-	if err != nil {
-		println(err.Error())
-		os.Exit(1)
-	}
-	for key, val := range env {
-		if err := setEnv(key, val, false); err != nil {
-			err = fmt.Errorf("failed to set environment variable \"%s=%s\": %w", key, val, err)
-			println(err.Error())
-			os.Exit(1)
-		}
-	}
 
 	app.CommandNotFound = func(ctx *cli.Context, cmd string) {
 		fmt.Fprintf(os.Stderr, "undefined subcommand %q cmdline%s\n", cmd, os.Args)
@@ -249,13 +323,14 @@ func main() {
 	}
 
 	setupCmd := func(ctx *cli.Context) error {
-		if clxc.command != "list" {
-			containerID := ctx.Args().Get(0)
-			if len(containerID) == 0 {
-				return fmt.Errorf("missing container ID")
-			}
-			clxc.cfg.ContainerID = containerID
+		if clxc.command == "list" || clxc.command == "config" {
+			return nil
 		}
+		containerID := ctx.Args().Get(0)
+		if len(containerID) == 0 {
+			return fmt.Errorf("missing container ID")
+		}
+		clxc.containerID = containerID
 
 		if err := clxc.configureLogger(); err != nil {
 			return fmt.Errorf("failed to configure logger: %w", err)
@@ -300,25 +375,24 @@ var createCmd = cli.Command{
 	Action:    doCreate,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
-			Name:        "bundle",
-			Usage:       "set bundle directory",
-			Value:       ".",
-			Destination: &clxc.cfg.BundlePath,
+			Name:  "bundle",
+			Usage: "set bundle directory",
+			Value: ".",
 		},
 		&cli.StringFlag{
-			Name:        "console-socket",
-			Usage:       "send container pty master fd to this socket path",
-			Destination: &clxc.cfg.ConsoleSocket,
+			Name:  "console-socket",
+			Usage: "send container pty master fd to this socket path",
 		},
 		&cli.StringFlag{
 			Name:  "pid-file",
 			Usage: "path to write container PID",
 		},
 		&cli.UintFlag{
-			Name:    "timeout",
-			Usage:   "maximum duration in seconds for create to complete",
-			EnvVars: []string{"LXCRI_CREATE_TIMEOUT"},
-			Value:   60,
+			Name:        "timeout",
+			Usage:       "maximum duration in seconds for create to complete",
+			EnvVars:     []string{"LXCRI_CREATE_TIMEOUT"},
+			Value:       clxc.Timeouts.CreateTimeout,
+			Destination: &clxc.Timeouts.CreateTimeout,
 		},
 	},
 }
@@ -327,23 +401,34 @@ func doCreate(ctxcli *cli.Context) error {
 	if err := clxc.Init(); err != nil {
 		return err
 	}
-	specPath := filepath.Join(clxc.cfg.BundlePath, lxcri.BundleConfigFile)
+
+	cfg := lxcri.ContainerConfig{
+		ContainerID:   clxc.containerID,
+		BundlePath:    ctxcli.String("bundle"),
+		ConsoleSocket: ctxcli.String("console-socket"),
+		SystemdCgroup: ctxcli.Bool("systemd-cgroup"),
+		Log:           clxc.Runtime.Log,
+		LogFile:       clxc.LogConfig.ContainerLogFile,
+		LogLevel:      clxc.LogConfig.ContainerLogLevel,
+	}
+
+	specPath := filepath.Join(cfg.BundlePath, lxcri.BundleConfigFile)
 	spec, err := specki.LoadSpecJSON(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
-	clxc.cfg.Spec = spec
+	cfg.Spec = spec
 	pidFile := ctxcli.String("pid-file")
 
-	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	timeout := time.Duration(clxc.Timeouts.CreateTimeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if err := doCreateInternal(ctx, pidFile); err != nil {
+	if err := doCreateInternal(ctx, &cfg, pidFile); err != nil {
 		// Create a new context because create may fail with a timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(clxc.Timeouts.DeleteTimeout)*time.Second)
 		defer cancel()
-		if err := clxc.Delete(ctx, clxc.cfg.ContainerID, true); err != nil {
+		if err := clxc.Delete(ctx, clxc.containerID, true); err != nil {
 			clxc.Log.Error().Err(err).Msg("failed to destroy container")
 		}
 		return err
@@ -351,8 +436,8 @@ func doCreate(ctxcli *cli.Context) error {
 	return nil
 }
 
-func doCreateInternal(ctx context.Context, pidFile string) error {
-	c, err := clxc.Create(ctx, &clxc.cfg)
+func doCreateInternal(ctx context.Context, cfg *lxcri.ContainerConfig, pidFile string) error {
+	c, err := clxc.Create(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -377,25 +462,26 @@ starts <containerID>
 `,
 	Flags: []cli.Flag{
 		&cli.UintFlag{
-			Name:    "timeout",
-			Usage:   "maximum duration in seconds for start to complete",
-			EnvVars: []string{"LXCRI_START_TIMEOUT"},
-			Value:   30,
+			Name:        "timeout",
+			Usage:       "maximum duration in seconds for start to complete",
+			EnvVars:     []string{"LXCRI_START_TIMEOUT"},
+			Value:       clxc.Timeouts.StartTimeout,
+			Destination: &clxc.Timeouts.StartTimeout,
 		},
 	},
 }
 
 func doStart(ctxcli *cli.Context) error {
 
-	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	timeout := time.Duration(clxc.Timeouts.StartTimeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	if err := doStartInternal(ctx); err != nil {
 		//  a new context because start may fail with a timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(clxc.Timeouts.DeleteTimeout)*time.Second)
 		defer cancel()
-		if err := clxc.Delete(ctx, clxc.cfg.ContainerID, true); err != nil {
+		if err := clxc.Delete(ctx, clxc.containerID, true); err != nil {
 			clxc.Log.Error().Err(err).Msg("failed to destroy container")
 		}
 		return err
@@ -404,7 +490,7 @@ func doStart(ctxcli *cli.Context) error {
 }
 
 func doStartInternal(ctx context.Context) error {
-	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer(clxc.containerID)
 	if err != nil {
 		return err
 	}
@@ -424,7 +510,7 @@ var stateCmd = cli.Command{
 }
 
 func doState(unused *cli.Context) error {
-	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer(clxc.containerID)
 	if err != nil {
 		return err
 	}
@@ -453,10 +539,11 @@ var killCmd = cli.Command{
 `,
 	Flags: []cli.Flag{
 		&cli.UintFlag{
-			Name:    "timeout",
-			Usage:   "timeout for killing all processes in container cgroup",
-			EnvVars: []string{"LXCRI_KILL_TIMEOUT"},
-			Value:   10,
+			Name:        "timeout",
+			Usage:       "timeout for killing all processes in container cgroup",
+			EnvVars:     []string{"LXCRI_KILL_TIMEOUT"},
+			Value:       clxc.Timeouts.KillTimeout,
+			Destination: &clxc.Timeouts.KillTimeout,
 		},
 	},
 }
@@ -468,13 +555,13 @@ func doKill(ctxcli *cli.Context) error {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
 
-	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer(clxc.containerID)
 	if err != nil {
 		return err
 	}
 	defer clxc.releaseContainer(c)
 
-	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	timeout := time.Duration(clxc.Timeouts.KillTimeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -495,20 +582,21 @@ var deleteCmd = cli.Command{
 			Usage: "force deletion",
 		},
 		&cli.UintFlag{
-			Name:    "timeout",
-			Usage:   "maximum duration in seconds for delete to complete",
-			EnvVars: []string{"LXCRI_DELETE_TIMEOUT"},
-			Value:   10,
+			Name:        "timeout",
+			Usage:       "maximum duration in seconds for delete to complete",
+			EnvVars:     []string{"LXCRI_DELETE_TIMEOUT"},
+			Value:       clxc.Timeouts.DeleteTimeout,
+			Destination: &clxc.Timeouts.DeleteTimeout,
 		},
 	},
 }
 
 func doDelete(ctxcli *cli.Context) error {
-	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	timeout := time.Duration(clxc.Timeouts.DeleteTimeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	err := clxc.Delete(ctx, clxc.cfg.ContainerID, ctxcli.Bool("force"))
+	err := clxc.Delete(ctx, clxc.containerID, ctxcli.Bool("force"))
 	// Deleting a non-existing container is a noop,
 	// otherwise cri-o / kubelet log warnings about that.
 	if err == lxcri.ErrNotExist {
@@ -628,7 +716,7 @@ func doExec(ctxcli *cli.Context) error {
 		return err
 	}
 
-	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer(clxc.containerID)
 	if err != nil {
 		return err
 	}
@@ -796,4 +884,54 @@ func inspectContainer(id string, t *template.Template) error {
 	}
 	_, err = fmt.Fprint(os.Stdout, string(j))
 	return err
+}
+
+var configCmd = cli.Command{
+	Name:   "config",
+	Usage:  "Output a config file for lxcri. Global options modify the output.",
+	Action: doConfig,
+	Flags: []cli.Flag{
+		&cli.StringFlag{
+			Name:  "out",
+			Usage: "write config to file",
+		},
+		&cli.BoolFlag{
+			Name:  "default",
+			Usage: "use the builtin default configuration",
+		},
+		&cli.BoolFlag{
+			Name:  "update-current",
+			Usage: "write to the current config file (--out is ignored)",
+		},
+		&cli.BoolFlag{
+			Name:  "quiet",
+			Usage: "do not print config to stdout",
+		},
+	},
+}
+
+// NOTE lxcri config  > /etc/lxcri/lxcri.yaml does not work
+func doConfig(ctxcli *cli.Context) (err error) {
+	// generate yaml
+	c := clxc
+	if ctxcli.Bool("default") {
+		c = defaultApp
+	}
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return err
+	}
+	if !ctxcli.Bool("quiet") {
+		fmt.Printf("---\n%s---\n", string(data))
+	}
+
+	out := ctxcli.String("out")
+	if ctxcli.Bool("update-current") {
+		out = clxc.configFile
+	}
+	if out != "" {
+		fmt.Printf("Writing to file %s\n", out)
+		return os.WriteFile(out, data, 0640)
+	}
+	return nil
 }

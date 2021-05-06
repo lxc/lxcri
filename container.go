@@ -43,6 +43,10 @@ type ContainerConfig struct {
 
 	CgroupDir string
 
+	// Use systemd encoded cgroup path (from crio-o/conmon)
+	// is true if /etc/crio/crio.conf#cgroup_manager = "systemd"
+	SystemdCgroup bool
+
 	// LogFile is the liblxc log file path
 	LogFile string
 

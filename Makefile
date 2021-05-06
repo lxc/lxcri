@@ -11,7 +11,7 @@ PKG_CONFIG_PATH ?= $(PREFIX)/lib/pkgconfig
 # Note: The default pkg-config directory is search after PKG_CONFIG_PATH
 # Note: (Exported) environment variables are NOT visible in the environment of the $(shell ...) function.
 export PKG_CONFIG_PATH
-LDFLAGS=-X main.version=$(COMMIT) -X main.libexecDir=$(LIBEXEC_DIR)
+LDFLAGS=-X main.version=$(COMMIT) -X main.defaultLibexecDir=$(LIBEXEC_DIR)
 CC ?= cc
 SHELL_SCRIPTS = $(shell find . -name \*.sh)
 GO_SRC = $(shell find . -name \*.go | grep -v _test.go)

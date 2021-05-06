@@ -62,19 +62,15 @@ type Runtime struct {
 	// Root is the file path to the runtime directory.
 	// Directories for containers created by the runtime
 	// are created within this directory.
-	Root string
-
-	// Use systemd encoded cgroup path (from crio-o/conmon)
-	// is true if /etc/crio/crio.conf#cgroup_manager = "systemd"
-	SystemdCgroup bool
+	Root string `json:",omitempty"`
 
 	// Path for lxc monitor cgroup (lxc specific feature).
 	// This is the cgroup where the liblxc monitor process (lxcri-start)
 	// will be placed in. It's similar to /etc/crio/crio.conf#conmon_cgroup
-	MonitorCgroup string
+	MonitorCgroup string `json:",omitempty"`
 
 	// LibexecDir is the the directory that contains the runtime executables.
-	LibexecDir string
+	LibexecDir string `json:",omitempty"`
 
 	// Featuress are runtime (security) features that apply to all containers
 	// created by the runtime.
@@ -85,7 +81,7 @@ type Runtime struct {
 
 	caps capability.Capabilities
 
-	specs.Hooks
+	specs.Hooks `json:",omitempty"`
 }
 
 func (rt *Runtime) libexec(name string) string {
