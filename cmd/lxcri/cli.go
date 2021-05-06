@@ -25,7 +25,6 @@ var (
 
 type app struct {
 	lxcri.Runtime
-	cfg lxcri.ContainerConfig
 
 	logConfig struct {
 		File       *os.File
@@ -35,7 +34,9 @@ type app struct {
 		LogConsole bool
 	}
 
-	command string
+	command     string
+	containerID string
+
 }
 
 var clxc = app{}
@@ -58,7 +59,7 @@ func (app *app) configureLogger() error {
 		app.logConfig.File = l
 		logCtx := log.NewLogger(app.logConfig.File, level)
 
-		app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.cfg.ContainerID).Logger()
+		app.Runtime.Log = logCtx.Str("cmd", app.command).Str("cid", app.containerID).Logger()
 	}
 
 	app.cfg.Log = app.Runtime.Log
@@ -160,9 +161,8 @@ func main() {
 			Destination: &clxc.Root,
 		},
 		&cli.BoolFlag{
-			Name:        "systemd-cgroup",
-			Usage:       "cgroup path in container spec is systemd encoded and must be expanded",
-			Destination: &clxc.SystemdCgroup,
+			Name:  "systemd-cgroup",
+			Usage: "cgroup path in container spec is systemd encoded and must be expanded",
 		},
 		&cli.StringFlag{
 			Name:        "monitor-cgroup",
@@ -228,13 +228,14 @@ func main() {
 	}
 
 	setupCmd := func(ctx *cli.Context) error {
-		if clxc.command != "list" {
-			containerID := ctx.Args().Get(0)
-			if len(containerID) == 0 {
-				return fmt.Errorf("missing container ID")
-			}
-			clxc.cfg.ContainerID = containerID
+		if clxc.command == "list" || clxc.command == "config" {
+			return nil
 		}
+		containerID := ctx.Args().Get(0)
+		if len(containerID) == 0 {
+			return fmt.Errorf("missing container ID")
+		}
+		clxc.containerID = containerID
 
 		if err := clxc.configureLogger(); err != nil {
 			return fmt.Errorf("failed to configure logger: %w", err)
@@ -279,15 +280,13 @@ var createCmd = cli.Command{
 	Action:    doCreate,
 	Flags: []cli.Flag{
 		&cli.StringFlag{
-			Name:        "bundle",
-			Usage:       "set bundle directory",
-			Value:       ".",
-			Destination: &clxc.cfg.BundlePath,
+			Name:  "bundle",
+			Usage: "set bundle directory",
+			Value: ".",
 		},
 		&cli.StringFlag{
-			Name:        "console-socket",
-			Usage:       "send container pty master fd to this socket path",
-			Destination: &clxc.cfg.ConsoleSocket,
+			Name:  "console-socket",
+			Usage: "send container pty master fd to this socket path",
 		},
 		&cli.StringFlag{
 			Name:  "pid-file",
@@ -306,23 +305,31 @@ func doCreate(ctxcli *cli.Context) error {
 	if err := clxc.Init(); err != nil {
 		return err
 	}
-	specPath := filepath.Join(clxc.cfg.BundlePath, lxcri.BundleConfigFile)
+
+	cfg := lxcri.ContainerConfig{
+		ContainerID:   clxc.containerID,
+		BundlePath:    ctxcli.String("bundle"),
+		ConsoleSocket: ctxcli.String("console-socket"),
+		SystemdCgroup: ctxcli.Bool("systemd-cgroup"),
+	}
+
+	specPath := filepath.Join(cfg.BundlePath, lxcri.BundleConfigFile)
 	spec, err := specki.LoadSpecJSON(specPath)
 	if err != nil {
 		return fmt.Errorf("failed to load container spec from bundle: %w", err)
 	}
-	clxc.cfg.Spec = spec
+	cfg.Spec = spec
 	pidFile := ctxcli.String("pid-file")
 
 	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	if err := doCreateInternal(ctx, pidFile); err != nil {
+	if err := doCreateInternal(ctx, &cfg, pidFile); err != nil {
 		// Create a new context because create may fail with a timeout.
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := clxc.Delete(ctx, clxc.cfg.ContainerID, true); err != nil {
+		if err := clxc.Delete(ctx, clxc.containerID, true); err != nil {
 			clxc.Log.Error().Err(err).Msg("failed to destroy container")
 		}
 		return err
@@ -330,8 +337,8 @@ func doCreate(ctxcli *cli.Context) error {
 	return nil
 }
 
-func doCreateInternal(ctx context.Context, pidFile string) error {
-	c, err := clxc.Create(ctx, &clxc.cfg)
+func doCreateInternal(ctx context.Context, cfg *lxcri.ContainerConfig, pidFile string) error {
+	c, err := clxc.Create(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -374,7 +381,7 @@ func doStart(ctxcli *cli.Context) error {
 		//  a new context because start may fail with a timeout.
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := clxc.Delete(ctx, clxc.cfg.ContainerID, true); err != nil {
+		if err := clxc.Delete(ctx, clxc.containerID, true); err != nil {
 			clxc.Log.Error().Err(err).Msg("failed to destroy container")
 		}
 		return err
@@ -383,7 +390,7 @@ func doStart(ctxcli *cli.Context) error {
 }
 
 func doStartInternal(ctx context.Context) error {
-	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer(clxc.containerID)
 	if err != nil {
 		return err
 	}
@@ -403,7 +410,7 @@ var stateCmd = cli.Command{
 }
 
 func doState(unused *cli.Context) error {
-	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer(clxc.containerID)
 	if err != nil {
 		return err
 	}
@@ -447,7 +454,7 @@ func doKill(ctxcli *cli.Context) error {
 		return fmt.Errorf("invalid signal param %q", sig)
 	}
 
-	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer(clxc.containerID)
 	if err != nil {
 		return err
 	}
@@ -487,7 +494,7 @@ func doDelete(ctxcli *cli.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	err := clxc.Delete(ctx, clxc.cfg.ContainerID, ctxcli.Bool("force"))
+	err := clxc.Delete(ctx, clxc.containerID, ctxcli.Bool("force"))
 	// Deleting a non-existing container is a noop,
 	// otherwise cri-o / kubelet log warnings about that.
 	if err == lxcri.ErrNotExist {
@@ -607,7 +614,7 @@ func doExec(ctxcli *cli.Context) error {
 		return err
 	}
 
-	c, err := clxc.loadContainer(clxc.cfg.ContainerID)
+	c, err := clxc.loadContainer(clxc.containerID)
 	if err != nil {
 		return err
 	}

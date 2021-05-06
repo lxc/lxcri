@@ -64,10 +64,6 @@ type Runtime struct {
 	// are created within this directory.
 	Root string
 
-	// Use systemd encoded cgroup path (from crio-o/conmon)
-	// is true if /etc/crio/crio.conf#cgroup_manager = "systemd"
-	SystemdCgroup bool
-
 	// Path for lxc monitor cgroup (lxc specific feature).
 	// This is the cgroup where the liblxc monitor process (lxcri-start)
 	// will be placed in. It's similar to /etc/crio/crio.conf#conmon_cgroup

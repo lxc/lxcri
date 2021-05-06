@@ -116,7 +116,7 @@ func configureCgroup(rt *Runtime, c *Container) error {
 }
 
 func configureCgroupPath(rt *Runtime, c *Container) error {
-	if rt.SystemdCgroup {
+	if c.SystemdCgroup {
 		c.CgroupDir = parseSystemdCgroupPath(c.Spec.Linux.CgroupsPath)
 	} else {
 		c.CgroupDir = c.Spec.Linux.CgroupsPath
