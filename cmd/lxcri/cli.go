@@ -911,7 +911,7 @@ var configCmd = cli.Command{
 }
 
 // NOTE lxcri config  > /etc/lxcri/lxcri.yaml does not work
-func doConfig(ctxcli *cli.Context) (err error) {
+func doConfig(ctxcli *cli.Context) error {
 	// generate yaml
 	c := clxc
 	if ctxcli.Bool("default") {
@@ -931,6 +931,9 @@ func doConfig(ctxcli *cli.Context) (err error) {
 	}
 	if out != "" {
 		fmt.Printf("Writing to file %s\n", out)
+		if err := os.MkdirAll(filepath.Dir(out), 0750); err != nil {
+			return fmt.Errorf("failed to create config file parent directory: %w", err)
+		}
 		return os.WriteFile(out, data, 0640)
 	}
 	return nil
