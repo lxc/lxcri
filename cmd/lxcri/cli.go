@@ -28,6 +28,7 @@ type app struct {
 	lxcri.Runtime
 
 	LogConfig logConfig
+	Timeouts  timeouts
 
 	configFile  string
 	command     string
@@ -44,6 +45,13 @@ type logConfig struct {
 
 	ContainerLogLevel string `json:",omitempty"`
 	ContainerLogFile  string `json:",omitempty"`
+}
+
+type timeouts struct {
+	CreateTimeout uint `json:",omitempty"`
+	StartTimeout  uint `json:",omitempty"`
+	KillTimeout   uint `json:",omitempty"`
+	DeleteTimeout uint `json:",omitempty"`
 }
 
 var defaultApp = app{
@@ -65,6 +73,12 @@ var defaultApp = app{
 		ContainerLogLevel: "info",
 	},
 
+	Timeouts: timeouts{
+		CreateTimeout: 60,
+		StartTimeout:  30,
+		KillTimeout:   10,
+		DeleteTimeout: 10,
+	},
 }
 
 var clxc = defaultApp
@@ -346,10 +360,11 @@ var createCmd = cli.Command{
 			Usage: "path to write container PID",
 		},
 		&cli.UintFlag{
-			Name:    "timeout",
-			Usage:   "maximum duration in seconds for create to complete",
-			EnvVars: []string{"LXCRI_CREATE_TIMEOUT"},
-			Value:   60,
+			Name:        "timeout",
+			Usage:       "maximum duration in seconds for create to complete",
+			EnvVars:     []string{"LXCRI_CREATE_TIMEOUT"},
+			Value:       clxc.Timeouts.CreateTimeout,
+			Destination: &clxc.Timeouts.CreateTimeout,
 		},
 	},
 }
@@ -377,13 +392,13 @@ func doCreate(ctxcli *cli.Context) error {
 	cfg.Spec = spec
 	pidFile := ctxcli.String("pid-file")
 
-	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	timeout := time.Duration(clxc.Timeouts.CreateTimeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	if err := doCreateInternal(ctx, &cfg, pidFile); err != nil {
 		// Create a new context because create may fail with a timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(clxc.Timeouts.DeleteTimeout)*time.Second)
 		defer cancel()
 		if err := clxc.Delete(ctx, clxc.containerID, true); err != nil {
 			clxc.Log.Error().Err(err).Msg("failed to destroy container")
@@ -419,23 +434,24 @@ starts <containerID>
 `,
 	Flags: []cli.Flag{
 		&cli.UintFlag{
-			Name:    "timeout",
-			Usage:   "maximum duration in seconds for start to complete",
-			EnvVars: []string{"LXCRI_START_TIMEOUT"},
-			Value:   30,
+			Name:        "timeout",
+			Usage:       "maximum duration in seconds for start to complete",
+			EnvVars:     []string{"LXCRI_START_TIMEOUT"},
+			Value:       clxc.Timeouts.StartTimeout,
+			Destination: &clxc.Timeouts.StartTimeout,
 		},
 	},
 }
 
 func doStart(ctxcli *cli.Context) error {
 
-	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	timeout := time.Duration(clxc.Timeouts.StartTimeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	if err := doStartInternal(ctx); err != nil {
 		//  a new context because start may fail with a timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(clxc.Timeouts.DeleteTimeout)*time.Second)
 		defer cancel()
 		if err := clxc.Delete(ctx, clxc.containerID, true); err != nil {
 			clxc.Log.Error().Err(err).Msg("failed to destroy container")
@@ -495,10 +511,11 @@ var killCmd = cli.Command{
 `,
 	Flags: []cli.Flag{
 		&cli.UintFlag{
-			Name:    "timeout",
-			Usage:   "timeout for killing all processes in container cgroup",
-			EnvVars: []string{"LXCRI_KILL_TIMEOUT"},
-			Value:   10,
+			Name:        "timeout",
+			Usage:       "timeout for killing all processes in container cgroup",
+			EnvVars:     []string{"LXCRI_KILL_TIMEOUT"},
+			Value:       clxc.Timeouts.KillTimeout,
+			Destination: &clxc.Timeouts.KillTimeout,
 		},
 	},
 }
@@ -516,7 +533,7 @@ func doKill(ctxcli *cli.Context) error {
 	}
 	defer clxc.releaseContainer(c)
 
-	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	timeout := time.Duration(clxc.Timeouts.KillTimeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
@@ -537,16 +554,17 @@ var deleteCmd = cli.Command{
 			Usage: "force deletion",
 		},
 		&cli.UintFlag{
-			Name:    "timeout",
-			Usage:   "maximum duration in seconds for delete to complete",
-			EnvVars: []string{"LXCRI_DELETE_TIMEOUT"},
-			Value:   10,
+			Name:        "timeout",
+			Usage:       "maximum duration in seconds for delete to complete",
+			EnvVars:     []string{"LXCRI_DELETE_TIMEOUT"},
+			Value:       clxc.Timeouts.DeleteTimeout,
+			Destination: &clxc.Timeouts.DeleteTimeout,
 		},
 	},
 }
 
 func doDelete(ctxcli *cli.Context) error {
-	timeout := time.Duration(ctxcli.Uint("timeout")) * time.Second
+	timeout := time.Duration(clxc.Timeouts.DeleteTimeout) * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
