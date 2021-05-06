@@ -6,40 +6,27 @@
 * `bundle config` the lxcri container state (bundle path, pidfile ....)
 * `runtime spec` the OCI runtime spec from the bundle
 
-## Setup 
+## Configuration
 
 The runtime binary implements flags that are required by the `OCI runtime spec`,</br>
 and flags that are runtime specific (timeouts, hooks, logging ...).
 
+The configuration file path defaults to **/etc/lxcri/lxcri.yaml**
+and can changed with the **LXCRI_CONFIG** environment variable.
 Most of the runtime specific flags have corresponding environment variables. See `lxcri --help`.</br>
-The runtime evaluates the flag value in the following order (lower order takes precedence).
+The `lxcri` cli command valuates the configuration in the following order (higher order takes precedence).
 
-1. cmdline flag from process arguments (overwrites process environment)
-2. process environment variable (overwrites environment file)
-3. environment file (overwrites cmdline flag default)
-4. cmdline flag default
+1. builtin default configuration
+2. configuration file
+3. environment variables
+4. commandline flags
 
-### Environment variables
+The `lxcri config` command can be used to display and update the configuration. e.g:
 
-Currently you have to compile to environment file yourself.</br>
-
-All environment variables are listed in the cmline help `lxcri --help`
-
-To compile a list of all available variables:
-
-```
-grep EnvVars cmd/lxcri/* | grep -o LXCRI_[A-Za-z_]* | xargs -I'{}' echo "#{}="
-```
-
-###  Environment file
-
-The default path to the environment file is `/etc/defaults/lxcri`.</br>
-It is loaded on every start of the `lxcri` binary, so changes take immediate effect
-for the next `lxcri` process started by `cri-o`.</br>
-Empty lines and those commented with a leading *#* are ignored.</br>
-
-A malformed environment will let the next runtime call fail.</br>
-In production it's recommended that you replace the environment file atomically.</br>
+* `lxcri config` print active configuration (builtin default configuration merged with config file)
+* `lxcri config --default` shows builtin default configuration
+* `lxcri --log-level debug config` print modified configuration
+* `lxcri --log-level debug config --update-current` update/create modified configuration
 
 ### Runtime (security) features
 
